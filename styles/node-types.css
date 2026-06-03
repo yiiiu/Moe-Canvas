@@ -3687,16 +3687,16 @@ body.is-aigen-text-selecting #v2-wrap {
   opacity: 0;
 }
 body.is-panning {
-  --pointer-cursor: var(--grab-cursor);
-  --link-cursor: var(--grab-cursor);
-  --text-cursor: var(--grab-cursor);
+  --pointer-cursor: var(--grabbing-cursor);
+  --link-cursor: var(--grabbing-cursor);
+  --text-cursor: var(--grabbing-cursor);
 }
 .canvas-wrapper.space-pan:active,
 .node.dragging,
 body.is-grabbing {
-  --pointer-cursor: var(--grab-cursor);
-  --link-cursor: var(--grab-cursor);
-  --text-cursor: var(--grab-cursor);
+  --pointer-cursor: var(--grabbing-cursor);
+  --link-cursor: var(--grabbing-cursor);
+  --text-cursor: var(--grabbing-cursor);
 }
 .settings-modal {
   position: absolute;

@@ -6341,6 +6341,7 @@ body.is-zoom-low
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
+  right: 0;
   font-size: 21px;
   font-weight: 500;
   color: var(--white-40);
@@ -6350,7 +6351,7 @@ body.is-zoom-low
   user-select: none;
   pointer-events: auto;
   z-index: 10;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   max-width: 100%;
   overflow: visible;
@@ -6415,6 +6416,43 @@ body.is-zoom-low
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.node-label-resolution {
+  flex: 0 0 auto;
+  margin-left: var(--space-8);
+  padding: 1px var(--space-6);
+  border-radius: var(--radius-999);
+  border: 1px solid var(--white-12);
+  background: var(--white-08);
+  color: var(--white-55);
+  font-size: var(--font-12);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.v2-node.selected .node-label-resolution {
+  color: var(--white-75);
+  border-color: var(--white-20);
+  background: var(--white-10);
+}
+:is(html[data-theme="light"], html.is-canvas-theme-light) .node-label-resolution {
+  color: var(--black-50);
+  border-color: var(--black-15);
+  background: var(--black-06);
+}
+:is(html[data-theme="light"], html.is-canvas-theme-light)
+  .v2-node.selected
+  .node-label-resolution {
+  color: var(--black-70);
+  border-color: var(--black-20);
+  background: var(--black-10);
+}
+.node-label[contenteditable="true"] {
+  right: auto;
+  display: inline-flex;
+  max-width: 100%;
 }
 .node-label[contenteditable="true"] .node-label-icon {
   opacity: 0.55;

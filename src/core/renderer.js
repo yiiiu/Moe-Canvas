@@ -935,6 +935,34 @@ function _v2ClearNodeLabelTooltip(_0x489b08) {
     _0x3d7825(_0x1764ae(0x189), _0x1764ae(0x247)),
     _0x3d7825(_0x1764ae(0x1d2), _0x1764ae(0x1ab)));
 }
+function _v2GetNodeResolutionLabel(_0x283d0f) {
+  if (!_0x283d0f) return "";
+  let _0x22ec23 = 0x0,
+    _0x342cf2 = 0x0;
+  if (isNodeType(_0x283d0f, "source-image")) {
+    _0x22ec23 = Number(
+      _0x283d0f["imageWidth"] ||
+        _0x283d0f["originalWidth"] ||
+        _0x283d0f["naturalWidth"] ||
+        0x0,
+    );
+    _0x342cf2 = Number(
+      _0x283d0f["imageHeight"] ||
+        _0x283d0f["originalHeight"] ||
+        _0x283d0f["naturalHeight"] ||
+        0x0,
+    );
+  } else if (isNodeType(_0x283d0f, "source-video")) {
+    _0x22ec23 = Number(_0x283d0f["videoWidth"] || _0x283d0f["naturalWidth"] || 0x0);
+    _0x342cf2 = Number(
+      _0x283d0f["videoHeight"] || _0x283d0f["naturalHeight"] || 0x0,
+    );
+  }
+  _0x22ec23 = Math["round"](_0x22ec23 || 0x0);
+  _0x342cf2 = Math["round"](_0x342cf2 || 0x0);
+  if (_0x22ec23 <= 0x0 || _0x342cf2 <= 0x0) return "";
+  return _0x22ec23 + "×" + _0x342cf2;
+}
 function _v2SetNodeLabelContent(
   _0x1526ca,
   {
@@ -943,6 +971,7 @@ function _v2SetNodeLabelContent(
     defaultName: _0xdaa475,
     isBeta: _0x10024b,
     fullLabelText: _0xcb4a02,
+    resolutionText: _0x3ced41,
   },
 ) {
   const _0x256bef = a330_0x12fb12;
@@ -961,6 +990,13 @@ function _v2SetNodeLabelContent(
   ((_0x4792f0["className"] = _0x256bef(0x1ba)),
     (_0x4792f0[_0x256bef(0x1f1)] = _0x325a1e || _0xdaa475),
     _0x48d6d1[_0x256bef(0x147)](_0x4792f0));
+  if (_0x3ced41) {
+    const _0x1f13a9 = document["createElement"]("span");
+    ((_0x1f13a9["className"] = "node-label-resolution"),
+      _0x1f13a9["setAttribute"]("aria-hidden", "true"),
+      (_0x1f13a9["textContent"] = _0x3ced41),
+      _0x48d6d1[_0x256bef(0x147)](_0x1f13a9));
+  }
   if (_0x10024b) {
     const _0x470a19 = document[_0x256bef(0x18c)](_0x256bef(0x1f0));
     ((_0x470a19[_0x256bef(0x146)] = "v2-node-beta-pill"),
@@ -2362,7 +2398,8 @@ function _createNodeRuntime(_0x1c4f8a, _0x19e6ff, _0x58eb3d, _0x3eb4bf) {
             ? "生成视频"
             : _0x53415e(0xfa)
           : _0x37c8ff),
-      _0x111fb9 = _v2FormatNodeLabelText(_0x12b3f4);
+      _0x111fb9 = _v2FormatNodeLabelText(_0x12b3f4),
+      _0x43f94b = _v2GetNodeResolutionLabel(_0x1c4f8a);
     ((_0x475241[_0x53415e(0x220)][_0x53415e(0x183)] = _0x12b3f4),
       (_0x475241[_0x53415e(0x220)][_0x53415e(0x249)] = _0x37c8ff),
       (_0x475241[_0x53415e(0x220)][_0x53415e(0x1ce)] = _0x3a7640 ? "1" : "0"),
@@ -2372,6 +2409,7 @@ function _createNodeRuntime(_0x1c4f8a, _0x19e6ff, _0x58eb3d, _0x3eb4bf) {
         defaultName: _0x37c8ff,
         isBeta: _0x3a7640,
         fullLabelText: _0x12b3f4,
+        resolutionText: _0x43f94b,
       }),
       _0x2f4c3f["appendChild"](_0x475241),
       (_0x2f4c3f[_0x53415e(0x1e0)] = _0x475241));
@@ -2626,15 +2664,18 @@ function _syncMountedNodePresentation({
             ? "生成视频"
             : _0x44313e(0xfa)
           : _0x3a9657),
-      _0x313e79 = _v2FormatNodeLabelText(_0x2c56eb);
+      _0x313e79 = _v2FormatNodeLabelText(_0x2c56eb),
+      _0x335ac8 = _v2GetNodeResolutionLabel(_0x308c1a);
     ((_0x3354f4[_0x44313e(0x220)][_0x44313e(0x183)] = _0x2c56eb),
       _v2ClearNodeLabelTooltip(_0x3354f4));
     const _0x300b92 = _0x3354f4["querySelector"](_0x44313e(0x157)),
       _0x3e1e68 = _0x3354f4[_0x44313e(0x214)](_0x44313e(0x1b4)),
+      _0x4efccf = _0x3354f4["querySelector"](".node-label-resolution"),
       _0x976344 = _0x313e79 || _0x3a9657,
       _0x36d878 = _0x300b92?.[_0x44313e(0x220)][_0x44313e(0x208)] || "";
     (_0x36d878 !== _0x487591 ||
       _0x3e1e68?.[_0x44313e(0x1f1)] !== _0x976344 ||
+      (_0x4efccf?.["textContent"] || "") !== _0x335ac8 ||
       (_0x148c58
         ? _0x3354f4[_0x44313e(0x220)]["betaLabel"] !== _0x2c56eb
         : _0x44313e(0xeb) in _0x3354f4["dataset"])) &&
@@ -2644,6 +2685,7 @@ function _syncMountedNodePresentation({
         defaultName: _0x3a9657,
         isBeta: _0x148c58,
         fullLabelText: _0x2c56eb,
+        resolutionText: _0x335ac8,
       });
   }
   const _0x266fdf = _0x583c5a[_0x44313e(0x280)];

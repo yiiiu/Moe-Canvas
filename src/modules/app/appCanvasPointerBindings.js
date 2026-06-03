@@ -266,7 +266,7 @@ function a398_0x4b28() {
     "forEach",
     "innerHeight",
     "videoClip",
-    "var(--grab-cursor)",
+    "var(--canvas-pan-cursor)",
     "getState",
     "preventDefault",
     "pointermove",
@@ -386,13 +386,20 @@ export function installAppCanvasPointerBindings({
         }
         const _0x19dc64 =
           _0x275a18[_0x3c1a8f(0x139)] === 0x1 ||
-          (targetWindow?.[_0x3c1a8f(0x135)] &&
-            _0x275a18[_0x3c1a8f(0x139)] === 0x0);
+          (_0x275a18[_0x3c1a8f(0x139)] === 0x0 &&
+            targetWindow?.[_0x3c1a8f(0x135)]);
         if (!_0x19dc64) return;
+        blurActiveEditableForCanvasPointer(
+          _0x275a18[_0x3c1a8f(0xee)],
+          targetDocument,
+        );
         (_0x275a18["preventDefault"](),
           _0x275a18["stopPropagation"](),
           _0x1b7b04?.["clearTrackedFocus"]?.(_0x3c1a8f(0x129)));
-        if (targetWindow?.["_spaceHeld"])
+        if (
+          _0x275a18[_0x3c1a8f(0x139)] === 0x1 ||
+          targetWindow?.["_spaceHeld"]
+        )
           _0x3bb578[_0x3c1a8f(0x118)][_0x3c1a8f(0xf8)] = _0x3c1a8f(0xe0);
         const _0x5b3b8d = _0x187c2d(),
           _0x4b4972 = !!_0x5b3b8d?.[_0x3c1a8f(0xfe)];
@@ -494,6 +501,7 @@ export function installAppCanvasPointerBindings({
         _0x246d2e(_0x3948db[_0x5e6ea0(0x110)], _0x3948db[_0x5e6ea0(0x13a)]));
       if (targetWindow?.[_0x5e6ea0(0x135)])
         _0x596ff6[_0x5e6ea0(0x118)][_0x5e6ea0(0xf8)] = _0x5e6ea0(0xe0);
+      else _0x596ff6?.style?.removeProperty?.("cursor");
       targetDocument?.documentElement?.style?.removeProperty?.("cursor");
     }),
     _0x43f439(_0x596ff6, _0x2ab77f(0xed), (_0x218514) => {
@@ -503,6 +511,7 @@ export function installAppCanvasPointerBindings({
       _0x246d2e(_0x218514["clientX"], _0x218514[_0x163177(0x13a)]);
       if (targetWindow?.[_0x163177(0x135)])
         _0x596ff6[_0x163177(0x118)][_0x163177(0xf8)] = _0x163177(0xe0);
+      else _0x596ff6?.style?.removeProperty?.("cursor");
       targetDocument?.documentElement?.style?.removeProperty?.("cursor");
     }),
     _0x43f439(targetDocument, _0x2ab77f(0x120), (_0x135541) => {

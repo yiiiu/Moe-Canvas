@@ -2896,10 +2896,10 @@ body.is-zooming #v2-canvas .group-toolbar.group-toolbar--detached {
   border-radius: 4px;
 }
 .canvas-wrapper.space-pan {
-  cursor: var(--grab-cursor);
+  cursor: var(--canvas-pan-cursor);
 }
 .canvas-wrapper.space-pan:active {
-  cursor: var(--grabbing-cursor);
+  cursor: var(--canvas-pan-cursor);
 }
 .ref-thumb-wrap {
   position: relative;
@@ -3048,6 +3048,7 @@ body.is-zooming #v2-canvas .group-toolbar.group-toolbar--detached {
   font-size: 14px;
   z-index: 1001;
   pointer-events: auto;
+  cursor: var(--link-cursor);
   box-shadow: 0 4px 12px var(--black-40);
   animation: connBtnFade 0.2s ease-out;
   transition:
@@ -6006,8 +6007,7 @@ body.is-panning #v2-canvas .connection-main {
   transition: none;
 }
 body.is-dragging #v2-canvas .connection-bg,
-body.is-edge-interaction-lite #v2-canvas .connection-bg,
-body.is-panning #v2-canvas .connection-bg {
+body.is-edge-interaction-lite #v2-canvas .connection-bg {
   display: none;
 }
 body.is-dragging #v2-canvas #v2-edges,
@@ -6581,15 +6581,24 @@ body.is-zoom-low
 .connection-bg {
   fill: none;
   stroke: white;
-  stroke-width: 20px;
+  stroke-width: 28px;
   stroke-opacity: 0;
   pointer-events: stroke;
+  cursor: var(--link-cursor);
 }
-.connection-main {
+.connection-base {
   fill: none;
   stroke: var(--white-40);
   stroke-width: 2px;
   transition: stroke 0.16s;
+  pointer-events: none;
+}
+.connection-main {
+  fill: none;
+  stroke: #58a6ff;
+  stroke-width: 2px;
+  stroke-opacity: 0;
+  transition: stroke 0.16s, stroke-opacity 0.16s;
   pointer-events: none;
 }
 @keyframes edge-flow-dash {
@@ -6602,6 +6611,7 @@ body.is-zoom-low
     stroke-dashoffset: calc(-45px * var(--zoom-inv, 1)) !important;
   }
 }
+#v2-canvas .connection-base,
 #v2-canvas .connection-main {
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -6609,8 +6619,17 @@ body.is-zoom-low
 }
 #v2-canvas .connection-group.connection-highlighted .connection-bg,
 #v2-canvas .connection-group:hover .connection-bg {
+  stroke: white;
+  stroke-width: 28px;
+  stroke-opacity: 0;
+  stroke-dasharray: none;
+  animation: none;
+  filter: none;
+}
+#v2-canvas .connection-group.connection-highlighted .connection-base,
+#v2-canvas .connection-group:hover .connection-base {
   stroke: #f4f8ff;
-  stroke-width: 3.4px;
+  stroke-width: 2.8px;
   stroke-opacity: 0.86;
   stroke-dasharray: none;
   animation: none;
@@ -6621,6 +6640,7 @@ body.is-zoom-low
 #v2-canvas .connection-group:hover .connection-main {
   stroke: #58a6ff;
   stroke-width: 3.2px;
+  stroke-opacity: 1;
   stroke-linecap: round;
   stroke-dasharray: 18 72;
   stroke-dashoffset: 0;
@@ -6632,6 +6652,22 @@ body.is-zoom-low
 body.is-dragging
   #v2-canvas
   .connection-group.connection-highlighted
+  .connection-base,
+body.is-dragging #v2-canvas .connection-group:hover .connection-base,
+body.is-zooming
+  #v2-canvas
+  .connection-group.connection-highlighted
+  .connection-base,
+body.is-zooming #v2-canvas .connection-group:hover .connection-base {
+  stroke: #f4f8ff;
+  stroke-width: 2.8px;
+  stroke-dasharray: none;
+  animation: none;
+  filter: none;
+}
+body.is-dragging
+  #v2-canvas
+  .connection-group.connection-highlighted
   .connection-main,
 body.is-dragging #v2-canvas .connection-group:hover .connection-main,
 body.is-zooming
@@ -6639,7 +6675,7 @@ body.is-zooming
   .connection-group.connection-highlighted
   .connection-main,
 body.is-zooming #v2-canvas .connection-group:hover .connection-main {
-  stroke: #f4f8ff;
+  stroke-opacity: 0;
   stroke-width: 2.8px;
   stroke-dasharray: none;
   animation: none;
@@ -6655,9 +6691,30 @@ body.is-zooming #v2-canvas .connection-group:hover .connection-main {
   .connection-bg,
 #v2-wrap.theme-light #v2-canvas .connection-group.connection-highlighted .connection-bg,
 #v2-wrap.theme-light #v2-canvas .connection-group:hover .connection-bg {
+  stroke: white;
+  stroke-width: 28px;
+  stroke-opacity: 0;
+}
+:is(html[data-theme="light"], html.is-canvas-theme-light)
+  #v2-canvas
+  .connection-base,
+#v2-wrap.theme-light #v2-canvas .connection-base {
+  stroke: #7f90a8;
+  stroke-opacity: 0.62;
+}
+:is(html[data-theme="light"], html.is-canvas-theme-light)
+  #v2-canvas
+  .connection-group.connection-highlighted
+  .connection-base,
+:is(html[data-theme="light"], html.is-canvas-theme-light)
+  #v2-canvas
+  .connection-group:hover
+  .connection-base,
+#v2-wrap.theme-light #v2-canvas .connection-group.connection-highlighted .connection-base,
+#v2-wrap.theme-light #v2-canvas .connection-group:hover .connection-base {
   stroke: #7f90a8;
   stroke-width: 2.8px;
-  stroke-opacity: 0.62;
+  stroke-opacity: 0.72;
 }
 :is(html[data-theme="light"], html.is-canvas-theme-light)
   #v2-canvas
@@ -6672,6 +6729,33 @@ body.is-zooming #v2-canvas .connection-group:hover .connection-main {
   stroke: #2f80ed;
   filter: drop-shadow(0 0 3px rgba(47, 128, 237, 0.18))
     drop-shadow(0 0 7px rgba(47, 128, 237, 0.1));
+}
+:is(html[data-theme="light"], html.is-canvas-theme-light)
+  body.is-dragging
+  #v2-canvas
+  .connection-group.connection-highlighted
+  .connection-base,
+:is(html[data-theme="light"], html.is-canvas-theme-light)
+  body.is-dragging
+  #v2-canvas
+  .connection-group:hover
+  .connection-base,
+:is(html[data-theme="light"], html.is-canvas-theme-light)
+  body.is-zooming
+  #v2-canvas
+  .connection-group.connection-highlighted
+  .connection-base,
+:is(html[data-theme="light"], html.is-canvas-theme-light)
+  body.is-zooming
+  #v2-canvas
+  .connection-group:hover
+  .connection-base,
+body.is-dragging #v2-wrap.theme-light #v2-canvas .connection-group.connection-highlighted .connection-base,
+body.is-dragging #v2-wrap.theme-light #v2-canvas .connection-group:hover .connection-base,
+body.is-zooming #v2-wrap.theme-light #v2-canvas .connection-group.connection-highlighted .connection-base,
+body.is-zooming #v2-wrap.theme-light #v2-canvas .connection-group:hover .connection-base {
+  stroke: #7f90a8;
+  stroke-width: 2.3px;
 }
 :is(html[data-theme="light"], html.is-canvas-theme-light)
   body.is-dragging
@@ -6697,7 +6781,7 @@ body.is-dragging #v2-wrap.theme-light #v2-canvas .connection-group.connection-hi
 body.is-dragging #v2-wrap.theme-light #v2-canvas .connection-group:hover .connection-main,
 body.is-zooming #v2-wrap.theme-light #v2-canvas .connection-group.connection-highlighted .connection-main,
 body.is-zooming #v2-wrap.theme-light #v2-canvas .connection-group:hover .connection-main {
-  stroke: #7f90a8;
+  stroke-opacity: 0;
   stroke-width: 2.3px;
 }
 :is(html[data-theme="light"], html.is-canvas-theme-light)
@@ -6711,6 +6795,7 @@ body.is-zooming #v2-wrap.theme-light #v2-canvas .connection-group:hover .connect
 .connection-delete-btn {
   opacity: 0;
   pointer-events: none;
+  cursor: var(--link-cursor);
   transition: opacity 0.2s;
   transform-origin: 0 0;
 }
@@ -6929,6 +7014,8 @@ input[type="text"] {
     url("../images/cursors/windows11-concept-v2/light/move-small.cur"), grab;
   --grabbing-cursor:
     url("../images/cursors/windows11-concept-v2/light/move-small.cur"), grabbing;
+  --canvas-pan-cursor: url("images/grip-16.png") 8 8, grab;
+  --canvas-pan-active-cursor: url("images/grip-16.png") 8 8, grabbing;
   --text-cursor:
     url("../images/cursors/windows11-concept-v2/light/beam-small.cur"), text;
   --precision-cursor:
@@ -7020,9 +7107,13 @@ select {
   cursor: var(--link-cursor);
 }
 #v2-wrap.is-panning,
-.v2-node.dragging,
-body.is-dragging,
 body.is-panning {
+  --pointer-cursor: var(--canvas-pan-cursor);
+  --link-cursor: var(--canvas-pan-cursor);
+  --text-cursor: var(--canvas-pan-cursor);
+}
+.v2-node.dragging,
+body.is-dragging {
   --pointer-cursor: var(--grabbing-cursor);
   --link-cursor: var(--grabbing-cursor);
   --text-cursor: var(--grabbing-cursor);
@@ -11665,11 +11756,15 @@ body.is-aigen-text-selecting #v2-wrap {
   opacity: 0;
 }
 body.is-panning {
-  --pointer-cursor: var(--grab-cursor);
-  --link-cursor: var(--grab-cursor);
-  --text-cursor: var(--grab-cursor);
+  --pointer-cursor: var(--canvas-pan-cursor);
+  --link-cursor: var(--canvas-pan-cursor);
+  --text-cursor: var(--canvas-pan-cursor);
 }
-.canvas-wrapper.space-pan:active,
+.canvas-wrapper.space-pan:active {
+  --pointer-cursor: var(--canvas-pan-cursor);
+  --link-cursor: var(--canvas-pan-cursor);
+  --text-cursor: var(--canvas-pan-cursor);
+}
 .node.dragging,
 body.is-grabbing {
   --pointer-cursor: var(--grab-cursor);
@@ -22471,7 +22566,9 @@ html.has-global-tooltip-portal body [data-tooltip]:hover::before {
 #v2-wrap .btn-icon,
 #v2-wrap .cc-btn,
 #v2-wrap .clickable,
+#v2-wrap .connection-bg,
 #v2-wrap .connection-group,
+#v2-wrap .conn-hover-path,
 #v2-wrap .cursor-size-btn,
 #v2-wrap .fab-btn,
 #v2-wrap .logo,

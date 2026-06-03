@@ -660,7 +660,20 @@ body.is-zoom-low
   stroke-width: 2;
   stroke-dasharray: 6 4;
   stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
   pointer-events: none;
+}
+.v2-draft-edge {
+  stroke: #58a6ff;
+  stroke-width: calc(4px * var(--zoom-inv, 1));
+  stroke-dasharray: calc(18px * var(--zoom-inv, 1)) calc(72px * var(--zoom-inv, 1)) !important;
+  stroke-dashoffset: 0;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  animation: edge-flow-dash 1.18s linear infinite;
+  will-change: stroke-dashoffset;
+  filter: drop-shadow(0 0 4px rgba(88, 166, 255, 0.42))
+    drop-shadow(0 0 10px rgba(88, 166, 255, 0.24));
 }
 .v2-node {
   position: absolute;
@@ -1866,23 +1879,24 @@ button:disabled {
 }
 @keyframes edge-flow-dash {
   to {
-    stroke-dashoffset: -90;
+    stroke-dashoffset: calc(-90px * var(--zoom-inv, 1));
   }
 }
 @keyframes edge-flow-dash-drag {
   to {
-    stroke-dashoffset: -84;
+    stroke-dashoffset: calc(-45px * var(--zoom-inv, 1)) !important;
   }
 }
 #v2-canvas .connection-main {
   stroke-linecap: round;
   stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 #v2-canvas .connection-group.connection-highlighted .connection-bg,
 #v2-canvas .connection-group:hover .connection-bg {
-  stroke: #eef4ff;
-  stroke-width: 3.2px;
-  stroke-opacity: 0.72;
+  stroke: #f4f8ff;
+  stroke-width: 3.4px;
+  stroke-opacity: 0.86;
   stroke-dasharray: none;
   animation: none;
   filter: none;
@@ -1891,7 +1905,7 @@ button:disabled {
 #v2-canvas .connection-group.connection-highlighted .connection-main,
 #v2-canvas .connection-group:hover .connection-main {
   stroke: #58a6ff;
-  stroke-width: 4px;
+  stroke-width: 3.2px;
   stroke-linecap: round;
   stroke-dasharray: 18 72;
   stroke-dashoffset: 0;
@@ -1910,8 +1924,8 @@ body.is-zooming
   .connection-group.connection-highlighted
   .connection-main,
 body.is-zooming #v2-canvas .connection-group:hover .connection-main {
-  stroke: #eef4ff;
-  stroke-width: 2.6px;
+  stroke: #f4f8ff;
+  stroke-width: 2.8px;
   stroke-dasharray: none;
   animation: none;
   filter: none;
@@ -1973,21 +1987,41 @@ body.is-zooming #v2-wrap.theme-light #v2-canvas .connection-group:hover .connect
 }
 :is(html[data-theme="light"], html.is-canvas-theme-light)
   #v2-canvas
+  .conn-drag-path-bg,
+#v2-wrap.theme-light #v2-canvas .conn-drag-path-bg {
+  stroke: #7f90a8;
+  stroke-width: 2.8px;
+  stroke-opacity: 0.62;
+}
+:is(html[data-theme="light"], html.is-canvas-theme-light)
+  #v2-canvas
   .conn-drag-path,
 #v2-wrap.theme-light #v2-canvas .conn-drag-path {
   stroke: #3d93f7;
   filter: drop-shadow(0 0 3px rgba(61, 147, 247, 0.18))
     drop-shadow(0 0 8px rgba(61, 147, 247, 0.1));
 }
+#v2-canvas .conn-drag-path-bg {
+  stroke: #f4f8ff;
+  stroke-width: 3.4px;
+  stroke-opacity: 0.86;
+  stroke-dasharray: none;
+  vector-effect: non-scaling-stroke;
+  animation: none;
+  filter: none;
+}
 #v2-canvas .conn-drag-path {
-  stroke: #73bbff;
-  stroke-width: 4px;
-  stroke-dasharray: 12 72;
+  stroke: #58a6ff;
+  stroke-width: calc(4px * var(--zoom-inv, 1));
+  stroke-dasharray: calc(18px * var(--zoom-inv, 1)) calc(72px * var(--zoom-inv, 1)) !important;
   stroke-dashoffset: 0;
-  animation: edge-flow-dash-drag 1.16s linear infinite;
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: edge-flow-dash 1.18s linear infinite;
   will-change: stroke-dashoffset;
-  filter: drop-shadow(0 0 5px rgba(115, 187, 255, 0.46))
-    drop-shadow(0 0 12px rgba(115, 187, 255, 0.26));
+  filter: drop-shadow(0 0 4px rgba(88, 166, 255, 0.42))
+    drop-shadow(0 0 10px rgba(88, 166, 255, 0.24));
 }
 body.is-panning #v2-canvas .connection-main,
 body.is-zooming #v2-canvas .connection-main,

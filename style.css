@@ -14747,20 +14747,20 @@ body.is-grabbing {
   z-index: 100001;
   background: var(--surface-node);
   border: 1px solid var(--stroke-default);
-  border-radius: var(--radius-18);
-  padding: var(--space-8);
+  border-radius: var(--radius-16);
+  padding: var(--space-6);
   box-shadow: var(--shadow-menu);
   backdrop-filter: blur(32px);
   -webkit-backdrop-filter: blur(32px);
   min-width: 220px;
-  font-size: var(--font-16);
+  font-size: var(--font-15);
   font-family: inherit;
   color: var(--text-primary);
   animation: v2MenuPop 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .v2-node-picker {
-  width: 272px;
-  max-height: calc(100vh - 24px);
+  width: 240px;
+  max-height: calc(100vh - 40px);
   overflow-y: auto;
   transform-origin: top left;
   animation: v2mpop 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
@@ -14795,7 +14795,7 @@ body.is-grabbing {
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  padding: var(--space-12) var(--space-10) var(--space-6);
+  padding: var(--space-9) var(--space-8) var(--space-4);
 }
 .v2-menu-rule {
   flex: 1;
@@ -14810,9 +14810,9 @@ body.is-grabbing {
   min-width: 0;
 }
 .v2-node-picker .v2-menu-row {
-  gap: var(--space-12);
-  padding: var(--space-9) var(--space-10);
-  border-radius: var(--radius-12);
+  gap: var(--space-10);
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-10);
   transition: background 0.12s;
   margin-bottom: 1px;
 }
@@ -14820,9 +14820,9 @@ body.is-grabbing {
   background: var(--fill-hover);
 }
 .v2-node-picker .v2-menu-ico {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-12);
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-10);
   background: var(--white-05);
 }
 .v2-badge-beta {

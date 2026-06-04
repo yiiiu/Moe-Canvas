@@ -227,43 +227,27 @@ class SubscriptionGateService:
             fallback_install_id=install_id,
         )
         model_id = self.normalize_vip_model_id(required_model_id)
-        cached_decision = self._get_cached_vip_allow_decision(install_id, model_id, device_id)
-        if isinstance(cached_decision, dict):
-            return cached_decision
-
-        try:
-            decision = self.client.evaluate_install_active(install_id, device_id=device_id)
-        except TypeError:
-            decision = self.client.evaluate_install_active(install_id)
-        decision = dict(decision) if isinstance(decision, dict) else {}
-        decision["requiredModelId"] = model_id
-        if device_id:
-            decision["deviceId"] = device_id
-        if bool(decision.get("allowed")) and model_id:
-            entitled_ids = self.extract_entitled_model_ids(decision.get("payload"))
-            entitled = (
-                model_id in entitled_ids
-                if entitled_ids
-                else self._is_install_entitled_for_model(install_id, model_id, device_id)
+        decision = {
+            "allowed": True,
+            "installId": install_id,
+            "deviceId": device_id,
+            "status": self.status_active,
+            "reasonCode": "OPEN_VIP_LOCAL_ALLOW",
+            "reasonMessage": "",
+            "requiredModelId": model_id,
+            "payload": {
+                "status": self.status_active,
+                "expiresAt": 0,
+                "entitledModelIds": [model_id] if model_id else [],
+            },
+        }
+        if install_id and model_id:
+            self._cache_vip_allow_decision(
+                install_id,
+                payload=decision.get("payload"),
+                entitled_ids=[model_id],
+                device_id=device_id,
             )
-            if not entitled:
-                decision["allowed"] = False
-                decision["reasonCode"] = self.error_model_not_entitled
-                model_name = self.model_name_map.get(model_id) or model_id
-                decision["reasonMessage"] = f"当前订阅未包含 {model_name}"
-                self.clear_vip_allow_cache(install_id, device_id)
-            else:
-                if not entitled_ids:
-                    entitled_ids = [model_id]
-                self._cache_vip_allow_decision(
-                    install_id,
-                    payload=decision.get("payload"),
-                    entitled_ids=entitled_ids,
-                    device_id=device_id,
-                )
-        elif install_id:
-            self.clear_vip_allow_cache(install_id, device_id)
-        self._log_first_vip_gate_success(decision)
         return decision
 
     def _is_install_entitled_for_model(self, install_id, model_id, device_id=""):

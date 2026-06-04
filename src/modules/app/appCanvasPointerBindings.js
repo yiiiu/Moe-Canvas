@@ -39,7 +39,7 @@ import {
   worldToScreen,
 } from "../../core/math.js";
 const CANVAS_UI_EXCLUSION_SELECTOR =
-    ".header,\x20.sidebar-floating,\x20.canvas-controls-floating,\x20.empty-hint,\x20.fab-btn,\x20.mascot-wrap,\x20.node-add-menu,\x20.minimap-wrapper",
+    ".header,\x20.sidebar-floating,\x20.canvas-controls-floating,\x20.empty-hint,\x20.fab-btn,\x20.assistant-fab,\x20.mascot-wrap,\x20.node-add-menu,\x20.minimap-wrapper",
   PANEL_SCROLL_SELECTOR = a398_0x15814d(0x105);
 function selectVideoInteractionLockState(_0x11cf21 = {}) {
   const _0x2742dc = a398_0x15814d,

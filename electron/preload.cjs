@@ -149,6 +149,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     scan: (payload) => ipcRenderer.invoke("localAssetCleanup:scan", payload),
     trash: (payload) => ipcRenderer.invoke("localAssetCleanup:trash", payload),
   },
+  interfaceCache: {
+    clear: () => ipcRenderer.invoke("interfaceCache:clear"),
+  },
   onAssetUpdated: (callback) => {
     if (typeof callback !== "function") return () => {};
     const listener = (_event, payload) => {

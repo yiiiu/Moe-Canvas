@@ -201,6 +201,8 @@
   min-height: 24px;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
+  contain: layout paint style;
   font-size: var(--prompt-font-size, 14px);
   line-height: 1.7;
   word-break: break-word;
@@ -210,6 +212,22 @@
   -webkit-user-select: none;
   cursor: var(--grab-cursor);
   transition: color 0.16s ease;
+  scrollbar-color: var(--white-10) transparent;
+}
+.v2-node .text-output-content.aigen-text-output::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+  background: transparent;
+}
+.v2-node .text-output-content.aigen-text-output::-webkit-scrollbar-track,
+.v2-node .text-output-content.aigen-text-output::-webkit-scrollbar-track-piece,
+.v2-node .text-output-content.aigen-text-output::-webkit-scrollbar-corner,
+.v2-node .text-output-content.aigen-text-output::-webkit-scrollbar-button {
+  background: transparent;
+}
+.v2-node .text-output-content.aigen-text-output::-webkit-scrollbar-thumb {
+  background: var(--white-10);
+  border-radius: 4px;
 }
 .v2-node .aigen-text-output.is-text-selection-active {
   color: var(--text-primary);

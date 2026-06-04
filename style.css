@@ -14914,19 +14914,19 @@ body.is-grabbing {
   z-index: 100001;
   background: var(--surface-node);
   border: 1px solid var(--stroke-default);
-  border-radius: var(--radius-16);
-  padding: var(--space-6);
+  border-radius: var(--radius-14);
+  padding: var(--space-5);
   box-shadow: var(--shadow-menu);
   backdrop-filter: blur(32px);
   -webkit-backdrop-filter: blur(32px);
-  min-width: 220px;
-  font-size: var(--font-15);
+  min-width: 196px;
+  font-size: var(--font-14);
   font-family: inherit;
   color: var(--text-primary);
   animation: v2MenuPop 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .v2-node-picker {
-  width: 240px;
+  width: 208px;
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   transform-origin: top left;
@@ -14961,8 +14961,8 @@ body.is-grabbing {
 .v2-menu-section {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-9) var(--space-8) var(--space-4);
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-7) var(--space-2);
 }
 .v2-menu-rule {
   flex: 1;
@@ -14972,24 +14972,24 @@ body.is-grabbing {
 .v2-menu-txt-wrap {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 1px;
   flex: 1;
   min-width: 0;
 }
 .v2-node-picker .v2-menu-row {
-  gap: var(--space-10);
-  padding: var(--space-6) var(--space-8);
-  border-radius: var(--radius-10);
+  gap: var(--space-7);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-8);
   transition: background 0.12s;
-  margin-bottom: 1px;
+  margin-bottom: 0;
 }
 .v2-node-picker .v2-menu-row:hover {
   background: var(--fill-hover);
 }
 .v2-node-picker .v2-menu-ico {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-10);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-8);
   background: var(--white-05);
 }
 .v2-badge-beta {
@@ -15008,7 +15008,28 @@ body.is-grabbing {
   align-self: center;
 }
 .v2-node-picker .v2-badge-beta {
-  margin-left: var(--space-6);
+  margin-left: var(--space-4);
+}
+.v2-node-picker .v2-menu-title {
+  font-size: var(--font-13);
+  padding: var(--space-3) var(--space-6) var(--space-2);
+}
+.v2-node-picker .v2-menu-row.has-desc .v2-menu-txt-wrap {
+  height: 32px;
+}
+.v2-node-picker .v2-menu-row.has-desc .v2-menu-lbl {
+  transform: translateY(7px);
+}
+.v2-node-picker .v2-menu-row.has-desc .v2-menu-sub {
+  font-size: var(--font-11);
+  margin-top: var(--space-2);
+  transform: translateY(12px);
+}
+.v2-node-picker .v2-menu-lbl {
+  font-size: var(--font-14);
+}
+.v2-node-picker .v2-menu-sub {
+  font-size: var(--font-12);
 }
 .v2-canvas-ctx-menu.v2-submenu {
   padding: var(--space-6);

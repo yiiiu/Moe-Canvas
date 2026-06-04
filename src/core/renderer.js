@@ -825,12 +825,6 @@ function _buildVirtualizationCandidateSignature({
       dragContext: {
         isDragging: !!_0x3b7aa7?.[_0x4c932d(0x1c1)],
         targetNodeId: _0x3b7aa7?.[_0x4c932d(0x221)] ?? null,
-        pendingDx: Number[_0x4c932d(0x27e)](_0x3b7aa7?.[_0x4c932d(0x273)])
-          ? _0x3b7aa7[_0x4c932d(0x273)]
-          : 0x0,
-        pendingDy: Number[_0x4c932d(0x27e)](_0x3b7aa7?.[_0x4c932d(0x201)])
-          ? _0x3b7aa7["pendingDy"]
-          : 0x0,
       },
       pinnedNodeIds: _0x31e45f,
       containerW: Number[_0x4c932d(0x27e)](_0x4fb07d) ? _0x4fb07d : 0x0,

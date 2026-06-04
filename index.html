@@ -54,7 +54,7 @@
           <div class="logo" id="logoLink">
             <img
               class="logo-mark"
-              src="images/favicon-32.svg"
+              src="images/head-logo.png"
               width="28"
               height="28"
               alt="Moe-Canvas"
@@ -88,9 +88,9 @@
             </button>
           </div>
         </div>
-        <div class="header-right">
+        <div class="header-right" aria-hidden="true">
           <div
-            class="canvas-version-badge"
+            class="canvas-version-badge canvas-version-badge--hidden"
             id="canvasVersionBadge"
             aria-label="当前版本"
           ></div>
@@ -338,7 +338,7 @@
               type="button"
               class="avatar-menu-item"
               id="btnGithubOfficial"
-              data-external-url="https://github.com/yiiiu/peak-canvas"
+              data-external-url="https://github.com/yiiiu/Moe-Canvas"
               aria-label="打开 GitHub 官方仓库"
             >
               <svg
@@ -357,7 +357,7 @@
               type="button"
               class="avatar-menu-item"
               id="btnFeatureFeedback"
-              data-external-url="https://github.com/yiiiu/peak-canvas/issues"
+              data-external-url="https://github.com/yiiiu/Moe-Canvas/issues"
               aria-label="打开功能反馈"
             >
               <svg
@@ -939,6 +939,21 @@
               <line x1="7" y1="16" x2="17" y2="16" />
             </svg>
             键盘快捷键
+          </button>
+          <button type="button" class="settings-nav-item" data-pane="about">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            关于
           </button>
         </nav>
         <div class="settings-content">
@@ -2794,6 +2809,56 @@
               </div>
             </div>
           </div>
+          <div class="settings-pane" id="pane-about">
+            <h2 class="settings-pane-title">关于</h2>
+            <div class="settings-pane-body">
+              <div class="settings-about-card">
+                <img
+                  src="images/主logo.svg"
+                  class="settings-about-logo"
+                  alt="Moe-Canvas"
+                />
+                <div class="settings-about-main">
+                  <div class="settings-about-title">Moe-Canvas</div>
+                  <div class="settings-about-desc">本地 AI 多模态画布编辑器</div>
+                </div>
+              </div>
+              <h3 class="settings-group-title">当前项目信息</h3>
+              <div class="settings-section settings-about-info">
+                <div class="settings-about-info-row">
+                  <span class="settings-about-info-label">应用版本</span>
+                  <span class="settings-about-info-value" id="settingsAboutVersion">-</span>
+                </div>
+                <div class="settings-about-info-row">
+                  <span class="settings-about-info-label">当前画布</span>
+                  <span class="settings-about-info-value" id="settingsAboutProject">-</span>
+                </div>
+                <div class="settings-about-info-row">
+                  <span class="settings-about-info-label">项目定位</span>
+                  <span class="settings-about-info-value">本地优先创作画布</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="about-link settings-about-link"
+                data-external-url="https://github.com/yiiiu/Moe-Canvas"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+                访问项目仓库
+              </button>
+            </div>
+          </div>
         </div>
         <div
           class="dreamina-login-modal-overlay"
@@ -2944,7 +3009,7 @@
       <button type="button" class="about-close" id="aboutClose">&times;</button>
       <div class="about-logo">
         <img
-          src="images/加载动画.svg"
+          src="images/主logo.svg"
           width="48"
           height="48"
           alt="Moe-Canvas Logo"
@@ -2957,7 +3022,7 @@
         type="button"
         class="about-link"
         id="btnBilibili"
-        data-external-url="https://github.com/yiiiu/peak-canvas"
+        data-external-url="https://github.com/yiiiu/Moe-Canvas"
       >
         <svg
           width="16"

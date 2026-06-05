@@ -38,6 +38,7 @@ import {
   hitTestNode,
   worldToScreen,
 } from "../../core/math.js";
+import { isZoomLockEnabled } from "../zoomLockState.js";
 const CANVAS_UI_EXCLUSION_SELECTOR =
     ".header,\x20.sidebar-floating,\x20.canvas-controls-floating,\x20.empty-hint,\x20.fab-btn,\x20.assistant-fab,\x20.mascot-wrap,\x20.node-add-menu,\x20.minimap-wrapper",
   PANEL_SCROLL_SELECTOR = a398_0x15814d(0x105);
@@ -551,6 +552,7 @@ export function installAppCanvasPointerBindings({
         if (_0x4b919e || isScrollableTextEditWheel(_0x315446, targetDocument))
           return;
         _0x17de33[_0x1150cc(0xe2)]();
+        if (isZoomLockEnabled()) return;
         if (isVideoInteractionLocked(_0x1c0e6e)) return;
         (_0x1b7b04?.[_0x1150cc(0xe9)]?.(_0x1150cc(0x104)),
           _0x273e31(
@@ -574,6 +576,7 @@ export function installAppCanvasPointerBindings({
             _0x38e4f6[_0x35332e(0xff)]?.(_0x35332e(0xfa)) ||
             _0x38e4f6[_0x35332e(0xff)]?.(".conn-scissor-btn");
         if (!_0x1e7243 && !_0x551473) return;
+        if (isZoomLockEnabled()) return;
         if (_0x1c0e6e[_0x35332e(0x114)]) return;
         (_0x45246a[_0x35332e(0xe2)](),
           _0x273e31(

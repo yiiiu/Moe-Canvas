@@ -153,6 +153,15 @@ import {
 	initAppNodeEntry,
 } from "./src/modules/app/appNodeEntry.js";
 import { initToolbarPlacementMenu } from "./src/modules/toolbarPlacementMenu.js";
+import { initCanvasToolbarManager } from "./src/modules/canvasToolbarManager.js";
+import {
+	initZoomLockState,
+	isZoomLockEnabled,
+	setZoomLockEnabled,
+	toggleZoomLockEnabled,
+	ZOOM_LOCK_CHANGE_EVENT,
+} from "./src/modules/zoomLockState.js";
+import { applyCanvasControlsPlacement } from "./src/modules/settings/canvasControlsPlacementSettings.js";
 import { bootstrapAppProject } from "./src/modules/app/projectBootstrap.js";
 ((window["_isSessionActive"] = !![]),
 	initToastService(),
@@ -164,6 +173,7 @@ import { bootstrapAppProject } from "./src/modules/app/projectBootstrap.js";
 	initTaskCenterManager(),
 	installTooltipUnifier(),
 	initToolbarPlacementMenu(),
+	initZoomLockState(),
 	initDesktopMediaWakeService(),
 	startServerConnectionMonitor(),
 	(window[a117_0x6f57d(0x183)] = ![]));
@@ -302,6 +312,14 @@ const appCanvasPointerBindings = installAppCanvasPointerBindings({
 		initConnectionHandles: initConnectionHandles,
 		initPickConnect: initPickConnect,
 	},
+});
+initCanvasToolbarManager({
+	isZoomLockEnabled: isZoomLockEnabled,
+	setZoomLockEnabled: setZoomLockEnabled,
+	toggleZoomLockEnabled: toggleZoomLockEnabled,
+	zoomLockChangeEvent: ZOOM_LOCK_CHANGE_EVENT,
+	applyCanvasControlsPlacement: applyCanvasControlsPlacement,
+	showToast: (...args) => window.showToast?.(...args),
 });
 function _v2GetDefaultNodeName(_0x159ef1) {
 	const _0x4fad2c = a117_0x6f57d,

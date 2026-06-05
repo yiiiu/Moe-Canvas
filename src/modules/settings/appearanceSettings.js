@@ -239,14 +239,12 @@ function normalizeCursorSize(_0x28413e) {
     : _0x1272fb(0x125);
 }
 function getBaseThemeForPreset(_0x2ec321) {
-  const _0x94b693 = a535_0x5c60a0;
-  return normalizeAppThemePreset(_0x2ec321) === "day"
-    ? _0x94b693(0xee)
-    : _0x94b693(0x13d);
+  const _0x94b693 = a535_0x5c60a0,
+    _0x57134e = normalizeAppThemePreset(_0x2ec321);
+  return _0x57134e === "day" ? _0x94b693(0xee) : _0x94b693(0x13d);
 }
 function isLightCanvasPreset(_0x446e4) {
-  const _0x4c2759 = a535_0x5c60a0;
-  return normalizeAppThemePreset(_0x446e4) !== _0x4c2759(0x156);
+  return normalizeAppThemePreset(_0x446e4) === "day";
 }
 function getCursorThemeForPreset(_0x1a62e0) {
   const _0x3eba9b = a535_0x5c60a0;
@@ -354,6 +352,7 @@ function syncCanvasTheme(_0x46f09b) {
     "is-canvas-theme-light",
     _0x3df6f5,
   );
+  document["documentElement"]?.setAttribute?.("data-app-theme", _0x3f2832);
   if (!_0x5d0b27) return;
   (_0x5d0b27["classList"]["toggle"](_0x26e82a(0x15a), _0x3df6f5),
     APP_THEME_PRESETS[_0x26e82a(0x164)]((_0xd93750) => {

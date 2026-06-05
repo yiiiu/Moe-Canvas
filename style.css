@@ -2244,10 +2244,10 @@ body {
 }
 .toolbar-placement-menu {
   position: fixed;
-  width: 184px;
-  padding: 6px;
+  width: 142px;
+  padding: 4px;
   border: 1px solid var(--stroke-default);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--surface-node);
   box-shadow: var(--shadow-menu);
   backdrop-filter: blur(24px);
@@ -2268,17 +2268,17 @@ body {
 }
 .toolbar-placement-menu-item {
   width: 100%;
-  height: 36px;
+  height: 30px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
+  gap: 6px;
+  padding: 0 8px;
   border: none;
-  border-radius: 9px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-primary);
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   text-align: left;
   cursor: var(--link-cursor);
 }
@@ -2288,7 +2288,7 @@ body {
   color: var(--text-strong);
 }
 .toolbar-placement-menu-check {
-  width: 14px;
+  width: 12px;
   color: var(--text-strong);
   opacity: 0;
   font-weight: 700;

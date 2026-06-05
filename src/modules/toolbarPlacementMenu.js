@@ -53,9 +53,9 @@ function createMenu() {
 
 function positionMenu(menu, anchor) {
 	const rect = anchor.getBoundingClientRect();
-	const left = Math.max(12, Math.min(rect.left, window.innerWidth - 220));
+	const left = Math.max(12, Math.min(rect.left, window.innerWidth - 154));
 	menu.style.left = `${left}px`;
-	menu.style.top = `${rect.bottom + 8}px`;
+	menu.style.top = `${rect.bottom + 6}px`;
 }
 
 function syncMenu(menu, placement) {

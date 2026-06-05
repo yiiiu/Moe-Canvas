@@ -152,6 +152,7 @@ import {
 	createSpecialNodeDataByType,
 	initAppNodeEntry,
 } from "./src/modules/app/appNodeEntry.js";
+import { initToolbarPlacementMenu } from "./src/modules/toolbarPlacementMenu.js";
 import { bootstrapAppProject } from "./src/modules/app/projectBootstrap.js";
 ((window["_isSessionActive"] = !![]),
 	initToastService(),
@@ -162,6 +163,7 @@ import { bootstrapAppProject } from "./src/modules/app/projectBootstrap.js";
 	initTextInputContextMenu(),
 	initTaskCenterManager(),
 	installTooltipUnifier(),
+	initToolbarPlacementMenu(),
 	initDesktopMediaWakeService(),
 	startServerConnectionMonitor(),
 	(window[a117_0x6f57d(0x183)] = ![]));

@@ -40,7 +40,7 @@ import {
 } from "../../core/math.js";
 import { isZoomLockEnabled } from "../zoomLockState.js";
 const CANVAS_UI_EXCLUSION_SELECTOR =
-    ".header,\x20.sidebar-floating,\x20.canvas-controls-floating,\x20.empty-hint,\x20.fab-btn,\x20.assistant-fab,\x20.mascot-wrap,\x20.node-add-menu,\x20.minimap-wrapper",
+    ".header,\x20.sidebar-floating,\x20.canvas-controls-floating,\x20.empty-hint,\x20.fab-btn,\x20.assistant-fab,\x20.mascot-wrap,\x20.node-add-menu,\x20.minimap-wrapper,\x20.canvas-proj-dropdown,\x20.v2-asset-sidebar-panel,\x20.v2-workflow-sidebar-panel,\x20.v2-file-history-panel,\x20.v2-task-center-panel,\x20#settingsOverlay,\x20#aboutOverlay",
   PANEL_SCROLL_SELECTOR = a398_0x15814d(0x105);
 function selectVideoInteractionLockState(_0x11cf21 = {}) {
   const _0x2742dc = a398_0x15814d,
@@ -416,6 +416,22 @@ export function installAppCanvasPointerBindings({
             ![],
             _0x275a18,
           );
+      },
+      { capture: !![] },
+    ),
+    _0x43f439(
+      _0x596ff6,
+      "dblclick",
+      (_0x2e8901) => {
+        const _0x1d7d2b = _0x2ab77f;
+        if (
+          _0x2e8901[_0x1d7d2b(0xee)]?.[_0x1d7d2b(0xff)]?.(
+            CANVAS_UI_EXCLUSION_SELECTOR,
+          )
+        ) {
+          _0x2e8901[_0x1d7d2b(0xe2)]();
+          _0x2e8901[_0x1d7d2b(0x137)]();
+        }
       },
       { capture: !![] },
     ),

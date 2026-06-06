@@ -26,6 +26,8 @@ const ensureManager = () => {
 		mountEl: popupState.content,
 		bindSidebar: false,
 		bindGenerationEvents: false,
+		multiSelectOnClick: true,
+		bindDoubleClickToCanvas: false,
 	});
 	popupState.manager.panel?.classList.add("generation-history-popup-file-panel");
 	return popupState.manager;

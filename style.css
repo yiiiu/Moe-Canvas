@@ -18959,7 +18959,7 @@ html[data-app-theme="dawn"] #appThemeGroup .cursor-size-btn[data-app-theme="dawn
   flex-direction: column-reverse;
   align-items: center;
   gap: 6px;
-  z-index: 99999;
+  z-index: 100400;
   pointer-events: none;
 }
 .v2-toast {
@@ -21041,6 +21041,25 @@ html[data-app-theme="dawn"] #appThemeGroup .cursor-size-btn[data-app-theme="dawn
   outline-offset: -2px;
   box-shadow: var(--shadow-popover);
 }
+.v2-file-history-card.is-selected .v2-file-history-thumb::after {
+  content: "✓";
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--blue);
+  color: var(--text-on-icon-badge);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 6px 16px var(--black-35);
+  z-index: 3;
+}
 .v2-file-history-card.is-preview-playing .v2-file-history-thumb {
   box-shadow: var(--shadow-popover);
 }
@@ -21069,6 +21088,44 @@ html[data-app-theme="dawn"] #appThemeGroup .cursor-size-btn[data-app-theme="dawn
   height: 100%;
   display: block;
   object-fit: cover;
+}
+.v2-file-history-preview-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--white-18);
+  border-radius: 999px;
+  background: var(--black-55);
+  color: var(--white-90);
+  cursor: var(--link-cursor);
+  opacity: 0.88;
+  z-index: 4;
+  box-shadow: 0 8px 18px var(--black-35);
+  backdrop-filter: blur(10px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    background 0.16s ease;
+}
+.v2-file-history-preview-btn:hover {
+  opacity: 1;
+  transform: translateY(-1px) scale(1.04);
+  background: var(--black-70);
+}
+.v2-file-history-preview-btn svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .v2-file-history-video-preview-overlay {
   position: absolute;

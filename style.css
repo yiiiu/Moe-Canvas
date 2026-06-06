@@ -16103,6 +16103,67 @@ html:not([data-canvas-controls-placement="top-right"]) .canvas-controls-floating
   background: var(--fill-hover-strong);
   color: var(--text-primary);
 }
+#tab-context-menu.v2-dropdown-menu {
+  padding: var(--space-6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-14);
+  background: rgba(24, 26, 34, 0.62);
+  box-shadow:
+    var(--shadow-menu),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  overflow: hidden;
+  backdrop-filter: blur(26px) saturate(1.24);
+  -webkit-backdrop-filter: blur(26px) saturate(1.24);
+}
+#tab-context-menu .v2-menu-row {
+  min-height: 34px;
+  color: var(--text-primary);
+}
+#tab-context-menu .v2-menu-row:hover {
+  background: var(--fill-hover-strong);
+  color: var(--text-primary);
+}
+#tab-context-menu .v2-menu-sep {
+  background: var(--stroke-07);
+}
+:is(html[data-theme="dark"], html:not([data-theme])) #tab-context-menu.v2-dropdown-menu {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(28, 32, 42, 0.66), rgba(14, 18, 27, 0.6));
+}
+:is(html[data-theme="dark"], html:not([data-theme])) #tab-context-menu .v2-menu-row {
+  color: rgba(255, 255, 255, 0.88);
+}
+:is(html[data-theme="dark"], html:not([data-theme])) #tab-context-menu .v2-menu-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+:is(html[data-theme="dark"], html:not([data-theme])) #tab-context-menu .v2-menu-sep {
+  background: rgba(255, 255, 255, 0.1);
+}
+html[data-app-theme="dawn"] #tab-context-menu.v2-dropdown-menu {
+  border-color: rgba(167, 139, 250, 0.2);
+  background: linear-gradient(180deg, rgba(42, 30, 78, 0.68), rgba(25, 20, 45, 0.6));
+}
+html[data-app-theme="dawn"] #tab-context-menu .v2-menu-row {
+  color: rgba(255, 255, 255, 0.88);
+}
+html[data-app-theme="dawn"] #tab-context-menu .v2-menu-row:hover {
+  background: rgba(124, 92, 255, 0.28);
+  color: #fff;
+}
+html[data-app-theme="dawn"] #tab-context-menu .v2-menu-sep {
+  background: rgba(255, 255, 255, 0.12);
+}
+:is(html[data-theme="light"], html.is-canvas-theme-light, html[data-app-theme="day"]) #tab-context-menu.v2-dropdown-menu {
+  border-color: rgba(124, 92, 255, 0.14);
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow:
+    0 16px 42px rgba(35, 28, 55, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.72) inset;
+}
+:is(html[data-theme="light"], html.is-canvas-theme-light, html[data-app-theme="day"]) #tab-context-menu .v2-menu-row:hover {
+  background: rgba(124, 92, 255, 0.12);
+}
 .v2-canvas-ctx-menu.v2-sb-dropdown {
   padding: var(--space-6);
   min-width: 120px;

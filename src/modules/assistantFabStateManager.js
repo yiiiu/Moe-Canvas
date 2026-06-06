@@ -185,6 +185,11 @@ function initAssistantFabStateManager() {
 		const label = row.textContent || "";
 		return label.includes("上传") || label.includes("文件");
 	};
+	const isHistoryMenuRow = (row) => {
+		if (!row) return false;
+		const label = row.textContent || "";
+		return label.includes("历史记录");
+	};
 	const isNodeCreationMenuTarget = (target, selector) => {
 		const item = target?.closest(selector);
 		return Boolean(item?.dataset?.type && item.dataset.type !== "resource");
@@ -214,6 +219,9 @@ function initAssistantFabStateManager() {
 			const target = event.target instanceof Element ? event.target : null;
 			const menuRow = getNodeCreationMenuRow(target);
 			if (!menuRow) return;
+			if (isHistoryMenuRow(menuRow)) {
+				return;
+			}
 			if (isResourceMenuRow(menuRow)) {
 				markResourceCreationStarted();
 				return;

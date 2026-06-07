@@ -1,1 +1,541 @@
-const a32_0x2d46d4=a32_0x40d5;(function(_0x3ba4e8,_0x5f2e75){const _0x89eed5=a32_0x40d5,_0x525209=_0x3ba4e8();while(!![]){try{const _0x14bf7f=-parseInt(_0x89eed5(0xf9))/0x1+parseInt(_0x89eed5(0x106))/0x2+-parseInt(_0x89eed5(0x101))/0x3+parseInt(_0x89eed5(0x10c))/0x4*(parseInt(_0x89eed5(0xf5))/0x5)+parseInt(_0x89eed5(0x10d))/0x6+parseInt(_0x89eed5(0x118))/0x7+-parseInt(_0x89eed5(0xfa))/0x8;if(_0x14bf7f===_0x5f2e75)break;else _0x525209['push'](_0x525209['shift']());}catch(_0x6bb700){_0x525209['push'](_0x525209['shift']());}}}(a32_0x4bb9,0x9fde6));import a32_0x243650 from'node:test';import a32_0x3c9f24 from'node:assert/strict';function mockFetchOnceJson(_0xfdb91d){globalThis['fetch']=async _0x59bb11=>{const _0x247582=a32_0x40d5;if(String(_0x59bb11)!==_0x247582(0xfc))throw new Error(_0x247582(0x109)+String(_0x59bb11));return{'ok':!![],'status':0xc8,'headers':{'get':()=>_0x247582(0x100)},'json':async()=>_0xfdb91d,'text':async()=>JSON[_0x247582(0xda)](_0xfdb91d)};};}function a32_0x40d5(_0x494bbb,_0x104b91){const _0x4bb9c7=a32_0x4bb9();return a32_0x40d5=function(_0x40d5b6,_0x2769b7){_0x40d5b6=_0x40d5b6-0xd9;let _0xd4ea85=_0x4bb9c7[_0x40d5b6];return _0xd4ea85;},a32_0x40d5(_0x494bbb,_0x104b91);}function a32_0x4bb9(){const _0xe266b0=['length','configApi:\x20secureSettings\x20不可用时保持明文配置兼容行为','hasOwnProperty','providers','apiConfig.providers.apimart.apiKey','./configApi.js','keys','am-key','prototype','https://grsai.example2.com/','k_rhwf','filter','runninghub','k_grsai2','after','equal','GET','rh-workflow-key','https://ppio.example.com','parse','push','apiKey','modelApiKey','k_rhmodel','set','configApi:\x20Electron\x20secureSettings\x20保存时只把非敏感配置写入\x20config.json','95uvuujS','key','apiConfig.providers.runninghub.modelApiKey','fromEntries','153121xRHAqk','4294240eYumYC','get','/api/config','configApi:\x20grsai\x20无\x20provider\x20配置时使用\x20apiUrlInput/apiKeyInput','grsai','fetch','application/json','2478624EwwvXr','k_grsai','ppio','apiUrl','rh-model-key','331748ArIvbj','value','configApi:\x20grsai\x20provider\x20配置优先于\x20apiUrlInput/apiKeyInput','unexpected\x20fetch\x20url:\x20','apiConfig.providers.grsai.apiKey','rh-key','97980nyEHjy','2382828udmFQT','delete','map','plain-key','https://api.apimart.ai','body','window','https://api.grsai.example.com','k_ppio','legacy-grsai-key','deepEqual','7997598dvnBRy','https://api.grsai.example.com///','isArray','stringify'];a32_0x4bb9=function(){return _0xe266b0;};return a32_0x4bb9();}function installSecureSettingsStub(_0x514e20,{available:available=!![],initialValues:initialValues={}}={}){const _0x29c385=a32_0x40d5,_0x705cf7=globalThis[_0x29c385(0x113)],_0x2caedf={...initialValues},_0x995515=[];return globalThis[_0x29c385(0x113)]={'electronAPI':{'secureSettings':{async 'get'(_0x4c2314={}){const _0x2b31d4=_0x29c385;_0x995515[_0x2b31d4(0xef)]({'method':_0x2b31d4(0xfb),'payload':_0x4c2314});const _0x51b08e=Array[_0x2b31d4(0xd9)](_0x4c2314[_0x2b31d4(0xe1)])?_0x4c2314[_0x2b31d4(0xe1)]:[_0x4c2314[_0x2b31d4(0xf6)]][_0x2b31d4(0xe6)](Boolean);return{'ok':!![],'available':available,'values':Object[_0x2b31d4(0xf8)](_0x51b08e[_0x2b31d4(0xe6)](_0x4aee0c=>Object[_0x2b31d4(0xe3)][_0x2b31d4(0xdd)]['call'](_0x2caedf,_0x4aee0c))[_0x2b31d4(0x10f)](_0x16da46=>[_0x16da46,_0x2caedf[_0x16da46]]))};},async 'set'(_0x74f818={}){const _0x2f4ad6=_0x29c385;_0x995515[_0x2f4ad6(0xef)]({'method':_0x2f4ad6(0xf3),'payload':_0x74f818});if(!available)return{'ok':![],'available':available};return _0x2caedf[_0x74f818[_0x2f4ad6(0xf6)]]=String(_0x74f818[_0x2f4ad6(0x107)]||''),{'ok':!![],'available':available};},async 'delete'(_0x407300={}){const _0x176499=_0x29c385;_0x995515['push']({'method':_0x176499(0x10e),'payload':_0x407300});if(!available)return{'ok':![],'available':available};return delete _0x2caedf[_0x407300['key']],{'ok':!![],'available':available};}}}},_0x514e20[_0x29c385(0xe9)](()=>{const _0x3e7367=_0x29c385;globalThis[_0x3e7367(0x113)]=_0x705cf7;}),{'values':_0x2caedf,'calls':_0x995515};}function installFetchSequence(_0x2e5eb3,{getData:getData={},postOk:postOk=!![]}={}){const _0x1d90f0=a32_0x40d5,_0xdd241c=globalThis[_0x1d90f0(0xff)],_0x445722=[];return globalThis[_0x1d90f0(0xff)]=async(_0x12f047,_0x384ed1={})=>{const _0xfad680=_0x1d90f0;if(String(_0x12f047)!=='/api/config')throw new Error('unexpected\x20fetch\x20url:\x20'+String(_0x12f047));const _0x4aa662=String(_0x384ed1['method']||_0xfad680(0xeb))['toUpperCase']();if(_0x4aa662==='POST')return _0x445722[_0xfad680(0xef)](JSON[_0xfad680(0xee)](String(_0x384ed1[_0xfad680(0x112)]||'{}'))),{'ok':postOk,'status':postOk?0xc8:0x1f4,'headers':{'get':()=>'application/json'},'json':async()=>({'success':postOk}),'text':async()=>JSON[_0xfad680(0xda)]({'success':postOk})};return{'ok':!![],'status':0xc8,'headers':{'get':()=>'application/json'},'json':async()=>getData,'text':async()=>JSON[_0xfad680(0xda)](getData)};},_0x2e5eb3[_0x1d90f0(0xe9)](()=>{globalThis['fetch']=_0xdd241c;}),{'posts':_0x445722};}a32_0x243650(a32_0x2d46d4(0x108),async()=>{const _0x371813=a32_0x2d46d4,_0x543137=globalThis['fetch'];try{mockFetchOnceJson({'apiUrlInput':'https://api.grsai.example.com///','apiKeyInput':'k_grsai','providers':{'grsai':{'apiUrl':_0x371813(0xe4),'apiKey':_0x371813(0xe8)}}});const {ensureConfig:_0x30bfca,getProviderConfig:_0x2f05e2,clearApiConfig:_0x9e98ac}=await import(_0x371813(0xe0));_0x9e98ac(),await _0x30bfca();const _0x588740=_0x2f05e2('grsai');a32_0x3c9f24[_0x371813(0xea)](_0x588740['apiUrl'],'https://grsai.example2.com'),a32_0x3c9f24['equal'](_0x588740[_0x371813(0xf0)],_0x371813(0xe8));}finally{globalThis[_0x371813(0xff)]=_0x543137;}}),a32_0x243650('configApi:\x20Electron\x20secureSettings\x20会迁移旧明文\x20API\x20Key\x20并回写去敏配置',{'concurrency':![]},async _0x4a1104=>{const _0x51f760=a32_0x2d46d4,{values:_0x4780a0}=installSecureSettingsStub(_0x4a1104),{posts:_0x2fcb2e}=installFetchSequence(_0x4a1104,{'getData':{'apiUrlInput':'https://api.grsai.example.com///','apiKeyInput':_0x51f760(0x116),'providers':{'runninghub':{'apiKey':'rh-workflow-key','modelApiKey':'rh-model-key'}}}}),{fetchApiConfigFromServer:_0x18aeb4,clearApiConfig:_0x3b4d0f}=await import(_0x51f760(0xe0));_0x3b4d0f();const _0x4c7f68=await _0x18aeb4();a32_0x3c9f24[_0x51f760(0xea)](_0x4c7f68[_0x51f760(0xde)][_0x51f760(0xfe)]['apiKey'],_0x51f760(0x116)),a32_0x3c9f24['equal'](_0x4c7f68[_0x51f760(0xde)][_0x51f760(0xe7)][_0x51f760(0xf0)],_0x51f760(0xec)),a32_0x3c9f24[_0x51f760(0xea)](_0x4c7f68[_0x51f760(0xde)][_0x51f760(0xe7)][_0x51f760(0xf1)],_0x51f760(0x105)),a32_0x3c9f24['equal'](_0x4780a0[_0x51f760(0x10a)],_0x51f760(0x116)),a32_0x3c9f24[_0x51f760(0xea)](_0x4780a0['apiConfig.providers.runninghub.apiKey'],'rh-workflow-key'),a32_0x3c9f24['equal'](_0x4780a0[_0x51f760(0xf7)],_0x51f760(0x105)),a32_0x3c9f24[_0x51f760(0xea)](_0x2fcb2e['length'],0x1),a32_0x3c9f24[_0x51f760(0xea)](_0x2fcb2e[0x0]['apiKeyInput'],undefined),a32_0x3c9f24['equal'](_0x2fcb2e[0x0][_0x51f760(0xde)][_0x51f760(0xe7)][_0x51f760(0xf0)],undefined),a32_0x3c9f24[_0x51f760(0xea)](_0x2fcb2e[0x0][_0x51f760(0xde)][_0x51f760(0xe7)][_0x51f760(0xf1)],undefined);}),a32_0x243650(a32_0x2d46d4(0xf4),{'concurrency':![]},async _0x14666b=>{const _0x26c1a=a32_0x2d46d4,{values:_0x2faa56}=installSecureSettingsStub(_0x14666b),{posts:_0x11e7ce}=installFetchSequence(_0x14666b),{saveApiConfigToServer:_0x2daa19,clearApiConfig:_0x4374fc}=await import(_0x26c1a(0xe0));_0x4374fc(),await _0x2daa19({'providers':{'apimart':{'apiKey':_0x26c1a(0xe2),'apiUrl':_0x26c1a(0x111)},'runninghub':{'apiKey':_0x26c1a(0x10b),'modelApiKey':'rh-model-key'}}}),a32_0x3c9f24[_0x26c1a(0xea)](_0x2faa56[_0x26c1a(0xdf)],_0x26c1a(0xe2)),a32_0x3c9f24[_0x26c1a(0xea)](_0x2faa56['apiConfig.providers.runninghub.apiKey'],_0x26c1a(0x10b)),a32_0x3c9f24[_0x26c1a(0xea)](_0x2faa56[_0x26c1a(0xf7)],_0x26c1a(0x105)),a32_0x3c9f24[_0x26c1a(0xea)](_0x11e7ce[_0x26c1a(0xdb)],0x1),a32_0x3c9f24[_0x26c1a(0x117)](_0x11e7ce[0x0],{'providers':{'apimart':{'apiUrl':_0x26c1a(0x111)},'runninghub':{}}});}),a32_0x243650(a32_0x2d46d4(0xdc),{'concurrency':![]},async _0x335fb7=>{const _0x58eee2=a32_0x2d46d4;installSecureSettingsStub(_0x335fb7,{'available':![]});const {posts:_0x4fb633}=installFetchSequence(_0x335fb7),{saveApiConfigToServer:_0x188b75,clearApiConfig:_0x499d0e}=await import('./configApi.js');_0x499d0e(),await _0x188b75({'providers':{'grsai':{'apiKey':_0x58eee2(0x110)}}}),a32_0x3c9f24[_0x58eee2(0x117)](_0x4fb633,[{'providers':{'grsai':{'apiKey':_0x58eee2(0x110)}}}]);}),a32_0x243650(a32_0x2d46d4(0xfd),async()=>{const _0x53eca1=a32_0x2d46d4,_0x78e961=globalThis[_0x53eca1(0xff)];try{mockFetchOnceJson({'apiUrlInput':_0x53eca1(0x119),'apiKeyInput':_0x53eca1(0x102),'providers':{'ppio':{'apiUrl':'https://ppio.example.com/','apiKey':'k_ppio'},'runninghub':{'apiUrl':'https://runninghub.example.com/','apiKey':_0x53eca1(0xe5),'modelApiKey':_0x53eca1(0xf2)}}});const {ensureConfig:_0x5062e2,getProviderConfig:_0x212e3c,clearApiConfig:_0x513089}=await import('./configApi.js');_0x513089(),await _0x5062e2();const _0x534e43=_0x212e3c(_0x53eca1(0xfe));a32_0x3c9f24[_0x53eca1(0xea)](_0x534e43['apiUrl'],_0x53eca1(0x114)),a32_0x3c9f24[_0x53eca1(0xea)](_0x534e43[_0x53eca1(0xf0)],_0x53eca1(0x102));const _0x46b9be=_0x212e3c(_0x53eca1(0x103));a32_0x3c9f24[_0x53eca1(0xea)](_0x46b9be[_0x53eca1(0x104)],_0x53eca1(0xed)),a32_0x3c9f24[_0x53eca1(0xea)](_0x46b9be[_0x53eca1(0xf0)],_0x53eca1(0x115));const _0x1993d8=_0x212e3c(_0x53eca1(0xe7));a32_0x3c9f24[_0x53eca1(0xea)](_0x1993d8[_0x53eca1(0xf0)],_0x53eca1(0xe5)),a32_0x3c9f24[_0x53eca1(0xea)](_0x1993d8[_0x53eca1(0xf1)],_0x53eca1(0xf2));const _0x163b7e=_0x212e3c('runninghubwf');a32_0x3c9f24[_0x53eca1(0xea)](_0x163b7e[_0x53eca1(0xf0)],_0x53eca1(0xe5)),a32_0x3c9f24['equal'](_0x163b7e[_0x53eca1(0xf1)],'');}finally{globalThis[_0x53eca1(0xff)]=_0x78e961;}});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+function mockFetchOnceJson(payload) {
+  globalThis.fetch = async url => {
+    if (String(url) !== '/api/config') {
+      throw new Error(`unexpected fetch url: ${String(url)}`);
+    }
+    return {
+      ok: true,
+      status: 200,
+      headers: {
+        get: () => 'application/json',
+      },
+      json: async () => payload,
+      text: async () => JSON.stringify(payload),
+    };
+  };
+}
+
+function installSecureSettingsStub(
+  testContext,
+  { available = true, initialValues = {} } = {},
+) {
+  const previousWindow = globalThis.window;
+  const values = { ...initialValues };
+  const calls = [];
+
+  globalThis.window = {
+    electronAPI: {
+      secureSettings: {
+        async get(payload = {}) {
+          calls.push({ method: 'get', payload });
+          const keys = Array.isArray(payload.keys)
+            ? payload.keys
+            : [payload.key].filter(Boolean);
+          return {
+            ok: true,
+            available,
+            values: Object.fromEntries(
+              keys
+                .filter(key => Object.prototype.hasOwnProperty.call(values, key))
+                .map(key => [key, values[key]]),
+            ),
+          };
+        },
+        async set(payload = {}) {
+          calls.push({ method: 'set', payload });
+          if (!available) {
+            return { ok: false, available };
+          }
+          values[payload.key] = String(payload.value || '');
+          return { ok: true, available };
+        },
+        async delete(payload = {}) {
+          calls.push({ method: 'delete', payload });
+          if (!available) {
+            return { ok: false, available };
+          }
+          delete values[payload.key];
+          return { ok: true, available };
+        },
+      },
+    },
+  };
+
+  testContext.after(() => {
+    globalThis.window = previousWindow;
+  });
+
+  return { values, calls };
+}
+
+function installFetchSequence(
+  testContext,
+  { getData = {}, postOk = true } = {},
+) {
+  const previousFetch = globalThis.fetch;
+  const posts = [];
+
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url) !== '/api/config') {
+      throw new Error(`unexpected fetch url: ${String(url)}`);
+    }
+
+    const method = String(init.method || 'GET').toUpperCase();
+    if (method === 'POST') {
+      posts.push(JSON.parse(String(init.body || '{}')));
+      return {
+        ok: postOk,
+        status: postOk ? 200 : 500,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: postOk }),
+        text: async () => JSON.stringify({ success: postOk }),
+      };
+    }
+
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => getData,
+      text: async () => JSON.stringify(getData),
+    };
+  };
+
+  testContext.after(() => {
+    globalThis.fetch = previousFetch;
+  });
+
+  return { posts };
+}
+
+test('configApi: grsai provider 配置优先于 apiUrlInput/apiKeyInput', async () => {
+  const previousFetch = globalThis.fetch;
+  try {
+    mockFetchOnceJson({
+      apiUrlInput: 'https://api.grsai.example.com///',
+      apiKeyInput: 'k_grsai',
+      providers: {
+        grsai: {
+          apiUrl: 'https://grsai.example2.com/',
+          apiKey: 'k_grsai2',
+        },
+      },
+    });
+
+    const { ensureConfig, getProviderConfig, clearApiConfig } = await import('./configApi.js');
+    clearApiConfig();
+    await ensureConfig();
+
+    const providerConfig = getProviderConfig('grsai');
+    assert.equal(providerConfig.apiUrl, 'https://grsai.example2.com');
+    assert.equal(providerConfig.apiKey, 'k_grsai2');
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test(
+  'configApi: Electron secureSettings 会迁移旧明文 API Key 并回写去敏配置',
+  { concurrency: false },
+  async testContext => {
+    const { values } = installSecureSettingsStub(testContext);
+    const { posts } = installFetchSequence(testContext, {
+      getData: {
+        apiUrlInput: 'https://api.grsai.example.com///',
+        apiKeyInput: 'legacy-grsai-key',
+        providers: {
+          runninghub: {
+            apiKey: 'rh-workflow-key',
+            modelApiKey: 'rh-model-key',
+          },
+        },
+      },
+    });
+
+    const { fetchApiConfigFromServer, clearApiConfig } = await import('./configApi.js');
+    clearApiConfig();
+
+    const apiConfig = await fetchApiConfigFromServer();
+    assert.equal(apiConfig.providers.grsai.apiKey, 'legacy-grsai-key');
+    assert.equal(apiConfig.providers.runninghub.apiKey, 'rh-workflow-key');
+    assert.equal(apiConfig.providers.runninghub.modelApiKey, 'rh-model-key');
+    assert.equal(values['apiConfig.providers.grsai.apiKey'], 'legacy-grsai-key');
+    assert.equal(values['apiConfig.providers.runninghub.apiKey'], 'rh-workflow-key');
+    assert.equal(values['apiConfig.providers.runninghub.modelApiKey'], 'rh-model-key');
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].apiKeyInput, undefined);
+    assert.equal(posts[0].providers.runninghub.apiKey, undefined);
+    assert.equal(posts[0].providers.runninghub.modelApiKey, undefined);
+  },
+);
+
+test(
+  'configApi: Electron secureSettings 保存时只把非敏感配置写入 config.json',
+  { concurrency: false },
+  async testContext => {
+    const { values } = installSecureSettingsStub(testContext);
+    const { posts } = installFetchSequence(testContext);
+    const { saveApiConfigToServer, clearApiConfig } = await import('./configApi.js');
+    clearApiConfig();
+
+    await saveApiConfigToServer({
+      providers: {
+        apimart: {
+          apiKey: 'am-key',
+          apiUrl: 'https://api.apimart.ai',
+        },
+        runninghub: {
+          apiKey: 'rh-key',
+          modelApiKey: 'rh-model-key',
+        },
+      },
+    });
+
+    assert.equal(values['apiConfig.providers.apimart.apiKey'], 'am-key');
+    assert.equal(values['apiConfig.providers.runninghub.apiKey'], 'rh-key');
+    assert.equal(values['apiConfig.providers.runninghub.modelApiKey'], 'rh-model-key');
+    assert.equal(posts.length, 1);
+    assert.deepEqual(posts[0], {
+      providers: {
+        apimart: {
+          apiUrl: 'https://api.apimart.ai',
+        },
+        runninghub: {},
+      },
+      customProviders: [],
+    });
+  },
+);
+
+test(
+  'configApi: secureSettings 不可用时保持明文配置兼容行为',
+  { concurrency: false },
+  async testContext => {
+    installSecureSettingsStub(testContext, { available: false });
+    const { posts } = installFetchSequence(testContext);
+    const { saveApiConfigToServer, clearApiConfig } = await import('./configApi.js');
+    clearApiConfig();
+
+    await saveApiConfigToServer({
+      providers: {
+        grsai: {
+          apiKey: 'plain-key',
+        },
+      },
+    });
+
+    assert.deepEqual(posts, [
+      {
+        providers: {
+          grsai: {
+            apiKey: 'plain-key',
+          },
+        },
+        customProviders: [],
+      },
+    ]);
+  },
+);
+
+test('configApi: grsai 无 provider 配置时使用 apiUrlInput/apiKeyInput', async () => {
+  const previousFetch = globalThis.fetch;
+  try {
+    mockFetchOnceJson({
+      apiUrlInput: 'https://api.grsai.example.com',
+      apiKeyInput: 'legacy-grsai-key',
+      providers: {
+        runninghub: {
+          apiUrl: 'https://runninghub.example.com/',
+          apiKey: 'k_rhwf',
+          modelApiKey: 'k_rhmodel',
+        },
+      },
+    });
+
+    const { ensureConfig, getProviderConfig, clearApiConfig } = await import('./configApi.js');
+    clearApiConfig();
+    await ensureConfig();
+
+    const grsai = getProviderConfig('grsai');
+    assert.equal(grsai.apiUrl, 'https://api.grsai.example.com');
+    assert.equal(grsai.apiKey, 'legacy-grsai-key');
+
+    const runninghub = getProviderConfig('runninghub');
+    assert.equal(runninghub.apiKey, 'k_rhwf');
+    assert.equal(runninghub.modelApiKey, 'k_rhmodel');
+
+    const runninghubwf = getProviderConfig('runninghubwf');
+    assert.equal(runninghubwf.apiKey, 'k_rhwf');
+    assert.equal(runninghubwf.modelApiKey, '');
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test(
+  'configApi: customProviders 注册表会归一化并参与安全存储',
+  { concurrency: false },
+  async testContext => {
+    const { values, calls } = installSecureSettingsStub(testContext);
+    const { posts } = installFetchSequence(testContext, {
+      getData: {
+        customProviders: [
+          {
+            id: 'Acme Cloud',
+            label: 'Acme',
+            capabilities: ['text', 'image', 'unknown', 'text'],
+            models: {
+              text: ['gpt-4o-mini', 'gpt-4o-mini'],
+              image: ['gpt-image-1'],
+            },
+          },
+        ],
+        providers: {
+          'custom_acme-cloud': {
+            apiUrl: 'https://api.acme.example.com///',
+            apiKey: 'acme-key',
+            modelApiKey: 'acme-model-key',
+          },
+        },
+      },
+    });
+
+    const {
+      fetchApiConfigFromServer,
+      getCustomProvidersConfig,
+      getCustomProviderMeta,
+      getProviderConfig,
+      clearApiConfig,
+    } = await import('./configApi.js');
+    clearApiConfig();
+
+    const apiConfig = await fetchApiConfigFromServer();
+    assert.deepEqual(apiConfig.customProviders, [
+      {
+        id: 'custom_acme-cloud',
+        label: 'Acme',
+        kind: 'openai-compatible',
+        enabled: true,
+        capabilities: ['text', 'image'],
+        models: {
+          text: ['gpt-4o-mini'],
+          image: ['gpt-image-1'],
+          video: [],
+          audio: [],
+        },
+      },
+    ]);
+    assert.equal(values['apiConfig.providers.custom_acme-cloud.apiKey'], 'acme-key');
+    assert.equal(
+      values['apiConfig.providers.custom_acme-cloud.modelApiKey'],
+      'acme-model-key',
+    );
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].providers['custom_acme-cloud'].apiKey, undefined);
+    assert.equal(posts[0].providers['custom_acme-cloud'].modelApiKey, undefined);
+    assert.deepEqual(getCustomProvidersConfig(), apiConfig.customProviders);
+    assert.deepEqual(getCustomProviderMeta('Acme Cloud'), apiConfig.customProviders[0]);
+    assert.deepEqual(getProviderConfig('custom_acme-cloud'), {
+      apiUrl: 'https://api.acme.example.com',
+      apiKey: 'acme-key',
+      modelApiKey: 'acme-model-key',
+    });
+
+    const secureReadCall = calls.find(
+      entry => entry.method === 'get' && Array.isArray(entry.payload?.keys),
+    );
+    assert.equal(
+      secureReadCall.payload.keys.includes('apiConfig.providers.custom_acme-cloud.apiKey'),
+      true,
+    );
+    assert.equal(
+      secureReadCall.payload.keys.includes(
+        'apiConfig.providers.custom_acme-cloud.modelApiKey',
+      ),
+      true,
+    );
+  },
+);
+
+test(
+  'configApi: 保存自定义供应商时保留注册表并剥离敏感字段',
+  { concurrency: false },
+  async testContext => {
+    const { values } = installSecureSettingsStub(testContext);
+    const { posts } = installFetchSequence(testContext);
+    const { saveApiConfigToServer, clearApiConfig } = await import('./configApi.js');
+    clearApiConfig();
+
+    await saveApiConfigToServer({
+      customProviders: [
+        {
+          id: 'custom_acme',
+          label: 'Acme',
+          capabilities: ['text', 'audio'],
+          models: {
+            text: ['gpt-4o-mini'],
+            audio: ['tts-1'],
+          },
+        },
+      ],
+      providers: {
+        custom_acme: {
+          apiUrl: 'https://api.acme.example.com',
+          apiKey: 'acme-key',
+          modelApiKey: 'acme-model-key',
+          enabled: true,
+        },
+      },
+    });
+
+    assert.equal(values['apiConfig.providers.custom_acme.apiKey'], 'acme-key');
+    assert.equal(values['apiConfig.providers.custom_acme.modelApiKey'], 'acme-model-key');
+    assert.deepEqual(posts[0], {
+      customProviders: [
+        {
+          id: 'custom_acme',
+          label: 'Acme',
+          kind: 'openai-compatible',
+          enabled: true,
+          capabilities: ['text', 'audio'],
+          models: {
+            text: ['gpt-4o-mini'],
+            image: [],
+            video: [],
+            audio: ['tts-1'],
+          },
+        },
+      ],
+      providers: {
+        custom_acme: {
+          apiUrl: 'https://api.acme.example.com',
+          enabled: true,
+        },
+      },
+    });
+  },
+);
+
+test(
+  'configApi: PPIO 内置配置会在读取和保存时移除',
+  { concurrency: false },
+  async testContext => {
+    const { values } = installSecureSettingsStub(testContext, {
+      initialValues: {
+        'apiConfig.providers.ppio.apiKey': 'old-ppio-key',
+        'apiConfig.providers.ppio.modelApiKey': 'old-ppio-model-key',
+      },
+    });
+    const { posts } = installFetchSequence(testContext, {
+      getData: {
+        providers: {
+          ppio: {
+            apiUrl: 'https://api.ppio.example.com',
+            apiKey: 'plain-ppio-key',
+          },
+          apimart: {
+            apiUrl: 'https://api.apimart.ai',
+          },
+        },
+      },
+    });
+
+    const {
+      fetchApiConfigFromServer,
+      getProviderConfig,
+      saveApiConfigToServer,
+      clearApiConfig,
+    } = await import('./configApi.js');
+    clearApiConfig();
+
+    const apiConfig = await fetchApiConfigFromServer();
+    assert.equal(Object.hasOwn(apiConfig.providers, 'ppio'), false);
+    assert.equal(values['apiConfig.providers.ppio.apiKey'], undefined);
+    assert.equal(values['apiConfig.providers.ppio.modelApiKey'], undefined);
+    assert.deepEqual(getProviderConfig('ppio'), {
+      apiUrl: '',
+      apiKey: '',
+      modelApiKey: '',
+    });
+
+    await saveApiConfigToServer({
+      providers: {
+        ppio: {
+          apiUrl: 'https://api.ppio.example.com',
+          apiKey: 'new-ppio-key',
+        },
+        apimart: {
+          apiKey: 'am-key',
+        },
+      },
+    });
+
+    assert.equal(posts.at(-1).providers.ppio, undefined);
+    assert.equal(values['apiConfig.providers.ppio.apiKey'], undefined);
+    assert.equal(values['apiConfig.providers.apimart.apiKey'], 'am-key');
+  },
+);
+
+test(
+  'configApi: 旧 openai 兼容配置会合并为自定义供应商并保留原配置',
+  { concurrency: false },
+  async testContext => {
+    installSecureSettingsStub(testContext, {
+      initialValues: {
+        'apiConfig.providers.openai.apiKey': 'legacy-openai-key',
+      },
+    });
+    installFetchSequence(testContext, {
+      getData: {
+        providers: {
+          openai: {
+            apiUrl: 'https://api.legacy-openai.example.com/v1',
+            enabled: true,
+          },
+        },
+      },
+    });
+
+    const {
+      fetchApiConfigFromServer,
+      getCustomProviderMeta,
+      getProviderConfig,
+      clearApiConfig,
+    } = await import('./configApi.js');
+    clearApiConfig();
+
+    const apiConfig = await fetchApiConfigFromServer();
+    assert.equal(
+      apiConfig.customProviders.some(
+        provider => provider.id === 'custom_openai_compatible' && provider.label === 'OpenAI 兼容',
+      ),
+      true,
+    );
+    assert.deepEqual(getCustomProviderMeta('custom_openai_compatible'), {
+      id: 'custom_openai_compatible',
+      label: 'OpenAI 兼容',
+      kind: 'openai-compatible',
+      enabled: true,
+      capabilities: ['text', 'connection_test'],
+      models: {
+        text: [],
+        image: [],
+        video: [],
+        audio: [],
+      },
+    });
+    assert.deepEqual(getProviderConfig('custom_openai_compatible'), {
+      apiUrl: 'https://api.legacy-openai.example.com/v1',
+      apiKey: 'legacy-openai-key',
+      modelApiKey: '',
+    });
+    assert.deepEqual(getProviderConfig('openai'), {
+      apiUrl: 'https://api.legacy-openai.example.com/v1',
+      apiKey: 'legacy-openai-key',
+      modelApiKey: '',
+    });
+  },
+);

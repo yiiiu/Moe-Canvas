@@ -163,6 +163,7 @@ import {
 } from "./src/modules/zoomLockState.js";
 import { applyCanvasControlsPlacement } from "./src/modules/settings/canvasControlsPlacementSettings.js";
 import { bootstrapAppProject } from "./src/modules/app/projectBootstrap.js";
+import { installCustomProviderRuntimeMenuRefresh } from "./src/modules/customProviderRuntimeMenuRefresh.js";
 ((window["_isSessionActive"] = !![]),
 	initToastService(),
 	initDiagnosticsService(),
@@ -172,6 +173,7 @@ import { bootstrapAppProject } from "./src/modules/app/projectBootstrap.js";
 	initTextInputContextMenu(),
 	initTaskCenterManager(),
 	installTooltipUnifier(),
+	installCustomProviderRuntimeMenuRefresh(),
 	initToolbarPlacementMenu(),
 	initZoomLockState(),
 	initDesktopMediaWakeService(),

@@ -1,1 +1,98 @@
-(function(_0x428363,_0x31a4ca){const _0x4a8616=a171_0x4ca0,_0x1fec68=_0x428363();while(!![]){try{const _0x563762=-parseInt(_0x4a8616(0x1ca))/0x1*(-parseInt(_0x4a8616(0x1cc))/0x2)+-parseInt(_0x4a8616(0x1cf))/0x3+-parseInt(_0x4a8616(0x1d5))/0x4+parseInt(_0x4a8616(0x1e2))/0x5*(-parseInt(_0x4a8616(0x1d9))/0x6)+-parseInt(_0x4a8616(0x1d1))/0x7*(-parseInt(_0x4a8616(0x1da))/0x8)+parseInt(_0x4a8616(0x1dd))/0x9+-parseInt(_0x4a8616(0x1d7))/0xa*(-parseInt(_0x4a8616(0x1d2))/0xb);if(_0x563762===_0x31a4ca)break;else _0x1fec68['push'](_0x1fec68['shift']());}catch(_0x487f63){_0x1fec68['push'](_0x1fec68['shift']());}}}(a171_0xc46e,0xdb960));import{getModelsByKind}from'../../manifests/index.js';import{renderNodeModelMenu,renderNodeModelTrigger}from'../shared/nodeModelMenu.js';function a171_0x4ca0(_0x3be4c6,_0x4fc5d2){const _0xc46e20=a171_0xc46e();return a171_0x4ca0=function(_0x4ca035,_0xaca85f){_0x4ca035=_0x4ca035-0x1c7;let _0x9a85e6=_0xc46e20[_0x4ca035];return _0x9a85e6;},a171_0x4ca0(_0x3be4c6,_0x4fc5d2);}function getAudioMenuMeta(_0x4efcc2){const _0x3d6b4f=a171_0x4ca0,_0x3667c2=_0x4efcc2?.[_0x3d6b4f(0x1e3)]?.[_0x3d6b4f(0x1d6)];return _0x3667c2&&typeof _0x3667c2==='object'?_0x3667c2:null;}function isAudioModelMenuManifest(_0x4ef18c){const _0x3b5881=a171_0x4ca0,_0x5d1c00=getAudioMenuMeta(_0x4ef18c);if(_0x5d1c00?.['group']!=='runninghubWorkflow')return![];if(_0x4ef18c?.[_0x3b5881(0x1d8)]!==_0x3b5881(0x1db))return![];const _0x59e80e=Array['isArray'](_0x4ef18c?.[_0x3b5881(0x1e5)])?_0x4ef18c['uiPlacement']:[_0x3b5881(0x1e7)];return!(_0x59e80e[_0x3b5881(0x1e9)](_0x3b5881(0x1e6))&&!_0x59e80e[_0x3b5881(0x1e9)](_0x3b5881(0x1e7)));}export function getAudioWorkflowMenuManifests(){const _0x15ec07=a171_0x4ca0;return getModelsByKind(_0x15ec07(0x1de))[_0x15ec07(0x1ea)](isAudioModelMenuManifest)[_0x15ec07(0x1cd)]((_0x2f69ce,_0x5882fb)=>{const _0x3270b=_0x15ec07,_0x41a912=Number(getAudioMenuMeta(_0x2f69ce)?.['order']),_0x1783af=Number(getAudioMenuMeta(_0x5882fb)?.[_0x3270b(0x1d4)]),_0x50f210=Number[_0x3270b(0x1cb)](_0x41a912)?_0x41a912:0x0,_0x2127f5=Number[_0x3270b(0x1cb)](_0x1783af)?_0x1783af:0x0;if(_0x50f210!==_0x2127f5)return _0x50f210-_0x2127f5;return String(_0x2f69ce[_0x3270b(0x1df)]||'')[_0x3270b(0x1ce)](String(_0x5882fb[_0x3270b(0x1df)]||''));});}export function buildAudioWorkflowItems(_0x4ba98e={}){const _0x5d521e=a171_0x4ca0;return getAudioWorkflowMenuManifests()[_0x5d521e(0x1e8)](_0x4a4080=>Object[_0x5d521e(0x1d0)]({'key':_0x4a4080[_0x5d521e(0x1df)],'label':_0x4a4080[_0x5d521e(0x1c7)],'subtitle':_0x4a4080[_0x5d521e(0x1dc)]||'','vip':_0x4a4080[_0x5d521e(0x1e0)]===!![],'validate':_0x4ba98e[_0x4a4080[_0x5d521e(0x1df)]]||(()=>'')}));}function a171_0xc46e(){const _0x2a6b7d=['localeCompare','5125911rkEqLj','freeze','56UhWBxL','13266671PGoZvm','<img\x20src=\x22images/RH.png\x22\x20style=\x22width:14px;height:14px;object-fit:contain;border-radius:3px;flex-shrink:0;\x22\x20alt=\x22runninghub\x22>','order','69896QtJkHj','audioMenu','10KceyTr','provider','6aQiRio','32360spcQUX','runninghubwf','description','6116850RXSDhu','audio','modelId','vip','runninghub','4088100ZNJgEo','extensions','label','uiPlacement','toolbar','modelMenu','map','includes','filter','RunningHUB工作流','displayName','subtitle','images/RH.png','11Ebzkbr','isFinite','277288uGiJWu','sort'];a171_0xc46e=function(){return _0x2a6b7d;};return a171_0xc46e();}export function buildAudioModelMenuHtml({activeModel:activeModel='',workflowItems:workflowItems=[]}={}){const _0x5dda43=a171_0x4ca0;return renderNodeModelMenu({'kind':_0x5dda43(0x1de),'activeModel':activeModel,'groups':[{'id':_0x5dda43(0x1e1),'label':_0x5dda43(0x1eb),'subtitle':'音频生成工作流','icon':_0x5dda43(0x1c9),'iconAlt':'runninghub','items':workflowItems[_0x5dda43(0x1e8)](_0x2d0eeb=>({'modelId':_0x2d0eeb['key'],'label':_0x2d0eeb[_0x5dda43(0x1e4)],'subtitle':_0x2d0eeb[_0x5dda43(0x1c8)],'icon':'images/RH.png','iconAlt':_0x5dda43(0x1e1),'vip':_0x2d0eeb['vip']===!![]}))}]});}export function buildAudioModelTriggerHtml({label:label=''}={}){const _0x9105f1=a171_0x4ca0;return renderNodeModelTrigger({'iconHtml':_0x9105f1(0x1d3),'label':label});}
+import { getModelsByKind } from '../../manifests/index.js';
+import {
+  buildRuntimeProviderBadgeHTML,
+  getRuntimeCustomProviderMenuGroups,
+} from '../../modules/runtimeProviderMenus.js';
+import { renderNodeModelMenu, renderNodeModelTrigger } from '../shared/nodeModelMenu.js';
+
+function getAudioMenuMeta(manifest) {
+  const audioMenu = manifest?.extensions?.audioMenu;
+  return audioMenu && typeof audioMenu === 'object' ? audioMenu : null;
+}
+
+function isAudioModelMenuManifest(manifest) {
+  const audioMenu = getAudioMenuMeta(manifest);
+  if (audioMenu?.group !== 'runninghubWorkflow') return false;
+  if (manifest?.provider !== 'runninghubwf') return false;
+  const uiPlacement = Array.isArray(manifest?.uiPlacement)
+    ? manifest.uiPlacement
+    : ['modelMenu'];
+  return !(uiPlacement.includes('toolbar') && !uiPlacement.includes('modelMenu'));
+}
+
+export function getAudioWorkflowMenuManifests() {
+  return getModelsByKind('audio')
+    .filter(isAudioModelMenuManifest)
+    .sort((left, right) => {
+      const leftOrder = Number(getAudioMenuMeta(left)?.order);
+      const rightOrder = Number(getAudioMenuMeta(right)?.order);
+      const normalizedLeftOrder = Number.isFinite(leftOrder) ? leftOrder : 0;
+      const normalizedRightOrder = Number.isFinite(rightOrder) ? rightOrder : 0;
+      if (normalizedLeftOrder !== normalizedRightOrder) {
+        return normalizedLeftOrder - normalizedRightOrder;
+      }
+      return String(left.modelId || '').localeCompare(String(right.modelId || ''));
+    });
+}
+
+export function buildAudioWorkflowItems(validators = {}) {
+  return getAudioWorkflowMenuManifests().map((manifest) =>
+    Object.freeze({
+      key: manifest.modelId,
+      label: manifest.label,
+      subtitle: manifest.description || '',
+      vip: manifest.vip === true,
+      validate: validators[manifest.modelId] || (() => ''),
+    }),
+  );
+}
+
+function buildRuntimeAudioGroups() {
+  return getRuntimeCustomProviderMenuGroups('audio').map((group) => ({
+    id: group.provider,
+    label: group.label || group.provider,
+    subtitle: '自定义音频模型',
+    iconHtml: group.badgeHtml || buildRuntimeProviderBadgeHTML(group.provider, 14),
+    items: group.models.map((item) => ({
+      modelId: item.modelId,
+      provider: item.provider,
+      label: item.title || item.rawModelId || item.modelId,
+      subtitle: item.subtitle || item.providerLabel || '自定义供应商',
+      iconHtml: group.smallBadgeHtml || buildRuntimeProviderBadgeHTML(item.provider, 12),
+    })),
+  }));
+}
+
+export function buildAudioModelMenuHtml({ activeModel = '', workflowItems = [] } = {}) {
+  return renderNodeModelMenu({
+    kind: 'audio',
+    activeModel,
+    groups: [
+      {
+        id: 'runninghubwf',
+        label: 'RunningHUB工作流',
+        subtitle: '音频生成工作流',
+        icon: 'images/RH.png',
+        iconAlt: 'runninghub',
+        items: workflowItems.map((item) => ({
+          modelId: item.key,
+          provider: 'runninghubwf',
+          label: item.label,
+          subtitle: item.subtitle,
+          icon: 'images/RH.png',
+          iconAlt: 'runninghubwf',
+          vip: item.vip === true,
+        })),
+      },
+      ...buildRuntimeAudioGroups(),
+    ],
+  });
+}
+
+export function buildAudioModelTriggerHtml({ label = '', provider = '' } = {}) {
+  const providerId = String(provider || '').trim();
+  const iconHtml = providerId.startsWith('custom_')
+    ? buildRuntimeProviderBadgeHTML(providerId, 14)
+    : '<img src="images/RH.png" style="width:14px;height:14px;object-fit:contain;border-radius:3px;flex-shrink:0;" alt="runninghub">';
+  return renderNodeModelTrigger({ iconHtml, label });
+}

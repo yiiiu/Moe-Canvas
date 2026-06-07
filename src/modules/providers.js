@@ -1,1 +1,239 @@
-const a524_0x16e662=a524_0x11df;(function(_0x2fabf1,_0x5ba149){const _0x2c20eb=a524_0x11df,_0xae223d=_0x2fabf1();while(!![]){try{const _0x45d274=parseInt(_0x2c20eb(0xd0))/0x1*(parseInt(_0x2c20eb(0xe3))/0x2)+parseInt(_0x2c20eb(0xbe))/0x3+parseInt(_0x2c20eb(0xcd))/0x4+-parseInt(_0x2c20eb(0xd3))/0x5+parseInt(_0x2c20eb(0xdf))/0x6+parseInt(_0x2c20eb(0xcf))/0x7+-parseInt(_0x2c20eb(0xd9))/0x8*(parseInt(_0x2c20eb(0xe9))/0x9);if(_0x45d274===_0x5ba149)break;else _0xae223d['push'](_0xae223d['shift']());}catch(_0x5b8a48){_0xae223d['push'](_0xae223d['shift']());}}}(a524_0x291c,0x99aa4));import{getModelManifest}from'../manifests/index.js';function a524_0x11df(_0x48033a,_0x167414){const _0x291ca6=a524_0x291c();return a524_0x11df=function(_0x11dfa7,_0x3aedc8){_0x11dfa7=_0x11dfa7-0xbe;let _0x11a3ac=_0x291ca6[_0x11dfa7];return _0x11a3ac;},a524_0x11df(_0x48033a,_0x167414);}export const getDisplayModelName=_0x261343=>{const _0x20f253=a524_0x11df;if(!_0x261343)return'';const _0xb7e483=getModelManifest(_0x261343);if(_0xb7e483?.[_0x20f253(0xc2)])return _0xb7e483['displayName'];const _0x2b90ce={'minimax/minimax-m2.5-highspeed':_0x20f253(0xe7),'qwen/qwen3.5-397b-a17b':_0x20f253(0xe8),'deepseek/deepseek-v3.2':'DeepSeek-V3.2','moonshotai/kimi-k2.5':'Kimi\x20K2.5','apimart/gemini-3.1-pro-preview':'Gemini\x203.1\x20Pro\x20Preview','apimart/gemini-3-flash-preview-nothinking':_0x20f253(0xe5),'gpt-image-2':'GPT\x20image\x202','gpt-image-2-vip':_0x20f253(0xc6),'nano-banana':'Nanobanana','nano-banana-fast':_0x20f253(0xe1),'nano-banana-pro':_0x20f253(0xda),'nano-banana-pro-vt':_0x20f253(0xda),'nano-banana-pro-cl':_0x20f253(0xda),'nano-banana-pro-vip':_0x20f253(0xda),'nano-banana-pro-4k-vip':_0x20f253(0xda),'nano-banana-2':_0x20f253(0xdb),'nano-banana-2-cl':_0x20f253(0xdb),'nano-banana-2-4k-cl':_0x20f253(0xdb),'apimart/gpt-5.4':_0x20f253(0xce),'seedance-2.0-fast':_0x20f253(0xc7),'seedance-2.0':_0x20f253(0xcb),'aicanvas/text-lite':_0x20f253(0xe4),'aicanvas/text-pro':_0x20f253(0xd8),'aicanvas/image-lite':_0x20f253(0xe0),'aicanvas/image-pro':_0x20f253(0xc8)};return _0x2b90ce[_0x261343]||_0x261343;};export const PROVIDERS_META={'grsai':{'id':a524_0x16e662(0xc9),'label':'GRSAI','defaultUrl':'https://grsai.dakka.com.cn','logoPath':a524_0x16e662(0xd5)},'openai':{'id':a524_0x16e662(0xbf),'label':a524_0x16e662(0xcc),'defaultUrl':a524_0x16e662(0xc0),'logoPath':null},'ppio':{'id':a524_0x16e662(0xe6),'label':a524_0x16e662(0xd2),'defaultUrl':a524_0x16e662(0xd6),'logoPath':'images/ppio.png'},'apimart':{'id':a524_0x16e662(0xdc),'label':a524_0x16e662(0xc4),'defaultUrl':'https://api.apimart.ai','logoPath':null},'volcengine':{'id':'volcengine','label':a524_0x16e662(0xdd),'defaultUrl':a524_0x16e662(0xd4),'logoPath':a524_0x16e662(0xc1)},'runninghub':{'id':'runninghub','label':a524_0x16e662(0xe2),'defaultUrl':a524_0x16e662(0xd7),'logoPath':a524_0x16e662(0xd1)},'runninghubwf':{'id':'runninghubwf','label':a524_0x16e662(0xde),'defaultUrl':a524_0x16e662(0xd7),'logoPath':'images/RH.png'},'dreamina':{'id':a524_0x16e662(0xc3),'label':'即梦','defaultUrl':'','logoPath':null},'aicanvas':{'id':'aicanvas','label':a524_0x16e662(0xc5),'defaultUrl':'','logoPath':a524_0x16e662(0xca)}};function a524_0x291c(){const _0x55c94b=['RunningHUB','1974330qRpPuW','AICanvas\x20Text\x20Lite','Gemini\x203\x20Flash\x20(No\x20Thinking)','ppio','MiniMax\x20M2.5-highspeed','Qwen3.5-397B-A17B','171whstiq','378150jVtaow','openai','https://api.openai.com','images/volcengine.svg','displayName','dreamina','APIMart','AICanvas','GPT\x20image\x202','Seedance\x202.0\x20Fast','AICanvas\x20Image\x20Pro','grsai','images/favicon.svg','Seedance\x202.0','OpenAI','4673108VkxnFp','GPT-5.4','777945nTDlqp','1QjWINa','images/RH.png','派欧云','2632615GyqfiE','https://ark.cn-beijing.volces.com/api/v3','images/grsai.png','https://api.ppio.com','https://www.runninghub.cn','AICanvas\x20Text\x20Pro','762952wWzUxH','NanobananaPRO','Nanobanana2','apimart','火山方舟','RunningHUB工作流','3451914aHtUyK','AICanvas\x20Image\x20Lite','Nanobanana'];a524_0x291c=function(){return _0x55c94b;};return a524_0x291c();}export function getAllProviderIds(){return Object['keys'](PROVIDERS_META);}
+import { isCustomProviderId, normalizeCustomProvidersRegistry } from '../../api/customProviderRegistry.js';
+import {
+  getCustomProviderRuntimeState,
+  getModelManifest,
+  getModelsByKind,
+} from '../manifests/index.js';
+
+const DISPLAY_NAME_OVERRIDES = {
+  'minimax/minimax-m2.5-highspeed': 'MiniMax M2.5-highspeed',
+  'qwen/qwen3.5-397b-a17b': 'Qwen3.5-397B-A17B',
+  'deepseek/deepseek-v3.2': 'DeepSeek-V3.2',
+  'moonshotai/kimi-k2.5': 'Kimi K2.5',
+  'apimart/gemini-3.1-pro-preview': 'Gemini 3.1 Pro Preview',
+  'apimart/gemini-3-flash-preview-nothinking': 'Gemini 3 Flash (No Thinking)',
+  'gpt-image-2': 'GPT image 2',
+  'gpt-image-2-vip': 'GPT image 2',
+  'nano-banana': 'Nanobanana',
+  'nano-banana-fast': 'Nanobanana',
+  'nano-banana-pro': 'NanobananaPRO',
+  'nano-banana-pro-vt': 'NanobananaPRO',
+  'nano-banana-pro-cl': 'NanobananaPRO',
+  'nano-banana-pro-vip': 'NanobananaPRO',
+  'nano-banana-pro-4k-vip': 'NanobananaPRO',
+  'nano-banana-2': 'Nanobanana2',
+  'nano-banana-2-cl': 'Nanobanana2',
+  'nano-banana-2-4k-cl': 'Nanobanana2',
+  'apimart/gpt-5.4': 'GPT-5.4',
+  'seedance-2.0-fast': 'Seedance 2.0 Fast',
+  'seedance-2.0': 'Seedance 2.0',
+  'aicanvas/text-lite': 'AICanvas Text Lite',
+  'aicanvas/text-pro': 'AICanvas Text Pro',
+  'aicanvas/image-lite': 'AICanvas Image Lite',
+  'aicanvas/image-pro': 'AICanvas Image Pro',
+};
+
+export const PROVIDERS_META = {
+  grsai: {
+    id: 'grsai',
+    label: 'GRSAI',
+    defaultUrl: 'https://grsai.dakka.com.cn',
+    logoPath: 'images/grsai.png',
+  },
+  openai: {
+    id: 'openai',
+    label: 'OpenAI',
+    defaultUrl: 'https://api.openai.com',
+    logoPath: null,
+  },
+  apimart: {
+    id: 'apimart',
+    label: 'APIMart',
+    defaultUrl: 'https://api.apimart.ai',
+    logoPath: null,
+  },
+  volcengine: {
+    id: 'volcengine',
+    label: '火山方舟',
+    defaultUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    logoPath: 'images/volcengine.svg',
+  },
+  runninghub: {
+    id: 'runninghub',
+    label: 'RunningHUB',
+    defaultUrl: 'https://www.runninghub.cn',
+    logoPath: 'images/RH.png',
+  },
+  runninghubwf: {
+    id: 'runninghubwf',
+    label: 'RunningHUB工作流',
+    defaultUrl: 'https://www.runninghub.cn',
+    logoPath: 'images/RH.png',
+  },
+  dreamina: {
+    id: 'dreamina',
+    label: '即梦',
+    defaultUrl: '',
+    logoPath: null,
+  },
+  aicanvas: {
+    id: 'aicanvas',
+    label: 'AICanvas',
+    defaultUrl: '',
+    logoPath: 'images/favicon.svg',
+  },
+};
+
+function normalizeText(value) {
+  return String(value || '').trim();
+}
+
+function dedupeCustomProviders(customProviders = []) {
+  const merged = new Map();
+  for (const provider of customProviders) {
+    const providerId = normalizeText(provider?.id);
+    if (!providerId) {
+      continue;
+    }
+    merged.set(providerId, provider);
+  }
+  return [...merged.values()];
+}
+
+function resolveRuntimeCustomProviders() {
+  const runtimeState = getCustomProviderRuntimeState();
+  return Array.isArray(runtimeState?.customProviders) ? runtimeState.customProviders : [];
+}
+
+function resolveEffectiveCustomProviders(customProviders = []) {
+  return dedupeCustomProviders(
+    normalizeCustomProvidersRegistry([
+      ...resolveRuntimeCustomProviders(),
+      ...(Array.isArray(customProviders) ? customProviders : []),
+    ]),
+  );
+}
+
+function buildCustomProviderMeta(customProvider) {
+  return {
+    id: customProvider.id,
+    label: customProvider.label || customProvider.id,
+    defaultUrl: '',
+    logoPath: null,
+    kind: customProvider.kind || 'openai-compatible',
+    enabled: customProvider.enabled !== false,
+    capabilities: Array.isArray(customProvider.capabilities)
+      ? [...customProvider.capabilities]
+      : [],
+  };
+}
+
+export function getDisplayModelName(modelId) {
+  if (!modelId) {
+    return '';
+  }
+
+  const manifest = getModelManifest(modelId);
+  if (manifest?.displayName) {
+    return manifest.displayName;
+  }
+
+  return DISPLAY_NAME_OVERRIDES[modelId] || modelId;
+}
+
+export function listProviderMeta(customProviders = []) {
+  const builtInProviders = Object.values(PROVIDERS_META);
+  const runtimeCustomProviders = resolveEffectiveCustomProviders(customProviders).map(
+    buildCustomProviderMeta,
+  );
+  return [...builtInProviders, ...runtimeCustomProviders];
+}
+
+export function getProviderMeta(providerId, customProviders = []) {
+  const normalizedProviderId = normalizeText(providerId);
+  if (!normalizedProviderId) {
+    return null;
+  }
+  return (
+    PROVIDERS_META[normalizedProviderId] ||
+    listProviderMeta(customProviders).find(provider => provider.id === normalizedProviderId) ||
+    null
+  );
+}
+
+export function getAllProviderIds(customProviders = []) {
+  return listProviderMeta(customProviders).map(provider => provider.id);
+}
+
+export function getProviderBadgeText(providerLike, fallback = 'AI') {
+  const label = normalizeText(
+    typeof providerLike === 'string'
+      ? getProviderMeta(providerLike)?.label || providerLike
+      : providerLike?.label || providerLike?.id,
+  );
+  if (!label) {
+    return fallback;
+  }
+
+  const asciiToken = label
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(token => token[0])
+    .join('')
+    .toUpperCase();
+  if (asciiToken) {
+    return asciiToken.slice(0, 2);
+  }
+
+  return label.replace(/\s+/g, '').slice(0, 2) || fallback;
+}
+
+export function isRuntimeCustomProviderId(providerId) {
+  return isCustomProviderId(providerId);
+}
+
+export function listCustomProviderModelsByKind(kind) {
+  const normalizedKind = normalizeText(kind);
+  return getModelsByKind(normalizedKind).filter(manifest =>
+    isRuntimeCustomProviderId(manifest?.provider),
+  );
+}
+
+export function listCustomProviderModelGroupsByKind(kind) {
+  const normalizedKind = normalizeText(kind);
+  const groups = new Map();
+
+  for (const manifest of listCustomProviderModelsByKind(normalizedKind)) {
+    const providerId = normalizeText(manifest?.provider);
+    if (!providerId) {
+      continue;
+    }
+
+    const existing = groups.get(providerId) || {
+      id: providerId,
+      provider: providerId,
+      meta: getProviderMeta(providerId),
+      models: [],
+    };
+    existing.models.push(manifest);
+    groups.set(providerId, existing);
+  }
+
+  return [...groups.values()]
+    .map(group => ({
+      ...group,
+      label: group.meta?.label || group.id,
+      subtitle:
+        group.meta?.label && normalizedKind
+          ? `${group.meta.label} · ${normalizedKind}`
+          : group.meta?.label || group.id,
+      models: [...group.models].sort((left, right) =>
+        getDisplayModelName(left?.modelId).localeCompare(
+          getDisplayModelName(right?.modelId),
+          'zh-CN',
+        ),
+      ),
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label, 'zh-CN'));
+}

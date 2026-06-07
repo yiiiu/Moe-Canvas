@@ -58,7 +58,7 @@
         color: #4f46e5;
       }
     </style>
-    <link rel="stylesheet" href="style.css?v=2026060301" />
+    <link rel="stylesheet" href="style.css?v=2026060302" />
   </head>
   <body>
     <div id="v2-server-disconnect-alert">
@@ -989,7 +989,7 @@
               <line x1="16" y1="13" x2="8" y2="13" />
               <line x1="16" y1="17" x2="8" y2="17" />
             </svg>
-            API Key
+            API 配置
           </button>
           <button
             type="button"
@@ -2482,79 +2482,6 @@
                   placeholder="sk-..."
                 />
               </div>
-              <div class="settings-section settings-card">
-                <div class="settings-card-head">
-                  <img
-                    src="images/ppio.png"
-                    class="settings-card-icon"
-                    alt="ppio"
-                  />
-                  <span class="settings-card-title">派欧云 (PPIO)</span>
-                  <span
-                    class="settings-provider-status settings-provider-status--deprecated"
-                    >准备下架</span
-                  >
-                  <span
-                    class="settings-provider-status settings-provider-status--test"
-                    id="providerTestStatus-ppio"
-                    hidden
-                  ></span>
-                  <button
-                    type="button"
-                    class="settings-provider-test-btn"
-                    data-provider-test="ppio"
-                    title="测试 PPIO 连接"
-                    aria-label="测试 PPIO 连接"
-                  >
-                    <svg
-                      class="settings-btn-icon"
-                      width="11"
-                      height="11"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <path
-                        d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
-                      />
-                      <path
-                        d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
-                      />
-                    </svg>
-                    <span class="settings-btn-label">测试连接</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-external-url="https://ppio.com/user/register"
-                    title="前往派欧云获取 API Key"
-                    class="settings-getkey"
-                  >
-                    <svg
-                      width="11"
-                      height="11"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <path
-                        d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
-                      ></path>
-                      <polyline points="15 3 21 3 21 9"></polyline>
-                      <line x1="10" y1="14" x2="21" y2="3"></line>
-                    </svg>
-                    获取 Key
-                  </button>
-                </div>
-                <div class="settings-label">API 密钥</div>
-                <input
-                  type="password"
-                  id="providerKey-ppio"
-                  class="settings-input"
-                  placeholder="sk-..."
-                />
-              </div>
               <div class="settings-section settings-card dev-mode-only">
                 <div class="settings-card-head">
                   <img
@@ -2579,7 +2506,11 @@
                   placeholder="sk-..."
                 />
               </div>
-              <div class="settings-section settings-card">
+              <div
+                class="settings-section settings-card"
+                data-legacy-openai-compatible-card
+                hidden
+              >
                 <div class="settings-card-head">
                   <svg
                     width="18"
@@ -2672,6 +2603,29 @@
                   placeholder="sk-..."
                 />
               </div>
+              <div id="customProvidersList" class="settings-custom-providers-list"></div>
+              <div
+                class="settings-section settings-card"
+                id="customProvidersHost"
+              >
+                <div class="settings-card-head">
+                  <div class="settings-card-badge">CP</div>
+                  <span class="settings-card-title">自定义供应商</span>
+                  <span class="settings-getkey settings-getkey--muted"
+                    >OpenAI-compatible</span
+                  >
+                </div>
+                <div class="settings-desc settings-input--mb10">
+                  支持新增 OpenAI-compatible 自定义供应商，并声明能力、模型列表与连接测试入口。
+                </div>
+                <button
+                  type="button"
+                  class="settings-save-btn settings-btn-ghost"
+                  id="btnAddCustomProvider"
+                >
+                  新增自定义供应商
+                </button>
+              </div>
               <div
                 class="settings-section settings-card"
                 id="dreaminaSettingsCard"
@@ -2751,7 +2705,7 @@
                   <span class="settings-btn-label">测试连接</span>
                 </button>
                 <button type="button" class="settings-save-btn" id="btnApiSave">
-                  保存
+                  保存配置
                 </button>
               </div>
             </div>

@@ -431,6 +431,186 @@ body.dev-mode .settings-card.dev-mode-only {
 .settings-input--mb10 {
   margin-bottom: var(--space-10);
 }
+.settings-hidden-control {
+  display: none !important;
+}
+.settings-custom-provider-card {
+  background: var(--white-02);
+}
+.settings-custom-provider-head {
+  align-items: flex-start;
+}
+.settings-custom-provider-title-wrap {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.settings-custom-provider-subtitle {
+  max-width: 360px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-11);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-custom-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-10) var(--space-12);
+}
+.settings-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+}
+.settings-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: var(--space-5) var(--space-10);
+  border: 1px solid var(--stroke-10);
+  border-radius: var(--radius-999);
+  background: var(--white-05);
+  color: var(--text-secondary);
+  font-size: var(--font-12);
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: var(--link-cursor);
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    transform 0.15s;
+}
+.settings-chip-btn:hover,
+.settings-chip-btn:focus-visible {
+  border-color: var(--indigo-35);
+  background: var(--indigo-12);
+  color: var(--text-primary);
+  outline: 0;
+}
+.settings-chip-btn.is-active {
+  border-color: var(--indigo-50);
+  background: var(--indigo-20);
+  color: var(--text-strong);
+}
+.settings-enable-btn.is-active {
+  border-color: var(--green-30);
+  background: var(--green-10);
+  color: var(--green);
+}
+.settings-model-button-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-8);
+}
+.settings-model-action {
+  min-width: 0;
+}
+.settings-model-edit-btn {
+  width: 100%;
+  min-height: 46px;
+  align-items: flex-start;
+  flex-direction: column;
+  border-radius: var(--radius-10);
+  text-align: left;
+}
+.settings-model-edit-label {
+  color: var(--text-primary);
+  font-size: var(--font-12);
+}
+.settings-model-edit-summary {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-11);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-model-editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-20);
+  background: var(--overlay-dim);
+  backdrop-filter: blur(var(--overlay-blur));
+}
+.settings-model-editor-overlay[hidden] {
+  display: none;
+}
+.settings-model-editor {
+  width: min(560px, 100%);
+  border: 1px solid var(--stroke-12);
+  border-radius: var(--radius-16);
+  background: var(--bg-panel-solid);
+  box-shadow: var(--shadow-dialog);
+  padding: var(--space-18);
+}
+.settings-model-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-12);
+  margin-bottom: var(--space-10);
+}
+.settings-model-editor-eyebrow {
+  color: var(--text-muted);
+  font-size: var(--font-11);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.settings-model-editor-title {
+  margin-top: var(--space-3);
+  color: var(--text-strong);
+  font-size: var(--font-16);
+  font-weight: 800;
+}
+.settings-model-editor-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--stroke-10);
+  border-radius: var(--radius-999);
+  background: var(--white-05);
+  color: var(--text-secondary);
+  font-size: var(--font-18);
+  line-height: 1;
+  cursor: var(--link-cursor);
+}
+.settings-model-editor-close:hover,
+.settings-model-editor-close:focus-visible {
+  background: var(--fill-hover);
+  color: var(--text-primary);
+  outline: 0;
+}
+.settings-model-editor-textarea {
+  min-height: 220px;
+  resize: vertical;
+}
+.settings-model-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  margin-top: var(--space-14);
+}
+@media (max-width: 760px) {
+  .settings-custom-provider-grid,
+  .settings-model-button-grid {
+    grid-template-columns: 1fr;
+  }
+  .settings-custom-provider-head {
+    flex-wrap: wrap;
+  }
+}
 .settings-section--shortcuts {
   margin-top: var(--space-10);
   margin-bottom: var(--space-20);

@@ -1,1 +1,435 @@
-const a31_0x2f81b5=a31_0x8fcc;(function(_0x31e27a,_0x3cc294){const _0x514e0b=a31_0x8fcc,_0x403e7b=_0x31e27a();while(!![]){try{const _0x4c77fa=-parseInt(_0x514e0b(0x12e))/0x1*(-parseInt(_0x514e0b(0x130))/0x2)+parseInt(_0x514e0b(0x119))/0x3+parseInt(_0x514e0b(0x116))/0x4+parseInt(_0x514e0b(0x11f))/0x5+-parseInt(_0x514e0b(0x10e))/0x6+-parseInt(_0x514e0b(0x112))/0x7+-parseInt(_0x514e0b(0x13e))/0x8*(-parseInt(_0x514e0b(0x125))/0x9);if(_0x4c77fa===_0x3cc294)break;else _0x403e7b['push'](_0x403e7b['shift']());}catch(_0x52bddc){_0x403e7b['push'](_0x403e7b['shift']());}}}(a31_0xcd52,0x24167));import{PROVIDERS_META}from'../src/modules/providers.js';import{get,post}from'./apiBase.js';let apiConfig=null;const SECURE_PROVIDER_FIELDS=[a31_0x2f81b5(0x10c),a31_0x2f81b5(0x113)],LEGACY_GRSAI_KEY_FIELDS=['apiKey',a31_0x2f81b5(0x121)],DEFAULT_SECURE_PROVIDER_IDS=Object['freeze']([...new Set([...Object[a31_0x2f81b5(0x131)](PROVIDERS_META||{}),a31_0x2f81b5(0x10b),a31_0x2f81b5(0x128),a31_0x2f81b5(0x12f),'apimart','runninghub',a31_0x2f81b5(0x115)])]);function a31_0x8fcc(_0x35c0f3,_0x39c39d){const _0xcd5294=a31_0xcd52();return a31_0x8fcc=function(_0x8fcc03,_0x29ffc9){_0x8fcc03=_0x8fcc03-0x10a;let _0x455244=_0xcd5294[_0x8fcc03];return _0x455244;},a31_0x8fcc(_0x35c0f3,_0x39c39d);}export function clearApiConfig(){apiConfig=null;}function isPlainObject(_0xe684e6){const _0x91c5ec=a31_0x2f81b5;return!!_0xe684e6&&typeof _0xe684e6===_0x91c5ec(0x12b)&&!Array['isArray'](_0xe684e6);}function cloneConfig(_0x476d8b){const _0xaad1bc=a31_0x2f81b5;return isPlainObject(_0x476d8b)?JSON[_0xaad1bc(0x123)](JSON[_0xaad1bc(0x132)](_0x476d8b)):{};}function normalizeProviderId(_0x2875b1){const _0x87c3ed=a31_0x2f81b5;return String(_0x2875b1||'')[_0x87c3ed(0x111)]()['replace'](/[^A-Za-z0-9_-]/g,'');}function buildProviderSecureKey(_0x328062,_0x1b1445){const _0x11f683=a31_0x2f81b5,_0x338537=normalizeProviderId(_0x328062),_0x54dfe4=String(_0x1b1445||'')['trim']();if(!_0x338537||!SECURE_PROVIDER_FIELDS[_0x11f683(0x120)](_0x54dfe4))return'';return _0x11f683(0x11e)+_0x338537+'.'+_0x54dfe4;}function getSecureSettingsApi(){const _0x1024d8=a31_0x2f81b5,_0x42a03f=globalThis?.['window']?.[_0x1024d8(0x11c)]?.['secureSettings'];if(_0x42a03f&&typeof _0x42a03f[_0x1024d8(0x133)]===_0x1024d8(0x110)&&typeof _0x42a03f['set']==='function'&&typeof _0x42a03f[_0x1024d8(0x137)]===_0x1024d8(0x110))return _0x42a03f;return null;}function collectProviderIds(_0x3a8b87={}){const _0x567917=a31_0x2f81b5,_0x89ad64=new Set(DEFAULT_SECURE_PROVIDER_IDS);return isPlainObject(_0x3a8b87[_0x567917(0x122)])&&Object[_0x567917(0x131)](_0x3a8b87[_0x567917(0x122)])['forEach'](_0x3b3084=>{const _0x2f780f=_0x567917,_0x1b4586=normalizeProviderId(_0x3b3084);if(_0x1b4586)_0x89ad64[_0x2f780f(0x127)](_0x1b4586);}),[..._0x89ad64];}function collectSecureKeys(_0x372b23={}){const _0x4e916e=a31_0x2f81b5,_0x40edca=[];return collectProviderIds(_0x372b23)[_0x4e916e(0x138)](_0x500664=>{SECURE_PROVIDER_FIELDS['forEach'](_0x2db34f=>{const _0x465b17=a31_0x8fcc,_0x5dbc5e=buildProviderSecureKey(_0x500664,_0x2db34f);if(_0x5dbc5e)_0x40edca[_0x465b17(0x11d)](_0x5dbc5e);});}),_0x40edca;}function stripSensitiveConfigValues(_0x1e07a4={}){const _0x183569=a31_0x2f81b5,_0x2baf77=cloneConfig(_0x1e07a4);return isPlainObject(_0x2baf77['providers'])&&Object[_0x183569(0x135)](_0x2baf77[_0x183569(0x122)])[_0x183569(0x138)](_0x1b0843=>{if(!isPlainObject(_0x1b0843))return;SECURE_PROVIDER_FIELDS['forEach'](_0x475f28=>{delete _0x1b0843[_0x475f28];});}),LEGACY_GRSAI_KEY_FIELDS['forEach'](_0x3fe26c=>{delete _0x2baf77[_0x3fe26c];}),_0x2baf77;}function extractPlaintextSecureValues(_0x1f60ea={}){const _0x9c7794=a31_0x2f81b5,_0x51b3f9=new Map(),_0x473cc8=isPlainObject(_0x1f60ea[_0x9c7794(0x122)])?_0x1f60ea[_0x9c7794(0x122)]:{};Object[_0x9c7794(0x10d)](_0x473cc8)[_0x9c7794(0x138)](([_0x3416e2,_0x18a08e])=>{if(!isPlainObject(_0x18a08e))return;SECURE_PROVIDER_FIELDS['forEach'](_0x144d7a=>{const _0x4877fb=a31_0x8fcc;if(!Object[_0x4877fb(0x11b)][_0x4877fb(0x129)][_0x4877fb(0x11a)](_0x18a08e,_0x144d7a))return;const _0x4ffb96=buildProviderSecureKey(_0x3416e2,_0x144d7a);if(!_0x4ffb96)return;_0x51b3f9[_0x4877fb(0x126)](_0x4ffb96,String(_0x18a08e[_0x144d7a]||''));});});const _0x2166c6=!!String(_0x473cc8?.[_0x9c7794(0x10b)]?.[_0x9c7794(0x10c)]||'')[_0x9c7794(0x111)]();if(!_0x2166c6)for(const _0x30a718 of LEGACY_GRSAI_KEY_FIELDS){if(!Object['prototype'][_0x9c7794(0x129)]['call'](_0x1f60ea,_0x30a718))continue;const _0x470877=String(_0x1f60ea[_0x30a718]||'');if(_0x470877)_0x51b3f9[_0x9c7794(0x126)](buildProviderSecureKey(_0x9c7794(0x10b),_0x9c7794(0x10c)),_0x470877);}return _0x51b3f9;}function mergeSecureValuesIntoConfig(_0x1c353a={},_0x7152da={}){const _0x72c37d=a31_0x2f81b5,_0x3d0a80=stripSensitiveConfigValues(_0x1c353a);return Object[_0x72c37d(0x10d)](_0x7152da||{})[_0x72c37d(0x138)](([_0x1869ca,_0x172cd7])=>{const _0x35d599=_0x72c37d,_0x4287d1=String(_0x1869ca||'')[_0x35d599(0x13c)](/^apiConfig\.providers\.([A-Za-z0-9_-]+)\.(apiKey|modelApiKey)$/);if(!_0x4287d1)return;const _0x1c2bbf=_0x4287d1[0x1],_0x5f5bba=_0x4287d1[0x2],_0x7fbf6d=String(_0x172cd7||'');if(!_0x7fbf6d)return;if(!isPlainObject(_0x3d0a80[_0x35d599(0x122)]))_0x3d0a80[_0x35d599(0x122)]={};if(!isPlainObject(_0x3d0a80['providers'][_0x1c2bbf]))_0x3d0a80['providers'][_0x1c2bbf]={};_0x3d0a80[_0x35d599(0x122)][_0x1c2bbf][_0x5f5bba]=_0x7fbf6d;}),_0x3d0a80;}async function readSecureValues(_0x34dc18={}){const _0x477d2d=a31_0x2f81b5,_0x5d8bbe=getSecureSettingsApi();if(!_0x5d8bbe)return{'available':![],'values':{}};try{const _0x161f30=await _0x5d8bbe['get']({'keys':collectSecureKeys(_0x34dc18)});if(!_0x161f30?.[_0x477d2d(0x13d)])return{'available':![],'values':{}};return{'available':!![],'values':isPlainObject(_0x161f30[_0x477d2d(0x135)])?_0x161f30[_0x477d2d(0x135)]:{}};}catch{return{'available':![],'values':{}};}}async function writeSecureValues(_0x52b9fa){const _0x53083e=a31_0x2f81b5,_0x1556b7=getSecureSettingsApi();if(!_0x1556b7||!(_0x52b9fa instanceof Map))return{'available':![],'changed':![]};const _0x4d1106=await _0x1556b7['get']({'keys':[]})[_0x53083e(0x136)](()=>null);if(!_0x4d1106?.[_0x53083e(0x13d)])return{'available':![],'changed':![]};let _0x3aea96=![];for(const [_0x3fa545,_0x3add48]of _0x52b9fa['entries']()){if(!_0x3fa545)continue;const _0x492c28=String(_0x3add48||'');if(_0x492c28){const _0x5d5063=await _0x1556b7[_0x53083e(0x126)]({'key':_0x3fa545,'value':_0x492c28});if(_0x5d5063?.['ok'])_0x3aea96=!![];}else{const _0x271eaa=await _0x1556b7[_0x53083e(0x137)]({'key':_0x3fa545});if(_0x271eaa?.['ok'])_0x3aea96=!![];}}return{'available':!![],'changed':_0x3aea96};}async function hydrateConfigFromSecureStorage(_0x213d3c={}){const _0x4a5503=a31_0x2f81b5,_0x19808d=extractPlaintextSecureValues(_0x213d3c),{available:_0x163f68,values:_0x189f69}=await readSecureValues(_0x213d3c);if(!_0x163f68)return _0x213d3c;let _0x2f715c={..._0x189f69};if(_0x19808d[_0x4a5503(0x12a)]>0x0){const _0x4a9824=await writeSecureValues(_0x19808d);if(_0x4a9824[_0x4a5503(0x13d)]){_0x19808d[_0x4a5503(0x138)]((_0x40c9e0,_0x1ff581)=>{if(String(_0x40c9e0||''))_0x2f715c[_0x1ff581]=String(_0x40c9e0||'');else delete _0x2f715c[_0x1ff581];});const _0x49d3a8=stripSensitiveConfigValues(_0x213d3c);await post(_0x4a5503(0x139),_0x49d3a8)['catch'](()=>null);}}return mergeSecureValuesIntoConfig(_0x213d3c,_0x2f715c);}function _syncLegacyWindowApiKeys(_0x119be4){const _0x323221=a31_0x2f81b5;if(typeof window===_0x323221(0x12d))return;const _0x14e7bf=_0x119be4?.[_0x323221(0x122)]||{},_0x2d0f8b=_0x119be4?.['apiKey']||'';window['_appApiKey']=_0x14e7bf[_0x323221(0x10b)]?.['apiKey']||_0x2d0f8b||'',window['_runningHubApiKey']=_0x14e7bf[_0x323221(0x13a)]?.[_0x323221(0x10c)]||'',window[_0x323221(0x12c)]=_0x14e7bf[_0x323221(0x13a)]?.[_0x323221(0x113)]||'';}function a31_0xcd52(){const _0x2c43aa=['/api/config','runninghub','apiUrl','match','available','528yUEDvG','error','grsai','apiKey','entries','1521372lYHQnu','https://grsai.dakka.com.cn','function','trim','1903825UdLxzY','modelApiKey','replace','aicanvas','44380lMkSyL','apiUrlInput','success','351774ZvGvFq','call','prototype','electronAPI','push','apiConfig.providers.','1241550HlzwRW','includes','apiKeyInput','providers','parse','runninghubwf','11115uciaEz','set','add','openai','hasOwnProperty','size','object','_runningHubModelApiKey','undefined','215179awqYSC','ppio','2dAmQfh','keys','stringify','get','data','values','catch','delete','forEach'];a31_0xcd52=function(){return _0x2c43aa;};return a31_0xcd52();}export async function fetchApiConfigFromServer(){const _0x36d845=a31_0x2f81b5,_0x2621b9=await get(_0x36d845(0x139));if(!_0x2621b9[_0x36d845(0x118)])throw new Error(_0x2621b9['error']||'获取配置失败');return apiConfig=await hydrateConfigFromSecureStorage(_0x2621b9[_0x36d845(0x134)]||{}),_syncLegacyWindowApiKeys(apiConfig),apiConfig;}export async function saveApiConfigToServer(_0x426257){const _0x453cf0=a31_0x2f81b5,_0x4a8bbf=extractPlaintextSecureValues(_0x426257||{}),_0x102937=await writeSecureValues(_0x4a8bbf),_0xe3b72a=_0x102937['available']?stripSensitiveConfigValues(_0x426257||{}):_0x426257||{},_0x44547b=await post(_0x453cf0(0x139),_0xe3b72a);if(!_0x44547b[_0x453cf0(0x118)])throw new Error(_0x44547b[_0x453cf0(0x10a)]||'保存配置失败');return clearApiConfig(),_syncLegacyWindowApiKeys({'providers':_0x426257?.[_0x453cf0(0x122)]||{}}),_0x44547b[_0x453cf0(0x134)];}export async function ensureConfig(){if(apiConfig)return;await fetchApiConfigFromServer();}export function getProviderConfig(_0x45f1ac){const _0x4d247d=a31_0x2f81b5,_0x67c1a5=PROVIDERS_META[_0x45f1ac],_0x5a01c4=_0x67c1a5?.['defaultUrl']||_0x4d247d(0x10f),_0x36bf99=apiConfig?.[_0x4d247d(0x122)]?.[_0x45f1ac];if(_0x36bf99?.[_0x4d247d(0x13b)]||_0x36bf99?.[_0x4d247d(0x10c)]||_0x36bf99?.[_0x4d247d(0x113)])return{'apiUrl':(_0x36bf99[_0x4d247d(0x13b)]||_0x5a01c4)[_0x4d247d(0x114)](/\/+$/,''),'apiKey':_0x36bf99[_0x4d247d(0x10c)]||'','modelApiKey':_0x36bf99['modelApiKey']||''};if(_0x45f1ac===_0x4d247d(0x124)){const _0x18e8d0=apiConfig?.[_0x4d247d(0x122)]?.[_0x4d247d(0x13a)];if(_0x18e8d0?.[_0x4d247d(0x13b)]||_0x18e8d0?.['apiKey']||_0x18e8d0?.['modelApiKey'])return{'apiUrl':(_0x18e8d0[_0x4d247d(0x13b)]||_0x5a01c4)['replace'](/\/+$/,''),'apiKey':_0x18e8d0[_0x4d247d(0x10c)]||'','modelApiKey':''};}if(_0x45f1ac===_0x4d247d(0x10b))return{'apiUrl':(apiConfig?.[_0x4d247d(0x117)]||apiConfig?.[_0x4d247d(0x13b)]||_0x5a01c4)[_0x4d247d(0x114)](/\/+$/,''),'apiKey':apiConfig?.[_0x4d247d(0x121)]||apiConfig?.[_0x4d247d(0x10c)]||'','modelApiKey':''};return{'apiUrl':_0x5a01c4,'apiKey':'','modelApiKey':''};}
+import { PROVIDERS_META } from '../src/modules/providers.js';
+import {
+  clearCustomProviderRuntimeManifests,
+  setCustomProviderRuntimeManifests,
+} from '../src/manifests/index.js';
+import { get, post } from './apiBase.js';
+import {
+  getCustomProvider,
+  getCustomProviderIds,
+  getCustomProviders,
+  normalizeCustomProviderConfig,
+} from './customProviderRegistry.js';
+
+let apiConfig = null;
+
+const SECURE_PROVIDER_FIELDS = ['apiKey', 'modelApiKey'];
+const LEGACY_GRSAI_KEY_FIELDS = ['apiKey', 'apiKeyInput'];
+const REMOVED_PROVIDER_IDS = Object.freeze(['ppio']);
+const DEFAULT_SECURE_PROVIDER_IDS = Object.freeze(
+  [
+    ...new Set([
+      ...Object.keys(PROVIDERS_META || {}),
+      'grsai',
+      'openai',
+      'apimart',
+      'runninghub',
+      'runninghubwf',
+    ]),
+  ],
+);
+
+export function clearApiConfig() {
+  apiConfig = null;
+  clearCustomProviderRuntimeManifests();
+}
+
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cloneConfig(value) {
+  return isPlainObject(value) ? JSON.parse(JSON.stringify(value)) : {};
+}
+
+function normalizeProviderId(providerId) {
+  return String(providerId || '').trim().replace(/[^A-Za-z0-9_-]/g, '');
+}
+
+function normalizeApiConfig(config = {}) {
+  const normalizedConfig = normalizeCustomProviderConfig(cloneConfig(config));
+  if (isPlainObject(normalizedConfig.providers)) {
+    for (const providerId of REMOVED_PROVIDER_IDS) {
+      delete normalizedConfig.providers[providerId];
+    }
+  }
+  return normalizedConfig;
+}
+
+function buildProviderSecureKey(providerId, fieldName) {
+  const normalizedProviderId = normalizeProviderId(providerId);
+  const normalizedFieldName = String(fieldName || '').trim();
+  if (!normalizedProviderId || !SECURE_PROVIDER_FIELDS.includes(normalizedFieldName)) {
+    return '';
+  }
+  return `apiConfig.providers.${normalizedProviderId}.${normalizedFieldName}`;
+}
+
+function getSecureSettingsApi() {
+  const secureSettings = globalThis?.window?.electronAPI?.secureSettings;
+  if (
+    secureSettings &&
+    typeof secureSettings.get === 'function' &&
+    typeof secureSettings.set === 'function' &&
+    typeof secureSettings.delete === 'function'
+  ) {
+    return secureSettings;
+  }
+  return null;
+}
+
+function collectProviderIds(config = {}) {
+  const normalizedConfig = normalizeApiConfig(config);
+  const providerIds = new Set(DEFAULT_SECURE_PROVIDER_IDS);
+
+  if (isPlainObject(normalizedConfig.providers)) {
+    for (const providerId of Object.keys(normalizedConfig.providers)) {
+      const normalizedProviderId = normalizeProviderId(providerId);
+      if (normalizedProviderId) {
+        providerIds.add(normalizedProviderId);
+      }
+    }
+  }
+
+  for (const providerId of getCustomProviderIds(normalizedConfig)) {
+    const normalizedProviderId = normalizeProviderId(providerId);
+    if (normalizedProviderId) {
+      providerIds.add(normalizedProviderId);
+    }
+  }
+
+  return [...providerIds];
+}
+
+function collectSecureKeys(config = {}) {
+  const keys = [];
+  for (const providerId of collectProviderIds(config)) {
+    for (const fieldName of SECURE_PROVIDER_FIELDS) {
+      const secureKey = buildProviderSecureKey(providerId, fieldName);
+      if (secureKey) {
+        keys.push(secureKey);
+      }
+    }
+  }
+  return keys;
+}
+
+function stripSensitiveConfigValues(config = {}) {
+  const safeConfig = normalizeApiConfig(config);
+
+  if (isPlainObject(safeConfig.providers)) {
+    for (const providerConfig of Object.values(safeConfig.providers)) {
+      if (!isPlainObject(providerConfig)) {
+        continue;
+      }
+      for (const fieldName of SECURE_PROVIDER_FIELDS) {
+        delete providerConfig[fieldName];
+      }
+    }
+  }
+
+  for (const fieldName of LEGACY_GRSAI_KEY_FIELDS) {
+    delete safeConfig[fieldName];
+  }
+
+  return safeConfig;
+}
+
+function extractPlaintextSecureValues(config = {}) {
+  const normalizedConfig = normalizeApiConfig(config);
+  const secureValues = new Map();
+  const providers = isPlainObject(normalizedConfig.providers) ? normalizedConfig.providers : {};
+
+  for (const [providerId, providerConfig] of Object.entries(providers)) {
+    if (!isPlainObject(providerConfig)) {
+      continue;
+    }
+
+    for (const fieldName of SECURE_PROVIDER_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(providerConfig, fieldName)) {
+        continue;
+      }
+      const secureKey = buildProviderSecureKey(providerId, fieldName);
+      if (!secureKey) {
+        continue;
+      }
+      secureValues.set(secureKey, String(providerConfig[fieldName] || ''));
+    }
+  }
+
+  const hasProviderLevelGrsaiKey = !!String(providers?.grsai?.apiKey || '').trim();
+  if (!hasProviderLevelGrsaiKey) {
+    for (const fieldName of LEGACY_GRSAI_KEY_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(normalizedConfig, fieldName)) {
+        continue;
+      }
+      const legacyValue = String(normalizedConfig[fieldName] || '');
+      if (legacyValue) {
+        secureValues.set(buildProviderSecureKey('grsai', 'apiKey'), legacyValue);
+      }
+    }
+  }
+
+  return secureValues;
+}
+
+function mergeSecureValuesIntoConfig(config = {}, secureValues = {}) {
+  const mergedConfig = stripSensitiveConfigValues(config);
+
+  for (const [key, value] of Object.entries(secureValues || {})) {
+    const match = String(key || '').match(/^apiConfig\.providers\.([A-Za-z0-9_-]+)\.(apiKey|modelApiKey)$/);
+    if (!match) {
+      continue;
+    }
+
+    const providerId = match[1];
+    const fieldName = match[2];
+    const normalizedValue = String(value || '');
+    if (!normalizedValue) {
+      continue;
+    }
+
+    if (!isPlainObject(mergedConfig.providers)) {
+      mergedConfig.providers = {};
+    }
+    if (!isPlainObject(mergedConfig.providers[providerId])) {
+      mergedConfig.providers[providerId] = {};
+    }
+    mergedConfig.providers[providerId][fieldName] = normalizedValue;
+  }
+
+  return normalizeApiConfig(mergedConfig);
+}
+
+async function readSecureValues(config = {}) {
+  const secureSettings = getSecureSettingsApi();
+  if (!secureSettings) {
+    return { available: false, values: {} };
+  }
+
+  try {
+    const result = await secureSettings.get({ keys: collectSecureKeys(config) });
+    if (!result?.available) {
+      return { available: false, values: {} };
+    }
+    return {
+      available: true,
+      values: isPlainObject(result.values) ? result.values : {},
+    };
+  } catch {
+    return { available: false, values: {} };
+  }
+}
+
+function collectRemovedProviderSecureKeys() {
+  const keys = [];
+  for (const providerId of REMOVED_PROVIDER_IDS) {
+    for (const fieldName of SECURE_PROVIDER_FIELDS) {
+      const secureKey = buildProviderSecureKey(providerId, fieldName);
+      if (secureKey) {
+        keys.push(secureKey);
+      }
+    }
+  }
+  return keys;
+}
+
+async function deleteRemovedProviderSecureValues() {
+  const secureSettings = getSecureSettingsApi();
+  if (!secureSettings) {
+    return { available: false, changed: false };
+  }
+
+  const availability = await secureSettings.get({ keys: [] }).catch(() => null);
+  if (!availability?.available) {
+    return { available: false, changed: false };
+  }
+
+  let changed = false;
+  for (const key of collectRemovedProviderSecureKeys()) {
+    const result = await secureSettings.delete({ key });
+    if (result?.ok) {
+      changed = true;
+    }
+  }
+  return { available: true, changed };
+}
+
+async function writeSecureValues(secureValues) {
+  const secureSettings = getSecureSettingsApi();
+  if (!secureSettings || !(secureValues instanceof Map)) {
+    return { available: false, changed: false };
+  }
+
+  const availability = await secureSettings.get({ keys: [] }).catch(() => null);
+  if (!availability?.available) {
+    return { available: false, changed: false };
+  }
+
+  let changed = false;
+  for (const [key, value] of secureValues.entries()) {
+    if (!key) {
+      continue;
+    }
+
+    const normalizedValue = String(value || '');
+    if (normalizedValue) {
+      const result = await secureSettings.set({ key, value: normalizedValue });
+      if (result?.ok) {
+        changed = true;
+      }
+      continue;
+    }
+
+    const result = await secureSettings.delete({ key });
+    if (result?.ok) {
+      changed = true;
+    }
+  }
+
+  return { available: true, changed };
+}
+
+async function hydrateConfigFromSecureStorage(config = {}) {
+  const normalizedConfig = normalizeApiConfig(config);
+  const plaintextSecureValues = extractPlaintextSecureValues(normalizedConfig);
+  const { available, values } = await readSecureValues(normalizedConfig);
+  await deleteRemovedProviderSecureValues();
+
+  if (!available) {
+    return normalizedConfig;
+  }
+
+  let mergedSecureValues = { ...values };
+  if (plaintextSecureValues.size > 0) {
+    const writeResult = await writeSecureValues(plaintextSecureValues);
+    if (writeResult.available) {
+      plaintextSecureValues.forEach((value, key) => {
+        if (String(value || '')) {
+          mergedSecureValues[key] = String(value || '');
+        } else {
+          delete mergedSecureValues[key];
+        }
+      });
+      await post('/api/config', stripSensitiveConfigValues(normalizedConfig)).catch(() => null);
+    }
+  }
+
+  return mergeSecureValuesIntoConfig(normalizedConfig, mergedSecureValues);
+}
+
+function syncRuntimeCustomProviderRegistry(config) {
+  const customProviders = getCustomProviders(config || {});
+  if (customProviders.length === 0) {
+    clearCustomProviderRuntimeManifests();
+    return;
+  }
+  setCustomProviderRuntimeManifests(customProviders);
+}
+
+function syncLegacyWindowApiKeys(config) {  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const providers = config?.providers || {};
+  const legacyGrsaiKey = config?.apiKey || '';
+  window._appApiKey = providers.grsai?.apiKey || legacyGrsaiKey || '';
+  window._runningHubApiKey = providers.runninghub?.apiKey || '';
+  window._runningHubModelApiKey = providers.runninghub?.modelApiKey || '';
+}
+
+export async function fetchApiConfigFromServer() {
+  const response = await get('/api/config');
+  if (!response.success) {
+    throw new Error(response.error || '获取配置失败');
+  }
+
+  apiConfig = await hydrateConfigFromSecureStorage(response.data || {});
+  apiConfig = normalizeApiConfig(apiConfig);
+  syncRuntimeCustomProviderRegistry(apiConfig);
+  syncLegacyWindowApiKeys(apiConfig);
+  return apiConfig;
+}
+
+export async function saveApiConfigToServer(config) {
+  const normalizedConfig = normalizeApiConfig(config || {});
+  const plaintextSecureValues = extractPlaintextSecureValues(normalizedConfig);
+  const secureWriteResult = await writeSecureValues(plaintextSecureValues);
+  await deleteRemovedProviderSecureValues();
+  const payload = secureWriteResult.available
+    ? stripSensitiveConfigValues(normalizedConfig)
+    : normalizedConfig;
+
+  const response = await post('/api/config', payload);
+  if (!response.success) {
+    throw new Error(response.error || '保存配置失败');
+  }
+
+  apiConfig = normalizedConfig;
+  syncRuntimeCustomProviderRegistry(normalizedConfig);
+  syncLegacyWindowApiKeys(normalizedConfig);
+  return response.data;
+}
+
+export async function ensureConfig() {
+  if (apiConfig) {
+    return;
+  }
+  await fetchApiConfigFromServer();
+}
+
+export function getApiConfig() {
+  return apiConfig ? cloneConfig(apiConfig) : null;
+}
+
+export function getCustomProvidersConfig() {
+  return apiConfig ? getCustomProviders(apiConfig) : [];
+}
+
+export function getCustomProviderMeta(providerId) {
+  return apiConfig ? getCustomProvider(apiConfig, providerId) : null;
+}
+
+export function getProviderConfig(providerId) {
+  const normalizedProviderId = normalizeProviderId(providerId);
+  const providerMeta = PROVIDERS_META[normalizedProviderId];
+  const defaultUrl = providerMeta?.defaultUrl || '';
+  const providerConfig = apiConfig?.providers?.[normalizedProviderId];
+
+  if (providerConfig?.apiUrl || providerConfig?.apiKey || providerConfig?.modelApiKey) {
+    return {
+      apiUrl: (providerConfig.apiUrl || defaultUrl).replace(/\/+$/, ''),
+      apiKey: providerConfig.apiKey || '',
+      modelApiKey: providerConfig.modelApiKey || '',
+    };
+  }
+
+  if (normalizedProviderId === 'runninghubwf') {
+    const runninghubConfig = apiConfig?.providers?.runninghub;
+    if (
+      runninghubConfig?.apiUrl ||
+      runninghubConfig?.apiKey ||
+      runninghubConfig?.modelApiKey
+    ) {
+      return {
+        apiUrl: (runninghubConfig.apiUrl || defaultUrl).replace(/\/+$/, ''),
+        apiKey: runninghubConfig.apiKey || '',
+        modelApiKey: '',
+      };
+    }
+  }
+
+  if (normalizedProviderId === 'grsai') {
+    return {
+      apiUrl: (apiConfig?.apiUrlInput || apiConfig?.apiUrl || defaultUrl).replace(/\/+$/, ''),
+      apiKey: apiConfig?.apiKeyInput || apiConfig?.apiKey || '',
+      modelApiKey: '',
+    };
+  }
+
+  return {
+    apiUrl: defaultUrl,
+    apiKey: '',
+    modelApiKey: '',
+  };
+}

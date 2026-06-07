@@ -17597,6 +17597,74 @@ body.dev-mode .settings-card.dev-mode-only {
   color: var(--text-on-danger);
   outline: 0;
 }
+.settings-provider-delete-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1750;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-20);
+  background: var(--overlay-dim);
+  backdrop-filter: blur(var(--overlay-blur));
+  -webkit-backdrop-filter: blur(var(--overlay-blur));
+}
+.settings-provider-delete-confirm-overlay[hidden] {
+  display: none;
+}
+.settings-provider-delete-confirm {
+  width: min(420px, 100%);
+  border: 1px solid var(--stroke-12);
+  border-radius: var(--radius-16);
+  background: var(--bg-panel-solid);
+  box-shadow: var(--shadow-dialog);
+  padding: var(--space-20);
+  color: var(--text-primary);
+  text-align: center;
+}
+.settings-provider-delete-confirm-icon {
+  width: 36px;
+  height: 36px;
+  margin: 0 auto var(--space-12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-999);
+  border: 1px solid var(--stroke-danger);
+  background: var(--fill-danger-soft);
+  color: var(--text-danger);
+  font-size: var(--font-18);
+  font-weight: 800;
+  line-height: 1;
+}
+.settings-provider-delete-confirm-title {
+  color: var(--text-strong);
+  font-size: var(--font-17);
+  font-weight: 800;
+  margin-bottom: var(--space-8);
+}
+.settings-provider-delete-confirm-message {
+  color: var(--text-secondary);
+  font-size: var(--font-13);
+  line-height: 1.6;
+  margin-bottom: var(--space-18);
+}
+.settings-provider-delete-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+}
+.settings-provider-delete-confirm-danger {
+  border-color: var(--stroke-danger);
+  background: var(--btn-danger-bg);
+  color: var(--text-on-danger);
+}
+.settings-provider-delete-confirm-danger:hover,
+.settings-provider-delete-confirm-danger:focus-visible {
+  border-color: var(--red-60);
+  background: var(--btn-danger-bg-hover);
+  color: var(--text-on-danger);
+}
 .settings-unsaved-hint {
   margin-right: auto;
   display: inline-flex;

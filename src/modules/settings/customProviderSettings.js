@@ -36,6 +36,7 @@ let bindingState = {
 
 let activeModelEditor = null;
 let activeFetchedModelsPicker = null;
+let activeProviderDeleteConfirm = null;
 let expandedCustomProviderIds = new Set();
 
 function normalizeString(value) {
@@ -582,6 +583,95 @@ function removeProviderFromDom(providerId) {
   renderProviders(providers);
 }
 
+function getProviderDeleteConfirmLabel(providerId) {
+  const card = getList()?.querySelector(`[data-custom-provider-card="${providerId}"]`);
+  return buildCardTitle({ label: card?.querySelector('[data-custom-provider-field="label"]')?.value });
+}
+
+function ensureProviderDeleteConfirm() {
+  let confirm = document.getElementById('customProviderDeleteConfirm');
+  if (confirm) {
+    return confirm;
+  }
+
+  confirm = document.createElement('div');
+  confirm.id = 'customProviderDeleteConfirm';
+  confirm.className = 'settings-provider-delete-confirm-overlay';
+  confirm.hidden = true;
+  confirm.innerHTML = `
+    <div class="settings-provider-delete-confirm" role="dialog" aria-modal="true" aria-labelledby="customProviderDeleteConfirmTitle">
+      <div class="settings-provider-delete-confirm-icon" aria-hidden="true">!</div>
+      <div class="settings-provider-delete-confirm-title" id="customProviderDeleteConfirmTitle">删除自定义供应商？</div>
+      <div class="settings-provider-delete-confirm-message" data-provider-delete-confirm-message></div>
+      <div class="settings-provider-delete-confirm-actions">
+        <button type="button" class="settings-save-btn settings-btn-ghost" data-provider-delete-confirm-cancel>取消</button>
+        <button type="button" class="settings-save-btn settings-provider-delete-confirm-danger" data-provider-delete-confirm-submit>确认删除</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(confirm);
+  confirm.addEventListener('click', handleProviderDeleteConfirmClick);
+  return confirm;
+}
+
+function openProviderDeleteConfirm(providerId) {
+  if (!providerId) {
+    return;
+  }
+
+  const confirm = ensureProviderDeleteConfirm();
+  const message = confirm.querySelector('[data-provider-delete-confirm-message]');
+  const providerLabel = getProviderDeleteConfirmLabel(providerId);
+  activeProviderDeleteConfirm = { providerId };
+  if (message) {
+    message.textContent = `将删除“${providerLabel}”及其模型、接口地址和密钥配置。确认后会立即保存删除结果。`;
+  }
+  confirm.hidden = false;
+  confirm.classList.add('is-open');
+  confirm.querySelector('[data-provider-delete-confirm-cancel]')?.focus();
+}
+
+function closeProviderDeleteConfirm() {
+  const confirm = document.getElementById('customProviderDeleteConfirm');
+  if (confirm) {
+    confirm.hidden = true;
+    confirm.classList.remove('is-open');
+  }
+  activeProviderDeleteConfirm = null;
+}
+
+function requestApiSettingsSave() {
+  const saveButton = document.getElementById('btnApiSave');
+  if (!saveButton || saveButton.disabled) {
+    window.showToast?.('删除已应用到当前页面，但自动保存不可用，请手动保存配置', 'warning');
+    return;
+  }
+  saveButton.click();
+}
+
+function confirmProviderDelete() {
+  const providerId = normalizeString(activeProviderDeleteConfirm?.providerId);
+  if (!providerId) {
+    closeProviderDeleteConfirm();
+    return;
+  }
+
+  removeProviderFromDom(providerId);
+  notifyProviderEdited(providerId);
+  closeProviderDeleteConfirm();
+  requestApiSettingsSave();
+}
+
+function handleProviderDeleteConfirmClick(event) {
+  if (event.target === event.currentTarget || event.target.closest('[data-provider-delete-confirm-cancel]')) {
+    closeProviderDeleteConfirm();
+    return;
+  }
+  if (event.target.closest('[data-provider-delete-confirm-submit]')) {
+    confirmProviderDelete();
+  }
+}
+
 function toggleProviderCardCollapsed(card) {
   const providerId = normalizeString(card?.dataset?.customProviderCard);
   if (!providerId || !card) {
@@ -1095,8 +1185,7 @@ function handleListClick(event) {
   if (removeButton) {
     const providerId = normalizeString(removeButton.dataset.customProviderRemove);
     if (providerId) {
-      removeProviderFromDom(providerId);
-      notifyProviderEdited(providerId);
+      openProviderDeleteConfirm(providerId);
     }
     return;
   }

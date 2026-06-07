@@ -142,6 +142,10 @@ test('custom provider video route builds OpenAI-compatible manifest request', as
       inputUrls: [],
       videos: [],
       audios: [],
+      generationParams: {
+        aspectRatio: '9:16',
+        resolution: '1080p',
+      },
     });
 
     assert.equal(request.url, '/api/v2/proxy/image');
@@ -152,6 +156,32 @@ test('custom provider video route builds OpenAI-compatible manifest request', as
     assert.equal(request.body.image, undefined);
     assert.equal(request.body.video, undefined);
     assert.equal(request.body.audio, undefined);
+    assert.equal(request.body.aspect_ratio, '9:16');
+    assert.equal(request.body.resolution, '1080p');
+    assert.equal(request.adapterTrace?.source, 'manifest');
+    assert.equal(request.adapterTrace?.modelId, 'veo-mini');
+  });
+});
+
+test('custom provider video route includes default aspect ratio and resolution params', async () => {
+  await withFetchMock(async (input, init = {}) => {
+    const url = String(input);
+    if (url === '/api/config') {
+      return makeJsonResponse(buildCustomConfig());
+    }
+    throw new Error(`unexpected fetch url: ${url}`);
+  }, async () => {
+    const request = await buildGenerateVideoRequest({
+      provider: CUSTOM_PROVIDER_ID,
+      model: 'veo-mini',
+      prompt: 'animate a skyline at dusk',
+      inputUrls: [],
+      videos: [],
+      audios: [],
+    });
+
+    assert.equal(request.body.aspect_ratio, '16:9');
+    assert.equal(request.body.resolution, '720p');
     assert.equal(request.adapterTrace?.source, 'manifest');
     assert.equal(request.adapterTrace?.modelId, 'veo-mini');
   });

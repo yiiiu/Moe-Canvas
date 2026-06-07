@@ -1,1 +1,134 @@
-const a318_0x3f76b9=a318_0x21b0;function a318_0x21b0(_0x24e239,_0x276d07){const _0x131476=a318_0x1314();return a318_0x21b0=function(_0x21b0de,_0x58021a){_0x21b0de=_0x21b0de-0x119;let _0x410379=_0x131476[_0x21b0de];return _0x410379;},a318_0x21b0(_0x24e239,_0x276d07);}(function(_0x19e7ca,_0x3c1584){const _0x187c63=a318_0x21b0,_0x101459=_0x19e7ca();while(!![]){try{const _0x399145=-parseInt(_0x187c63(0x133))/0x1+-parseInt(_0x187c63(0x12c))/0x2+-parseInt(_0x187c63(0x11c))/0x3+parseInt(_0x187c63(0x13b))/0x4*(parseInt(_0x187c63(0x123))/0x5)+-parseInt(_0x187c63(0x131))/0x6+-parseInt(_0x187c63(0x138))/0x7*(-parseInt(_0x187c63(0x130))/0x8)+parseInt(_0x187c63(0x125))/0x9;if(_0x399145===_0x3c1584)break;else _0x101459['push'](_0x101459['shift']());}catch(_0x1d217d){_0x101459['push'](_0x101459['shift']());}}}(a318_0x1314,0xa96e4));import a318_0x43dbe8 from'node:test';function a318_0x1314(){const _0xb5fb01=['generationResultRenderer:\x20normalizes\x20canonical,\x20collection,\x20array,\x20and\x20single\x20results','17807202sBWLBo','rhStatusMessage','mainVideoIndex','success','videos','generationResultRenderer:\x20builds\x20success\x20and\x20failure\x20collection\x20patches','provider\x20failed','1623206vsJZhE','videoUrl','generationResultRenderer:\x20result\x20error\x20is\x20read\x20from\x20normalized\x20items','/out.mp4','176xjYKsg','2513220hGLQdP','/a.mp4','845484YJIxHL','error','jobStatus','image','output/out.mp4','284242AduLSb','/a.mp3','generationResultRenderer:\x20builds\x20single\x20result\x20patch\x20without\x20collection\x20fields','4rmZdcP','equal','length','now','output/final.mp3','3936429jrGdxf','isVideosExpanded','/a.png','deepEqual','audioUrl','localPath','jobError','6050890PjsBzh'];a318_0x1314=function(){return _0xb5fb01;};return a318_0x1314();}import a318_0x498075 from'node:assert/strict';import{buildGenerationCollectionResultPatch,buildGenerationSingleResultPatch,firstNonEmptyString,getFirstGenerationResultError,normalizeGenerationResultItems}from'./generationResultRenderer.js';a318_0x43dbe8(a318_0x3f76b9(0x124),()=>{const _0xcae988=a318_0x3f76b9;a318_0x498075[_0xcae988(0x11f)](normalizeGenerationResultItems({'outputType':_0xcae988(0x136),'items':[{'url':'/a.png'}]}),[{'url':_0xcae988(0x11e)}]),a318_0x498075['deepEqual'](normalizeGenerationResultItems({'videos':[{'videoUrl':'/a.mp4'}]},{'collectionField':_0xcae988(0x129)}),[{'videoUrl':_0xcae988(0x132)}]),a318_0x498075['deepEqual'](normalizeGenerationResultItems([{'audioUrl':_0xcae988(0x139)}]),[{'audioUrl':_0xcae988(0x139)}]),a318_0x498075[_0xcae988(0x11f)](normalizeGenerationResultItems({'audioUrl':'/a.mp3'},{'singleItemFields':[_0xcae988(0x120)]}),[{'audioUrl':'/a.mp3'}]);}),a318_0x43dbe8(a318_0x3f76b9(0x12e),()=>{const _0x53ada7=a318_0x3f76b9;a318_0x498075[_0x53ada7(0x13c)](getFirstGenerationResultError({'videos':[{'error':_0x53ada7(0x12b)}]},{'collectionField':_0x53ada7(0x129)}),_0x53ada7(0x12b)),a318_0x498075[_0x53ada7(0x13c)](firstNonEmptyString('',null,'\x20ok\x20'),'ok');}),a318_0x43dbe8(a318_0x3f76b9(0x12a),()=>{const _0x42e098=a318_0x3f76b9,_0x19b82a=buildGenerationCollectionResultPatch({'videos':[{'videoUrl':_0x42e098(0x12f),'localPath':_0x42e098(0x137)}]},{'collectionField':_0x42e098(0x129),'mainIndexField':_0x42e098(0x127),'expandedField':_0x42e098(0x11d),'startedAt':Date[_0x42e098(0x11a)]()-0xa,'buildFirstItemPatch':_0x12ab1c=>({'videoUrl':_0x12ab1c['videoUrl'],'localPath':_0x12ab1c[_0x42e098(0x121)]}),'extraPatch':{'rhStatusMessage':null}});a318_0x498075[_0x42e098(0x13c)](_0x19b82a['jobStatus'],'success'),a318_0x498075[_0x42e098(0x13c)](_0x19b82a['mainVideoIndex'],0x0),a318_0x498075['equal'](_0x19b82a[_0x42e098(0x11d)],![]),a318_0x498075[_0x42e098(0x13c)](_0x19b82a[_0x42e098(0x12d)],_0x42e098(0x12f)),a318_0x498075[_0x42e098(0x13c)](_0x19b82a['localPath'],_0x42e098(0x137)),a318_0x498075[_0x42e098(0x13c)](_0x19b82a[_0x42e098(0x126)],null);const _0x3f22c7=buildGenerationCollectionResultPatch({'error':'provider\x20failed'},{'collectionField':_0x42e098(0x129),'mainIndexField':'mainVideoIndex','singleItemFields':[_0x42e098(0x12d)]});a318_0x498075[_0x42e098(0x13c)](_0x3f22c7[_0x42e098(0x135)],_0x42e098(0x134)),a318_0x498075[_0x42e098(0x13c)](_0x3f22c7['jobError'],_0x42e098(0x12b)),a318_0x498075['equal'](_0x3f22c7[_0x42e098(0x129)][_0x42e098(0x119)],0x1);}),a318_0x43dbe8('generationResultRenderer:\x20collection\x20patch\x20can\x20select\x20a\x20nonzero\x20main\x20item',()=>{const _0x17ade6=a318_0x3f76b9,_0x246f1d=buildGenerationCollectionResultPatch({'videos':[{'error':'provider\x20failed'},{'videoUrl':_0x17ade6(0x12f),'localPath':'output/out.mp4'}]},{'collectionField':_0x17ade6(0x129),'mainIndexField':_0x17ade6(0x127),'selectMainIndex':()=>0x1,'buildFirstItemPatch':_0x4f12ea=>({'videoUrl':_0x4f12ea['videoUrl'],'localPath':_0x4f12ea['localPath']})});a318_0x498075['equal'](_0x246f1d['jobStatus'],'success'),a318_0x498075[_0x17ade6(0x13c)](_0x246f1d[_0x17ade6(0x127)],0x1),a318_0x498075['equal'](_0x246f1d[_0x17ade6(0x12d)],'/out.mp4'),a318_0x498075[_0x17ade6(0x13c)](_0x246f1d[_0x17ade6(0x121)],'output/out.mp4');}),a318_0x43dbe8(a318_0x3f76b9(0x13a),()=>{const _0x5cf7da=a318_0x3f76b9,_0x19c968=buildGenerationSingleResultPatch({'audioUrl':'/output/final.mp3','localPath':'output/final.mp3'},{'singleItemFields':[_0x5cf7da(0x120),_0x5cf7da(0x121)],'buildItemPatch':_0x21c058=>({'audioUrl':_0x21c058[_0x5cf7da(0x120)],'localPath':_0x21c058[_0x5cf7da(0x121)]}),'extraPatch':{'rhStatusMessage':null}});a318_0x498075[_0x5cf7da(0x13c)](_0x19c968[_0x5cf7da(0x135)],_0x5cf7da(0x128)),a318_0x498075[_0x5cf7da(0x13c)](_0x19c968[_0x5cf7da(0x120)],'/output/final.mp3'),a318_0x498075[_0x5cf7da(0x13c)](_0x19c968[_0x5cf7da(0x121)],_0x5cf7da(0x11b)),a318_0x498075[_0x5cf7da(0x13c)](_0x19c968[_0x5cf7da(0x126)],null);const _0x1bd89e=buildGenerationSingleResultPatch({'error':_0x5cf7da(0x12b)},{'singleItemFields':[_0x5cf7da(0x120)]});a318_0x498075[_0x5cf7da(0x13c)](_0x1bd89e[_0x5cf7da(0x135)],'error'),a318_0x498075[_0x5cf7da(0x13c)](_0x1bd89e[_0x5cf7da(0x122)],'provider\x20failed');});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  buildGenerationCollectionResultPatch,
+  buildGenerationSingleResultPatch,
+  firstNonEmptyString,
+  getFirstGenerationResultError,
+  normalizeGenerationResultItems,
+} from './generationResultRenderer.js';
+
+test('generationResultRenderer normalizes generation result items', () => {
+  assert.deepEqual(
+    normalizeGenerationResultItems({ outputType: 'image', items: [{ url: '/a.png' }] }),
+    [{ url: '/a.png' }],
+  );
+  assert.deepEqual(
+    normalizeGenerationResultItems({ videos: [{ videoUrl: '/a.mp4' }] }, { collectionField: 'videos' }),
+    [{ videoUrl: '/a.mp4' }],
+  );
+  assert.deepEqual(normalizeGenerationResultItems([{ audioUrl: '/a.mp3' }]), [
+    { audioUrl: '/a.mp3' },
+  ]);
+  assert.deepEqual(
+    normalizeGenerationResultItems({ audioUrl: '/a.mp3' }, { singleItemFields: ['audioUrl'] }),
+    [{ audioUrl: '/a.mp3' }],
+  );
+});
+
+test('generationResultRenderer reads first result error', () => {
+  assert.equal(
+    getFirstGenerationResultError(
+      { videos: [{ error: 'provider failed' }] },
+      { collectionField: 'videos' },
+    ),
+    'provider failed',
+  );
+  assert.equal(firstNonEmptyString('', null, ' ok '), 'ok');
+});
+
+test('generationResultRenderer formats structured error objects as readable text', () => {
+  assert.equal(firstNonEmptyString({ error: { message: 'Upstream video failed' } }), 'Upstream video failed');
+  assert.equal(firstNonEmptyString({ error_message: 'Invalid aspect ratio' }), 'Invalid aspect ratio');
+  assert.notEqual(firstNonEmptyString({ error: { message: 'Readable message' } }), '[object Object]');
+});
+
+test('generationResultRenderer builds collection result patch', () => {
+  const patch = buildGenerationCollectionResultPatch(
+    { videos: [{ videoUrl: '/out.mp4', localPath: 'output/out.mp4' }] },
+    {
+      collectionField: 'videos',
+      mainIndexField: 'mainVideoIndex',
+      expandedField: 'isVideosExpanded',
+      startedAt: Date.now() - 10,
+      buildFirstItemPatch: item => ({
+        videoUrl: item.videoUrl,
+        localPath: item.localPath,
+      }),
+      extraPatch: { rhStatusMessage: null },
+    },
+  );
+
+  assert.equal(patch.jobStatus, 'success');
+  assert.equal(patch.mainVideoIndex, 0);
+  assert.equal(patch.isVideosExpanded, false);
+  assert.equal(patch.videoUrl, '/out.mp4');
+  assert.equal(patch.localPath, 'output/out.mp4');
+  assert.equal(patch.rhStatusMessage, null);
+
+  const failurePatch = buildGenerationCollectionResultPatch(
+    { error: 'provider failed' },
+    {
+      collectionField: 'videos',
+      mainIndexField: 'mainVideoIndex',
+      singleItemFields: ['videoUrl'],
+    },
+  );
+
+  assert.equal(failurePatch.jobStatus, 'error');
+  assert.equal(failurePatch.jobError, 'provider failed');
+  assert.equal(failurePatch.videos.length, 1);
+});
+
+test('generationResultRenderer collection patch can select a nonzero main item', () => {
+  const patch = buildGenerationCollectionResultPatch(
+    {
+      videos: [
+        { error: 'provider failed' },
+        { videoUrl: '/out.mp4', localPath: 'output/out.mp4' },
+      ],
+    },
+    {
+      collectionField: 'videos',
+      mainIndexField: 'mainVideoIndex',
+      selectMainIndex: () => 1,
+      buildFirstItemPatch: item => ({
+        videoUrl: item.videoUrl,
+        localPath: item.localPath,
+      }),
+    },
+  );
+
+  assert.equal(patch.jobStatus, 'success');
+  assert.equal(patch.mainVideoIndex, 1);
+  assert.equal(patch.videoUrl, '/out.mp4');
+  assert.equal(patch.localPath, 'output/out.mp4');
+});
+
+test('generationResultRenderer builds single result patch without collection fields', () => {
+  const patch = buildGenerationSingleResultPatch(
+    { audioUrl: '/output/final.mp3', localPath: 'output/final.mp3' },
+    {
+      singleItemFields: ['audioUrl', 'localPath'],
+      buildItemPatch: item => ({
+        audioUrl: item.audioUrl,
+        localPath: item.localPath,
+      }),
+      extraPatch: { rhStatusMessage: null },
+    },
+  );
+
+  assert.equal(patch.jobStatus, 'success');
+  assert.equal(patch.audioUrl, '/output/final.mp3');
+  assert.equal(patch.localPath, 'output/final.mp3');
+  assert.equal(patch.rhStatusMessage, null);
+
+  const failurePatch = buildGenerationSingleResultPatch(
+    { error: 'provider failed' },
+    { singleItemFields: ['audioUrl'] },
+  );
+
+  assert.equal(failurePatch.jobStatus, 'error');
+  assert.equal(failurePatch.jobError, 'provider failed');
+});

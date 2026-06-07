@@ -41,6 +41,50 @@ function normalizeText(value) {
   return String(value || '').trim();
 }
 
+function createVideoUiSchema() {
+  return Object.freeze({
+    fields: Object.freeze([
+      Object.freeze({
+        id: 'aspectRatio',
+        displayRole: 'aspectRatio',
+        type: 'segmented',
+        placement: 'resolution',
+        variant: 'pillMenu',
+        label: '比例',
+        defaultValue: '16:9',
+        options: Object.freeze([
+          Object.freeze({ value: '16:9', label: '16:9' }),
+          Object.freeze({ value: '9:16', label: '9:16' }),
+          Object.freeze({ value: '1:1', label: '1:1' }),
+          Object.freeze({ value: '4:3', label: '4:3' }),
+          Object.freeze({ value: '3:4', label: '3:4' }),
+        ]),
+      }),
+      Object.freeze({
+        id: 'resolution',
+        displayRole: 'resolution',
+        type: 'segmented',
+        placement: 'resolution',
+        variant: 'pillMenu',
+        label: '分辨率',
+        defaultValue: '720p',
+        options: Object.freeze([
+          Object.freeze({ value: '720p', label: '720p' }),
+          Object.freeze({ value: '1080p', label: '1080p' }),
+        ]),
+      }),
+    ]),
+  });
+}
+
+function createUiSchema(capability) {
+  if (capability === 'video') {
+    return createVideoUiSchema();
+  }
+
+  return Object.freeze({ fields: Object.freeze([]) });
+}
+
 function createExecutionId(providerId, capability) {
   return `${providerId}.custom-openai-compatible.${capability}.v1`;
 }
@@ -165,6 +209,18 @@ function createBodyMapping(capability) {
         Object.freeze({ path: 'image', from: 'inputImages', transform: 'first', omitWhenEmpty: true }),
         Object.freeze({ path: 'video', from: 'inputVideos', transform: 'first', omitWhenEmpty: true }),
         Object.freeze({ path: 'audio', from: 'inputAudios', transform: 'first', omitWhenEmpty: true }),
+        Object.freeze({
+          path: 'aspect_ratio',
+          from: 'param',
+          field: 'generationParams.aspectRatio',
+          omitWhenEmpty: true,
+        }),
+        Object.freeze({
+          path: 'resolution',
+          from: 'param',
+          field: 'generationParams.resolution',
+          omitWhenEmpty: true,
+        }),
       ]),
     });
   }
@@ -224,7 +280,7 @@ function createModelManifest(customProvider, capability, rawModelId) {
     icon: CUSTOM_PROVIDER_RUNTIME_ICON,
     description: CUSTOM_PROVIDER_RUNTIME_DESCRIPTION,
     inputSlots: createInputSlots(capability),
-    uiSchema: Object.freeze({ fields: Object.freeze([]) }),
+    uiSchema: createUiSchema(capability),
     async: capability !== 'text',
     cancellable: capability === 'video',
     outputType: capability,

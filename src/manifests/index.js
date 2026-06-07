@@ -25,7 +25,7 @@ import {
   resolveModelExecution as resolveStaticModelExecution,
   resolveModelManifest as resolveStaticModelManifest,
   resolveModelProvider as resolveStaticModelProvider,
-  sanitizeModelUiSchemaParams,
+  sanitizeModelUiSchemaParams as sanitizeStaticModelUiSchemaParams,
   validateExecutionManifest,
   validateModelManifest,
 } from './modelRegistry.js';
@@ -39,7 +39,6 @@ export {
   normalizeProviderId,
   normalizeUiSchemaFieldValue,
   registerManifestBundle,
-  sanitizeModelUiSchemaParams,
   setCustomProviderRuntimeManifests,
   CUSTOM_PROVIDER_RUNTIME_CHANGED_EVENT,
   validateExecutionManifest,
@@ -52,6 +51,62 @@ function mergeUniqueModelManifests(staticModels, runtimeModels) {
     merged.set(model.modelId, model);
   }
   return [...merged.values()];
+}
+
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sanitizeRuntimeModelUiSchemaParams(modelManifest, params = {}, { includeDefaults = true } = {}) {
+  const fields = Array.isArray(modelManifest?.uiSchema?.fields) ? modelManifest.uiSchema.fields : [];
+  const sourceParams = isPlainObject(params) ? params : {};
+  const defaultParams = {};
+
+  return fields.reduce((result, field) => {
+    const fieldId = String(field?.id || '').trim();
+    if (!fieldId) {
+      return result;
+    }
+
+    const contextParams = {
+      ...sourceParams,
+      ...defaultParams,
+      ...result,
+    };
+
+    if (Object.prototype.hasOwnProperty.call(sourceParams, fieldId)) {
+      result[fieldId] = normalizeUiSchemaFieldValue(field, sourceParams[fieldId], {
+        params: contextParams,
+      });
+      defaultParams[fieldId] = result[fieldId];
+      return result;
+    }
+
+    const defaultValue = normalizeUiSchemaFieldValue(field, field?.defaultValue, {
+      params: contextParams,
+    });
+    defaultParams[fieldId] = defaultValue;
+
+    if (includeDefaults) {
+      result[fieldId] = defaultValue;
+    }
+
+    return result;
+  }, {});
+}
+
+export function sanitizeModelUiSchemaParams(modelId, params = {}, options = {}) {
+  const staticModel = getStaticModelManifest(modelId);
+  if (staticModel) {
+    return sanitizeStaticModelUiSchemaParams(modelId, params, options);
+  }
+
+  const runtimeModel = getCustomProviderRuntimeModelManifest(modelId);
+  if (runtimeModel) {
+    return sanitizeRuntimeModelUiSchemaParams(runtimeModel, params, options);
+  }
+
+  return sanitizeStaticModelUiSchemaParams(modelId, params, options);
 }
 
 export function getModelManifest(modelId) {

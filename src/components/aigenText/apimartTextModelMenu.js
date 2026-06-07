@@ -225,7 +225,7 @@ export function buildTextModelMenuHTML(activeModel, providerId) {
         {
           modelId: item.modelId,
           provider: item.provider,
-          title: item.title,
+          label: item.title,
           subtitle: item.subtitle,
           iconHtml: item.iconHtml || buildTextModelIconHTML(item.icon, 20),
         },
@@ -242,7 +242,7 @@ export function buildRuntimeCustomTextMenuHTML(activeModel) {
         {
           modelId: item.modelId,
           provider: item.provider,
-          title: item.title,
+          label: item.title,
           subtitle: item.subtitle,
           iconHtml: item.iconHtml,
           className: 'custom-provider-menu-item',
@@ -295,7 +295,7 @@ export function buildTextProviderMenuGroupsHTML(activeModel, options = {}) {
         items: group.models.map(item => ({
           modelId: item.modelId,
           provider: item.provider,
-          title: item.title,
+          label: item.title,
           subtitle: item.subtitle,
           iconHtml: buildRuntimeProviderBadgeHTML(item.provider, 14),
         })),

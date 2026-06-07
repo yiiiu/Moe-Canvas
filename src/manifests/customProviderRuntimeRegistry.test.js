@@ -53,5 +53,24 @@ test('custom runtime manifests: 注册后可解析自定义 provider 模型', ()
   );
 
   clearCustomProviderRuntimeManifests();
+  setCustomProviderRuntimeManifests([
+    {
+      id: 'custom_acme',
+      label: 'Acme',
+      kind: 'openai-compatible',
+      enabled: true,
+      capabilities: ['text'],
+      models: {
+        text: ['custom_acme/gpt-4o-mini'],
+      },
+    },
+  ]);
+
+  const migratedManifest = getModelManifest('custom_acme/gpt-4o-mini');
+  assert.equal(migratedManifest?.displayName, 'gpt-4o-mini');
+  assert.equal(migratedManifest?.extensions?.rawModelId, 'gpt-4o-mini');
+  assert.equal(resolveModelExecution('custom_acme/gpt-4o-mini')?.modelManifest, migratedManifest);
+
+  clearCustomProviderRuntimeManifests();
   assert.equal(resolveModelExecution('gpt-4o-mini', { providerHint: 'custom_acme' }), null);
 });

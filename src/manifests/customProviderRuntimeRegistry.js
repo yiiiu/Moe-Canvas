@@ -1,6 +1,8 @@
 import {
+  CUSTOM_PROVIDER_DEFAULT_VIDEO_ENDPOINT_PRESET,
   CUSTOM_PROVIDER_KIND,
   CUSTOM_PROVIDER_MODEL_CAPABILITIES,
+  CUSTOM_PROVIDER_VIDEO_ENDPOINT_PRESETS,
   normalizeCustomProvidersRegistry,
 } from '../../api/customProviderRegistry.js';
 
@@ -85,12 +87,32 @@ function createUiSchema(capability) {
   return Object.freeze({ fields: Object.freeze([]) });
 }
 
-function createExecutionId(providerId, capability) {
+function createExecutionId(providerId, capability, rawModelId = '') {
+  const normalizedModelId = normalizeText(rawModelId)
+    .replace(/[^a-z0-9_.-]+/gi, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (capability === 'video' && normalizedModelId) {
+    return `${providerId}.custom-openai-compatible.${capability}.${normalizedModelId}.v1`;
+  }
   return `${providerId}.custom-openai-compatible.${capability}.v1`;
 }
 
 function createCanonicalModelId(providerId, modelId) {
   return `${providerId}/${modelId}`;
+}
+
+function normalizeRawModelIdForProvider(providerId, rawModelId) {
+  const normalizedProviderId = normalizeText(providerId);
+  const normalizedModelId = normalizeText(rawModelId);
+  if (!normalizedProviderId || !normalizedModelId) {
+    return normalizedModelId;
+  }
+
+  const providerPrefix = `${normalizedProviderId}/`;
+  return normalizedModelId.startsWith(providerPrefix)
+    ? normalizeText(normalizedModelId.slice(providerPrefix.length))
+    : normalizedModelId;
 }
 
 function createInputSlots(capability) {
@@ -206,6 +228,7 @@ function createBodyMapping(capability) {
       entries: Object.freeze([
         Object.freeze({ path: 'model', from: 'model' }),
         Object.freeze({ path: 'prompt', from: 'prompt' }),
+        Object.freeze({ path: 'messages', from: 'promptMessagesWithImages', omitWhenEmpty: true }),
         Object.freeze({ path: 'image', from: 'inputImages', transform: 'first', omitWhenEmpty: true }),
         Object.freeze({ path: 'video', from: 'inputVideos', transform: 'first', omitWhenEmpty: true }),
         Object.freeze({ path: 'audio', from: 'inputAudios', transform: 'first', omitWhenEmpty: true }),
@@ -242,14 +265,50 @@ function createBodyMapping(capability) {
   });
 }
 
-function createExecutionManifest(customProvider, capability) {
+function shouldUseChatCompatibleVideoEndpoint(rawModelId) {
+  const modelId = normalizeText(rawModelId).toLowerCase();
+  if (!modelId) {
+    return false;
+  }
+  return /(^|[-_/.])(chat|gpt|gemini|qwen|glm|grok|doubao)([-_/.]|$)/i.test(modelId);
+}
+
+function resolveAutoVideoEndpoint(rawModelId = '') {
+  return shouldUseChatCompatibleVideoEndpoint(rawModelId)
+    ? CUSTOM_PROVIDER_VIDEO_ENDPOINT_PRESETS.openai_chat.endpoint
+    : CAPABILITY_ENDPOINTS.video;
+}
+
+function resolveExecutionEndpoint(customProvider, capability, rawModelId = '') {
+  if (capability !== 'video') {
+    return customProvider.endpoints?.[capability] || CAPABILITY_ENDPOINTS[capability];
+  }
+
+  if (customProvider.endpoints?.video) {
+    return customProvider.endpoints.video;
+  }
+
+  const presetId = customProvider.endpointPresets?.video || CUSTOM_PROVIDER_DEFAULT_VIDEO_ENDPOINT_PRESET;
+  if (presetId === 'auto') {
+    return resolveAutoVideoEndpoint(rawModelId);
+  }
+
+  const preset = CUSTOM_PROVIDER_VIDEO_ENDPOINT_PRESETS[presetId]
+    || CUSTOM_PROVIDER_VIDEO_ENDPOINT_PRESETS[CUSTOM_PROVIDER_DEFAULT_VIDEO_ENDPOINT_PRESET];
+  if (presetId === 'custom') {
+    return preset.endpoint || resolveAutoVideoEndpoint(rawModelId);
+  }
+  return preset.endpoint || resolveAutoVideoEndpoint(rawModelId);
+}
+
+function createExecutionManifest(customProvider, capability, rawModelId = '') {
   return Object.freeze({
     schemaVersion: '1.0',
-    id: createExecutionId(customProvider.id, capability),
+    id: createExecutionId(customProvider.id, capability, rawModelId),
     provider: customProvider.id,
     kind: capability,
     adapterType: 'modelApi',
-    endpoint: CAPABILITY_ENDPOINTS[capability],
+    endpoint: resolveExecutionEndpoint(customProvider, capability, rawModelId),
     endpointMode: capability === 'text' ? 'chat-completion' : undefined,
     method: 'POST',
     model: '',
@@ -267,16 +326,17 @@ function createExecutionManifest(customProvider, capability) {
 }
 
 function createModelManifest(customProvider, capability, rawModelId) {
-  const canonicalModelId = createCanonicalModelId(customProvider.id, rawModelId);
+  const upstreamModelId = normalizeRawModelIdForProvider(customProvider.id, rawModelId);
+  const canonicalModelId = createCanonicalModelId(customProvider.id, upstreamModelId);
   return Object.freeze({
     schemaVersion: '1.0',
     modelId: canonicalModelId,
-    aliases: Object.freeze([rawModelId]),
+    aliases: Object.freeze([upstreamModelId]),
     provider: customProvider.id,
     kind: capability,
     adapterType: 'modelApi',
-    executionId: createExecutionId(customProvider.id, capability),
-    displayName: rawModelId,
+    executionId: createExecutionId(customProvider.id, capability, upstreamModelId),
+    displayName: upstreamModelId,
     icon: CUSTOM_PROVIDER_RUNTIME_ICON,
     description: CUSTOM_PROVIDER_RUNTIME_DESCRIPTION,
     inputSlots: createInputSlots(capability),
@@ -290,7 +350,7 @@ function createModelManifest(customProvider, capability, rawModelId) {
       customProviderKind: CUSTOM_PROVIDER_KIND,
       customProviderId: customProvider.id,
       capability,
-      rawModelId,
+      rawModelId: upstreamModelId,
     }),
   });
 }
@@ -325,9 +385,11 @@ function buildRuntimeState(customProviders = []) {
         continue;
       }
 
-      const executionManifest = createExecutionManifest(customProvider, capability);
-      nextState.executions.push(executionManifest);
-      nextState.executionById.set(executionManifest.id, executionManifest);
+      if (capability !== 'video') {
+        const executionManifest = createExecutionManifest(customProvider, capability);
+        nextState.executions.push(executionManifest);
+        nextState.executionById.set(executionManifest.id, executionManifest);
+      }
 
       for (const rawModelId of models) {
         const normalizedModelId = normalizeText(rawModelId);
@@ -335,9 +397,19 @@ function buildRuntimeState(customProviders = []) {
           continue;
         }
         const modelManifest = createModelManifest(customProvider, capability, normalizedModelId);
+        if (capability === 'video') {
+          const videoExecutionManifest = createExecutionManifest(
+            customProvider,
+            capability,
+            modelManifest.extensions?.rawModelId || normalizedModelId,
+          );
+          nextState.executions.push(videoExecutionManifest);
+          nextState.executionById.set(videoExecutionManifest.id, videoExecutionManifest);
+        }
         nextState.models.push(modelManifest);
         nextState.modelByCanonicalId.set(modelManifest.modelId, modelManifest);
         addRawModelCandidate(nextState, normalizedModelId, modelManifest);
+        addRawModelCandidate(nextState, modelManifest.extensions?.rawModelId, modelManifest);
       }
     }
   }

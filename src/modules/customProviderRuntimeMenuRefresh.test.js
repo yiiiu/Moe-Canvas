@@ -4,6 +4,7 @@ import {
   buildActiveCustomProviderSelectionIndex,
   collectStaleCustomProviderSelectionPatches,
   getStaleCustomProviderSelectionPatch,
+  isMountedTextModelMenu,
 } from './customProviderRuntimeMenuRefresh.js';
 
 function createManifest({ provider = 'custom_acme', modelId = 'custom_acme/gpt-4o-mini', rawModelId = 'gpt-4o-mini', kind = 'text' } = {}) {
@@ -131,5 +132,39 @@ test('custom provider runtime refresh: collects node patches for stale selection
         model: '',
       },
     },
+  );
+});
+
+function createMountedMenu({ kind = '', lazyKind = '', hasTextBadge = false } = {}) {
+  return {
+    dataset: {
+      ...(kind ? { nodeMenuKind: kind } : {}),
+      ...(lazyKind ? { lazyModelMenu: lazyKind } : {}),
+    },
+    classList: {
+      contains(className) {
+        return className === 'node-model-menu';
+      },
+    },
+    getAttribute(name) {
+      return name === 'data-node-menu-kind' ? kind : '';
+    },
+    querySelector(selector) {
+      return hasTextBadge && selector.includes('text-model-icon-badge') ? {} : null;
+    },
+  };
+}
+
+test('custom provider runtime refresh: does not treat explicit video menu as text menu', () => {
+  assert.equal(
+    isMountedTextModelMenu(createMountedMenu({ kind: 'video', hasTextBadge: true })),
+    false,
+  );
+});
+
+test('custom provider runtime refresh: treats explicit text menu as text menu', () => {
+  assert.equal(
+    isMountedTextModelMenu(createMountedMenu({ kind: 'text', hasTextBadge: false })),
+    true,
   );
 });

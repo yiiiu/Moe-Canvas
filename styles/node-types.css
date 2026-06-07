@@ -2721,6 +2721,10 @@ body.is-aigen-text-selecting #v2-wrap {
 .text-model-icon-small.text-model-icon-moonshot span {
   font-size: 8px;
 }
+.custom-group-header[data-custom-toggle],
+.custom-submenu {
+  display: none !important;
+}
 .custom-model-item {
   position: relative;
   gap: 9px;

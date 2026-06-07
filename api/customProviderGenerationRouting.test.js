@@ -153,6 +153,9 @@ test('custom provider video route builds OpenAI-compatible manifest request', as
     assert.equal(request.body.apiKey, CUSTOM_API_KEY);
     assert.equal(request.body.model, 'veo-mini');
     assert.equal(request.body.prompt, 'animate a skyline at dusk');
+    assert.deepEqual(request.body.messages, [
+      { role: 'user', content: 'animate a skyline at dusk' },
+    ]);
     assert.equal(request.body.image, undefined);
     assert.equal(request.body.video, undefined);
     assert.equal(request.body.audio, undefined);
@@ -160,6 +163,186 @@ test('custom provider video route builds OpenAI-compatible manifest request', as
     assert.equal(request.body.resolution, '1080p');
     assert.equal(request.adapterTrace?.source, 'manifest');
     assert.equal(request.adapterTrace?.modelId, 'veo-mini');
+  });
+});
+
+test('custom provider video route auto-selects chat-compatible endpoint by model name', async () => {
+  await withFetchMock(async (input, init = {}) => {
+    const url = String(input);
+    if (url === '/api/config') {
+      return makeJsonResponse({
+        ...buildCustomConfig(),
+        customProviders: [
+          {
+            ...buildCustomConfig().customProviders[0],
+            models: {
+              ...buildCustomConfig().customProviders[0].models,
+              video: ['gpt-video-1'],
+            },
+          },
+        ],
+      });
+    }
+    throw new Error(`unexpected fetch url: ${url}`);
+  }, async () => {
+    const request = await buildGenerateVideoRequest({
+      provider: CUSTOM_PROVIDER_ID,
+      model: 'gpt-video-1',
+      prompt: 'animate a skyline at dusk',
+      inputUrls: [],
+      videos: [],
+      audios: [],
+    });
+
+    assert.equal(request.body.apiUrl, `${CUSTOM_API_URL}/v1/chat/completions`);
+    assert.equal(request.body.model, 'gpt-video-1');
+    assert.deepEqual(request.body.messages, [
+      { role: 'user', content: 'animate a skyline at dusk' },
+    ]);
+    assert.equal(request.adapterTrace?.source, 'manifest');
+  });
+});
+
+test('custom provider video route uses configured relative endpoint', async () => {
+  await withFetchMock(async (input, init = {}) => {
+    const url = String(input);
+    if (url === '/api/config') {
+      return makeJsonResponse({
+        ...buildCustomConfig(),
+        customProviders: [
+          {
+            ...buildCustomConfig().customProviders[0],
+            endpoints: {
+              video: '/v1/video/generations',
+            },
+          },
+        ],
+      });
+    }
+    throw new Error(`unexpected fetch url: ${url}`);
+  }, async () => {
+    const request = await buildGenerateVideoRequest({
+      provider: CUSTOM_PROVIDER_ID,
+      model: 'veo-mini',
+      prompt: 'animate a skyline at dusk',
+      inputUrls: [],
+      videos: [],
+      audios: [],
+    });
+
+    assert.equal(request.body.apiUrl, `${CUSTOM_API_URL}/v1/video/generations`);
+    assert.equal(request.body.model, 'veo-mini');
+    assert.equal(request.adapterTrace?.source, 'manifest');
+  });
+});
+
+test('custom provider video route uses endpoint preset', async () => {
+  await withFetchMock(async (input, init = {}) => {
+    const url = String(input);
+    if (url === '/api/config') {
+      return makeJsonResponse({
+        ...buildCustomConfig(),
+        customProviders: [
+          {
+            ...buildCustomConfig().customProviders[0],
+            endpointPresets: {
+              video: 'openai_chat',
+            },
+          },
+        ],
+      });
+    }
+    throw new Error(`unexpected fetch url: ${url}`);
+  }, async () => {
+    const request = await buildGenerateVideoRequest({
+      provider: CUSTOM_PROVIDER_ID,
+      model: 'veo-mini',
+      prompt: 'animate a skyline at dusk',
+      inputUrls: [],
+      videos: [],
+      audios: [],
+    });
+
+    assert.equal(request.body.apiUrl, `${CUSTOM_API_URL}/v1/chat/completions`);
+    assert.equal(request.body.model, 'veo-mini');
+    assert.deepEqual(request.body.messages, [
+      { role: 'user', content: 'animate a skyline at dusk' },
+    ]);
+    assert.equal(request.adapterTrace?.source, 'manifest');
+  });
+});
+
+test('custom provider video route uses configured absolute endpoint directly', async () => {
+  const absoluteEndpoint = 'https://video.example.com/openai/v1/generations';
+
+  await withFetchMock(async (input, init = {}) => {
+    const url = String(input);
+    if (url === '/api/config') {
+      return makeJsonResponse({
+        ...buildCustomConfig(),
+        customProviders: [
+          {
+            ...buildCustomConfig().customProviders[0],
+            endpoints: {
+              video: absoluteEndpoint,
+            },
+          },
+        ],
+      });
+    }
+    throw new Error(`unexpected fetch url: ${url}`);
+  }, async () => {
+    const request = await buildGenerateVideoRequest({
+      provider: CUSTOM_PROVIDER_ID,
+      model: 'veo-mini',
+      prompt: 'animate a skyline at dusk',
+      inputUrls: [],
+      videos: [],
+      audios: [],
+    });
+
+    assert.equal(request.body.apiUrl, absoluteEndpoint);
+    assert.equal(request.body.model, 'veo-mini');
+    assert.equal(request.adapterTrace?.source, 'manifest');
+  });
+});
+
+test('custom provider video route rejects relative endpoint when base url is missing', async () => {
+  await withFetchMock(async (input, init = {}) => {
+    const url = String(input);
+    if (url === '/api/config') {
+      return makeJsonResponse({
+        ...buildCustomConfig(),
+        providers: {
+          [CUSTOM_PROVIDER_ID]: {
+            apiUrl: '',
+            apiKey: CUSTOM_API_KEY,
+            enabled: true,
+          },
+        },
+        customProviders: [
+          {
+            ...buildCustomConfig().customProviders[0],
+            endpoints: {
+              video: '/v1/video/generations',
+            },
+          },
+        ],
+      });
+    }
+    throw new Error(`unexpected fetch url: ${url}`);
+  }, async () => {
+    await assert.rejects(
+      () => buildGenerateVideoRequest({
+        provider: CUSTOM_PROVIDER_ID,
+        model: 'veo-mini',
+        prompt: 'animate a skyline at dusk',
+        inputUrls: [],
+        videos: [],
+        audios: [],
+      }),
+      /自定义供应商未配置接口地址/,
+    );
   });
 });
 

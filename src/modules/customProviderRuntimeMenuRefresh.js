@@ -211,10 +211,23 @@ function getActiveModelFromMenu(menu) {
   return activeItem?.dataset?.value || menu?.dataset?.activeModel || '';
 }
 
-function isMountedTextModelMenu(menu) {
+export function isMountedTextModelMenu(menu) {
   if (!menu?.classList?.contains('node-model-menu') || !menu.querySelector) {
     return false;
   }
+
+  const explicitKind = normalizeText(
+    menu?.dataset?.nodeMenuKind || menu?.getAttribute?.('data-node-menu-kind'),
+  ).toLowerCase();
+  if (explicitKind) {
+    return explicitKind === 'text';
+  }
+
+  const lazyKind = normalizeText(menu?.dataset?.lazyModelMenu).toLowerCase();
+  if (lazyKind) {
+    return lazyKind === 'text';
+  }
+
   return Boolean(
     menu.querySelector(
       '.text-model-icon, .text-model-icon-small, .text-model-icon-badge, .custom-provider-menu-item',

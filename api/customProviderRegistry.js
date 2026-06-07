@@ -3,6 +3,30 @@ const CUSTOM_PROVIDER_KIND = 'openai-compatible';
 const LEGACY_OPENAI_PROVIDER_ID = 'openai';
 const LEGACY_OPENAI_CUSTOM_PROVIDER_ID = 'custom_openai_compatible';
 const LEGACY_OPENAI_CUSTOM_PROVIDER_LABEL = 'OpenAI 兼容';
+const CUSTOM_PROVIDER_VIDEO_ENDPOINT_PRESETS = Object.freeze({
+  auto: Object.freeze({
+    label: '自动选择',
+    endpoint: '',
+  }),
+  openai_video: Object.freeze({
+    label: 'OpenAI 视频生成',
+    endpoint: '/v1/videos/generations',
+  }),
+  openai_chat: Object.freeze({
+    label: 'OpenAI Chat 兼容',
+    endpoint: '/v1/chat/completions',
+  }),
+  custom: Object.freeze({
+    label: '自定义端点',
+    endpoint: '',
+  }),
+});
+const CUSTOM_PROVIDER_LEGACY_VIDEO_ENDPOINT_PRESETS = Object.freeze({
+  openai_video_singular: Object.freeze({
+    endpoint: '/v1/video/generations',
+  }),
+});
+const CUSTOM_PROVIDER_DEFAULT_VIDEO_ENDPOINT_PRESET = 'auto';
 const CUSTOM_PROVIDER_CAPABILITIES = Object.freeze([
   'text',
   'image',
@@ -94,6 +118,65 @@ function normalizeModelList(rawModels) {
   return result;
 }
 
+function normalizeEndpointPath(rawEndpoint) {
+  const endpoint = normalizeString(rawEndpoint);
+  if (!endpoint) {
+    return '';
+  }
+  if (/^https?:\/\//i.test(endpoint)) {
+    return endpoint;
+  }
+  return endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+}
+
+function getVideoEndpointPreset(presetId) {
+  const normalizedPresetId = normalizeString(presetId);
+  if (CUSTOM_PROVIDER_VIDEO_ENDPOINT_PRESETS[normalizedPresetId]) {
+    return normalizedPresetId;
+  }
+  if (CUSTOM_PROVIDER_LEGACY_VIDEO_ENDPOINT_PRESETS[normalizedPresetId]) {
+    return 'custom';
+  }
+  return '';
+}
+
+function inferVideoEndpointPreset(rawEndpoint) {
+  const endpoint = normalizeEndpointPath(rawEndpoint);
+  if (!endpoint) {
+    return CUSTOM_PROVIDER_DEFAULT_VIDEO_ENDPOINT_PRESET;
+  }
+
+  const matchedPreset = Object.entries(CUSTOM_PROVIDER_VIDEO_ENDPOINT_PRESETS).find(
+    ([presetId, preset]) => presetId !== 'custom' && preset.endpoint === endpoint,
+  );
+  return matchedPreset?.[0] || 'custom';
+}
+
+function normalizeEndpointPresetsMap(rawEndpointPresets, rawEndpoints) {
+  const endpointPresets = isPlainObject(rawEndpointPresets) ? rawEndpointPresets : {};
+  const endpoints = isPlainObject(rawEndpoints) ? rawEndpoints : {};
+  return {
+    video:
+      getVideoEndpointPreset(endpointPresets.video)
+      || inferVideoEndpointPreset(endpoints.video),
+  };
+}
+
+function normalizeEndpointsMap(rawEndpoints, rawEndpointPresets = {}) {
+  const endpoints = isPlainObject(rawEndpoints) ? rawEndpoints : {};
+  const endpointPresets = isPlainObject(rawEndpointPresets) ? rawEndpointPresets : {};
+  return CUSTOM_PROVIDER_MODEL_CAPABILITIES.reduce((accumulator, capability) => {
+    const legacyVideoEndpoint = capability === 'video'
+      ? CUSTOM_PROVIDER_LEGACY_VIDEO_ENDPOINT_PRESETS[normalizeString(endpointPresets.video)]?.endpoint
+      : '';
+    const endpoint = normalizeEndpointPath(endpoints[capability] || legacyVideoEndpoint);
+    if (endpoint) {
+      accumulator[capability] = endpoint;
+    }
+    return accumulator;
+  }, {});
+}
+
 function normalizeModelsMap(rawModels) {
   const models = isPlainObject(rawModels) ? rawModels : {};
   return CUSTOM_PROVIDER_MODEL_CAPABILITIES.reduce((accumulator, capability) => {
@@ -106,10 +189,13 @@ function buildSyntheticCustomProvider(providerId, providerConfig = {}) {
   return {
     id: normalizeCustomProviderId(providerId),
     label: buildLabelFromId(providerId),
+    note: '',
     kind: CUSTOM_PROVIDER_KIND,
     enabled: providerConfig.enabled !== false,
     capabilities: [],
     models: normalizeModelsMap(),
+    endpoints: normalizeEndpointsMap(),
+    endpointPresets: normalizeEndpointPresetsMap(),
   };
 }
 
@@ -124,10 +210,13 @@ function buildLegacyOpenAiCustomProvider(providerConfig = {}) {
   return {
     id: LEGACY_OPENAI_CUSTOM_PROVIDER_ID,
     label: LEGACY_OPENAI_CUSTOM_PROVIDER_LABEL,
+    note: '',
     kind: CUSTOM_PROVIDER_KIND,
     enabled: providerConfig.enabled !== false,
     capabilities: ['text', 'connection_test'],
     models: normalizeModelsMap(),
+    endpoints: normalizeEndpointsMap(),
+    endpointPresets: normalizeEndpointPresetsMap(),
   };
 }
 
@@ -161,10 +250,13 @@ export function normalizeCustomProviderRecord(rawProvider, { fallbackId = '' } =
   return {
     id,
     label: normalizeString(source.label) || buildLabelFromId(id),
+    note: normalizeString(source.note),
     kind: CUSTOM_PROVIDER_KIND,
     enabled: source.enabled !== false,
     capabilities: normalizeCapabilityList(source.capabilities),
     models: normalizeModelsMap(source.models),
+    endpoints: normalizeEndpointsMap(source.endpoints, source.endpointPresets),
+    endpointPresets: normalizeEndpointPresetsMap(source.endpointPresets, source.endpoints),
   };
 }
 
@@ -235,7 +327,9 @@ export function normalizeCustomProviderConfig(config = {}) {
 
 export {
   CUSTOM_PROVIDER_CAPABILITIES,
+  CUSTOM_PROVIDER_DEFAULT_VIDEO_ENDPOINT_PRESET,
   CUSTOM_PROVIDER_KIND,
   CUSTOM_PROVIDER_MODEL_CAPABILITIES,
   CUSTOM_PROVIDER_PREFIX,
+  CUSTOM_PROVIDER_VIDEO_ENDPOINT_PRESETS,
 };

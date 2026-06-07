@@ -2,6 +2,7 @@ import { request } from '../../../api/apiBase.js';
 import { markSettingsUnsavedChanges } from './settingsUnsavedChanges.js';
 import {
   CUSTOM_PROVIDER_CAPABILITIES,
+  CUSTOM_PROVIDER_DEFAULT_VIDEO_ENDPOINT_PRESET,
   CUSTOM_PROVIDER_MODEL_CAPABILITIES,
   getCustomProviders,
   isCustomProviderId,
@@ -148,6 +149,7 @@ function createEmptyProvider(providerId = '') {
   return {
     id,
     label: '',
+    note: '',
     kind: 'openai-compatible',
     enabled: true,
     capabilities: [...DEFAULT_CAPABILITIES],
@@ -156,6 +158,12 @@ function createEmptyProvider(providerId = '') {
       image: [],
       video: [],
       audio: [],
+    },
+    endpoints: {
+      video: '',
+    },
+    endpointPresets: {
+      video: CUSTOM_PROVIDER_DEFAULT_VIDEO_ENDPOINT_PRESET,
     },
     config: {
       apiUrl: '',
@@ -176,6 +184,7 @@ function normalizeProviderForView(entry = {}, providerConfigs = {}) {
   return {
     id: providerId,
     label: normalizeString(entry.label),
+    note: normalizeString(entry.note),
     kind: normalizeString(entry.kind || 'openai-compatible') || 'openai-compatible',
     enabled: entry.enabled !== false,
     capabilities: capabilities.length > 0 ? unique(capabilities) : [...DEFAULT_CAPABILITIES],
@@ -185,6 +194,12 @@ function normalizeProviderForView(entry = {}, providerConfigs = {}) {
         : [];
       return accumulator;
     }, {}),
+    endpoints: {
+      video: normalizeString(entry?.endpoints?.video),
+    },
+    endpointPresets: {
+      video: normalizeString(entry?.endpointPresets?.video) || CUSTOM_PROVIDER_DEFAULT_VIDEO_ENDPOINT_PRESET,
+    },
     config: {
       apiUrl: normalizeString(providerConfig.apiUrl),
       apiKey: normalizeString(providerConfig.apiKey),
@@ -209,8 +224,12 @@ function readProvidersFromDom() {
   return [...list.querySelectorAll('[data-custom-provider-card]')].map(card => {
     const providerId = normalizeCustomProviderId(card.dataset.customProviderCard || buildNewProviderId());
     const label = normalizeString(card.querySelector('[data-custom-provider-field="label"]')?.value);
+    const note = normalizeString(card.querySelector('[data-custom-provider-field="note"]')?.value);
     const apiUrl = normalizeString(card.querySelector('[data-custom-provider-field="apiUrl"]')?.value);
     const apiKey = normalizeString(card.querySelector('[data-custom-provider-field="apiKey"]')?.value);
+    const videoEndpointPreset = normalizeString(card.querySelector('[data-custom-provider-field="videoEndpointPreset"]')?.value)
+      || CUSTOM_PROVIDER_DEFAULT_VIDEO_ENDPOINT_PRESET;
+    const videoEndpoint = normalizeString(card.querySelector('[data-custom-provider-field="videoEndpoint"]')?.value);
     const enabled = card.querySelector('[data-custom-provider-field="enabled"]')?.checked !== false;
     const capabilities = unique(
       [...card.querySelectorAll('[data-custom-provider-capability]:checked')].map(input =>
@@ -227,10 +246,17 @@ function readProvidersFromDom() {
     return {
       id: providerId,
       label,
+      note,
       kind: 'openai-compatible',
       enabled,
       capabilities: capabilities.length > 0 ? capabilities : [...DEFAULT_CAPABILITIES],
       models,
+      endpoints: {
+        ...(videoEndpoint ? { video: videoEndpoint } : {}),
+      },
+      endpointPresets: {
+        video: videoEndpointPreset,
+      },
       config: {
         apiUrl,
         apiKey,
@@ -267,32 +293,44 @@ function renderCapabilityOption(providerId, capabilities, capability) {
   `;
 }
 
-function buildModelSummary(models, capability) {
+function renderModelTags(models, capability) {
   const items = Array.isArray(models?.[capability]) ? models[capability].filter(Boolean) : [];
   if (items.length === 0) {
-    return '未配置';
+    return '<span class="settings-model-tag-empty">未配置</span>';
   }
-  if (items.length === 1) {
-    return items[0];
-  }
-  return `${items.length} 个模型 · ${items.slice(0, 2).join('、')}${items.length > 2 ? '…' : ''}`;
+  return `
+    <span class="settings-model-tag-list">
+      ${items.map(model => `
+        <span class="settings-model-tag" title="${escapeHtml(model)}">
+          <span class="settings-model-tag-text">${escapeHtml(model)}</span>
+          <button
+            type="button"
+            class="settings-model-tag-remove"
+            data-custom-provider-model-remove="${escapeHtml(capability)}"
+            data-custom-provider-model-value="${escapeHtml(model)}"
+            aria-label="移除模型 ${escapeHtml(model)}"
+          >×</button>
+        </span>
+      `).join('')}
+    </span>
+  `;
 }
 
 function renderModelButton(providerId, models, capability) {
-  const summary = buildModelSummary(models, capability);
   return `
     <div class="settings-model-action">
-      <button
-        type="button"
-        class="settings-chip-btn settings-model-edit-btn"
-        data-custom-provider-model-open="${escapeHtml(capability)}"
-        data-custom-provider-id="${escapeHtml(providerId)}"
-      >
+      <div class="settings-model-action-head">
         <span class="settings-model-edit-label">${escapeHtml(MODEL_LABELS[capability] || capability)}</span>
-        <span class="settings-model-edit-summary" data-custom-provider-model-summary="${escapeHtml(capability)}">
-          ${escapeHtml(summary)}
-        </span>
-      </button>
+        <button
+          type="button"
+          class="settings-chip-btn settings-model-edit-btn"
+          data-custom-provider-model-open="${escapeHtml(capability)}"
+          data-custom-provider-id="${escapeHtml(providerId)}"
+        >编辑</button>
+      </div>
+      <div class="settings-model-edit-summary" data-custom-provider-model-summary="${escapeHtml(capability)}">
+        ${renderModelTags(models, capability)}
+      </div>
       <textarea
         class="settings-hidden-control"
         data-custom-provider-model="${escapeHtml(capability)}"
@@ -439,6 +477,23 @@ function renderProviderCard(provider) {
           />
         </div>
         <div>
+          <div class="settings-label">自定义视频端点（可选，高级）</div>
+          <input
+            type="hidden"
+            data-custom-provider-field="videoEndpointPreset"
+            data-custom-provider-id="${escapeHtml(provider.id)}"
+            value="${escapeHtml(provider.endpointPresets?.video || CUSTOM_PROVIDER_DEFAULT_VIDEO_ENDPOINT_PRESET)}"
+          />
+          <input
+            type="text"
+            class="settings-input settings-input--mb10"
+            data-custom-provider-field="videoEndpoint"
+            data-custom-provider-id="${escapeHtml(provider.id)}"
+            value="${escapeHtml(provider.endpoints?.video || '')}"
+            placeholder="留空自动选择；特殊中转站可填 /v1/chat/completions"
+          />
+        </div>
+        <div>
           <div class="settings-label">API 密钥</div>
           <input
             type="password"
@@ -449,6 +504,16 @@ function renderProviderCard(provider) {
             placeholder="sk-..."
           />
         </div>
+      </div>
+      <div class="settings-custom-provider-note-field settings-input--mb10">
+        <div class="settings-label">备注</div>
+        <textarea
+          class="settings-input settings-custom-provider-note-input"
+          data-custom-provider-field="note"
+          data-custom-provider-id="${escapeHtml(provider.id)}"
+          rows="2"
+          placeholder="例如计费说明、适用模型、接口限制等"
+        >${escapeHtml(provider.note)}</textarea>
       </div>
       <div class="settings-label">启用与能力</div>
       <div class="settings-button-row settings-input--mb10">
@@ -569,7 +634,22 @@ function updateModelSummary(card, capability) {
   if (!textarea || !summaryEl) {
     return;
   }
-  summaryEl.textContent = buildModelSummary({ [capability]: parseModelLines(textarea.value) }, capability);
+  summaryEl.innerHTML = renderModelTags({ [capability]: parseModelLines(textarea.value) }, capability);
+}
+
+function removeModelTagFromCard(removeButton) {
+  const capability = normalizeString(removeButton?.dataset?.customProviderModelRemove).toLowerCase();
+  const model = normalizeString(removeButton?.dataset?.customProviderModelValue);
+  const card = removeButton?.closest('[data-custom-provider-card]');
+  const providerId = normalizeString(card?.dataset?.customProviderCard);
+  const textarea = card?.querySelector(`[data-custom-provider-model="${capability}"]`);
+  if (!capability || !model || !card || !textarea || !providerId) {
+    return;
+  }
+
+  textarea.value = formatModelLines(parseModelLines(textarea.value).filter(item => item !== model));
+  updateModelSummary(card, capability);
+  notifyProviderEdited(providerId);
 }
 
 function getModelCapabilityState(card) {
@@ -976,6 +1056,14 @@ function handleListClick(event) {
     return;
   }
 
+  const modelRemoveButton = event.target.closest('[data-custom-provider-model-remove]');
+  if (modelRemoveButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    removeModelTagFromCard(modelRemoveButton);
+    return;
+  }
+
   const modelButton = event.target.closest('[data-custom-provider-model-open]');
   if (modelButton) {
     const capability = normalizeString(modelButton.dataset.customProviderModelOpen).toLowerCase();
@@ -1001,6 +1089,19 @@ function handleListClick(event) {
   if (typeof bindingState.onProviderTest === 'function') {
     bindingState.onProviderTest(testButton, providerId);
   }
+}
+
+function handleListKeydown(event) {
+  const modelRemoveButton = event.target.closest('[data-custom-provider-model-remove]');
+  if (!modelRemoveButton) {
+    return;
+  }
+  if (event.key !== 'Enter' && event.key !== ' ') {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  removeModelTagFromCard(modelRemoveButton);
 }
 
 function handleListInput(event) {
@@ -1053,6 +1154,7 @@ export function bindCustomProviderSettings({ onProviderTest, onProviderEdited } 
     notifyProviderEdited();
   });
   list.addEventListener('click', handleListClick);
+  list.addEventListener('keydown', handleListKeydown);
   list.addEventListener('input', handleListInput);
   list.addEventListener('change', handleListInput);
   bindingState.bound = true;
@@ -1080,10 +1182,13 @@ export function mergeCustomProviderSettings(config = {}) {
   nextConfig.customProviders = providers.map(provider => ({
     id: provider.id,
     label: provider.label,
+    note: provider.note,
     kind: 'openai-compatible',
     enabled: provider.enabled !== false,
     capabilities: unique(provider.capabilities),
     models: { ...provider.models },
+    endpoints: { ...provider.endpoints },
+    endpointPresets: { ...provider.endpointPresets },
   }));
 
   for (const provider of providers) {

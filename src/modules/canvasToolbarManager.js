@@ -72,21 +72,6 @@ function applyCanvasColor(color) {
   return normalized;
 }
 
-function collectDocumentStyleText() {
-  return Array.from(document.styleSheets)
-    .map((sheet) => {
-      try {
-        return Array.from(sheet.cssRules || [])
-          .map((rule) => rule.cssText)
-          .join('\n');
-      } catch {
-        return '';
-      }
-    })
-    .filter(Boolean)
-    .join('\n');
-}
-
 function addRecentColor(color) {
   const normalized = normalizeHexColor(color);
   if (!normalized) return [];
@@ -271,72 +256,12 @@ function syncZoomLockUi(enabled) {
   });
 }
 
-function getVisibleCanvasRect() {
-  const wrap = getEl('v2-wrap');
-  const rect = wrap?.getBoundingClientRect?.();
-  if (!wrap || !rect) return null;
-  return {
-    wrap,
-    rect,
-    width: Math.max(1, Math.floor(rect.width)),
-    height: Math.max(1, Math.floor(rect.height)),
-  };
-}
-
-async function downloadVisibleCanvasPng() {
-  const visible = getVisibleCanvasRect();
-  if (!visible) return false;
-  const { wrap, width, height } = visible;
-  const clone = wrap.cloneNode(true);
-  clone.querySelectorAll('.canvas-controls-floating, .minimap-wrapper, .empty-hint, .assistant-fab, .mascot-wrap').forEach((item) => item.remove());
-  clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-  clone.style.width = `${width}px`;
-  clone.style.height = `${height}px`;
-  clone.style.margin = '0';
-  clone.style.transform = 'none';
-  const styleEl = document.createElement('style');
-  styleEl.textContent = collectDocumentStyleText();
-  clone.insertBefore(styleEl, clone.firstChild);
-  const serialized = new XMLSerializer().serializeToString(clone);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${serialized}</foreignObject></svg>`;
-  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
-  try {
-    const image = new Image();
-    image.decoding = 'async';
-    const loaded = new Promise((resolve, reject) => {
-      image.onload = resolve;
-      image.onerror = reject;
-    });
-    image.src = url;
-    await loaded;
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d');
-    context.drawImage(image, 0, 0);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-    if (!blob) return false;
-    const downloadUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = `moe-canvas-${new Date().toISOString().replace(/[-:]/g, '').replace(/T/, '-').slice(0, 15)}.png`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1500);
-    return true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 export function initCanvasToolbarManager({
   isZoomLockEnabled,
   toggleZoomLockEnabled,
   setZoomLockEnabled,
   zoomLockChangeEvent,
   applyCanvasControlsPlacement,
-  showToast,
 } = {}) {
   const toolbar = document.querySelector('[data-canvas-toolbar]');
   if (!toolbar || toolbar.__canvasToolbarManagerBound) return;
@@ -394,15 +319,6 @@ export function initCanvasToolbarManager({
   getEl('btnZoomIn')?.addEventListener('click', () => stepZoom(5));
   getEl('btnZoomOut')?.addEventListener('click', () => stepZoom(-5));
   getEl('zoomSlider')?.addEventListener('input', updatePopoverPercent);
-  getEl('btnCanvasToolbarDownload')?.addEventListener('click', async () => {
-    try {
-      const ok = await downloadVisibleCanvasPng();
-      showToast?.(ok ? '画布 PNG 已开始下载' : '画布下载失败', ok ? 'success' : 'error');
-    } catch (error) {
-      console.error('[canvas-toolbar] download failed', error);
-      showToast?.('画布下载失败', 'error');
-    }
-  });
   themeButton?.addEventListener('click', () => triggerThemeSwitch(themeButton));
   menuButton?.addEventListener('click', () => togglePopover(menuPopover, menuButton));
   colorButton?.addEventListener('click', () => togglePopover(colorPopover, colorButton));

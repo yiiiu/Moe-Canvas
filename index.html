@@ -2177,6 +2177,35 @@
               <div class="settings-desc settings-desc-lead">
                 为每个厂商单独配置接口地址和密钥，节点会根据所选模型自动路由。
               </div>
+              <div
+                class="settings-section settings-card settings-custom-provider-entry-card"
+                id="customProvidersHost"
+              >
+                <div class="settings-card-head settings-custom-provider-entry-head">
+                  <div class="settings-card-badge">CP</div>
+                  <div class="settings-custom-provider-entry-title">
+                    <span class="settings-card-title">自定义供应商</span>
+                    <span class="settings-custom-provider-entry-subtitle">
+                      OpenAI-compatible · 文本 / 图片 / 视频 / 音频
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    class="settings-save-btn settings-custom-provider-add-btn"
+                    id="btnAddCustomProvider"
+                  >
+                    新增自定义供应商
+                  </button>
+                </div>
+                <div class="settings-desc">
+                  先添加常用中转站或私有接口，再展开卡片配置地址、密钥、能力和模型列表。
+                </div>
+              </div>
+              <div id="customProvidersList" class="settings-custom-providers-list"></div>
+              <div class="settings-api-section-title">
+                <span>内置厂商</span>
+                <span>只需配置密钥，节点会按所选模型自动路由。</span>
+              </div>
               <div class="settings-section settings-card">
                 <div class="settings-card-head">
                   <div class="settings-card-badge">AM</div>
@@ -2593,29 +2622,6 @@
                   class="settings-input"
                   placeholder="sk-..."
                 />
-              </div>
-              <div id="customProvidersList" class="settings-custom-providers-list"></div>
-              <div
-                class="settings-section settings-card"
-                id="customProvidersHost"
-              >
-                <div class="settings-card-head">
-                  <div class="settings-card-badge">CP</div>
-                  <span class="settings-card-title">自定义供应商</span>
-                  <span class="settings-getkey settings-getkey--muted"
-                    >OpenAI-compatible</span
-                  >
-                </div>
-                <div class="settings-desc settings-input--mb10">
-                  支持新增 OpenAI-compatible 自定义供应商，并声明能力、模型列表与连接测试入口。
-                </div>
-                <button
-                  type="button"
-                  class="settings-save-btn settings-btn-ghost"
-                  id="btnAddCustomProvider"
-                >
-                  新增自定义供应商
-                </button>
               </div>
               <div
                 class="settings-section settings-card"

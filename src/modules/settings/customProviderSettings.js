@@ -570,6 +570,9 @@ function createProviderFromCurrentDom() {
   providers.unshift(provider);
   expandedCustomProviderIds.add(provider.id);
   renderProviders(providers);
+  const card = getList()?.querySelector(`[data-custom-provider-card="${provider.id}"]`);
+  card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  card?.querySelector('[data-custom-provider-field="label"]')?.focus();
   notifyProviderEdited(provider.id);
 }
 
@@ -579,9 +582,8 @@ function removeProviderFromDom(providerId) {
   renderProviders(providers);
 }
 
-function toggleProviderCollapsed(button) {
-  const providerId = normalizeString(button?.dataset?.customProviderCollapse);
-  const card = button?.closest('[data-custom-provider-card]');
+function toggleProviderCardCollapsed(card) {
+  const providerId = normalizeString(card?.dataset?.customProviderCard);
   if (!providerId || !card) {
     return;
   }
@@ -594,13 +596,18 @@ function toggleProviderCollapsed(button) {
   }
   card.classList.toggle('is-collapsed', !isExpanded);
   const label = isExpanded ? '收起' : '展开';
-  const labelEl = button.querySelector('.settings-custom-provider-collapse-label');
+  const button = card.querySelector('[data-custom-provider-collapse]');
+  const labelEl = button?.querySelector('.settings-custom-provider-collapse-label');
   if (labelEl) {
     labelEl.textContent = label;
   }
-  button.title = `${label}自定义供应商`;
-  button.setAttribute('aria-label', `${label}自定义供应商`);
-  button.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+  button?.setAttribute('title', `${label}自定义供应商`);
+  button?.setAttribute('aria-label', `${label}自定义供应商`);
+  button?.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+}
+
+function toggleProviderCollapsed(button) {
+  toggleProviderCardCollapsed(button?.closest('[data-custom-provider-card]'));
 }
 
 function updateConnectionTestButton(card) {
@@ -660,6 +667,32 @@ function getModelCapabilityState(card) {
   }, {});
 }
 
+function getFetchedModelSearchText(value) {
+  return normalizeString(value).toLowerCase();
+}
+
+function updateFetchedModelsSearchResults(picker) {
+  const root = picker || document.getElementById('customProviderFetchedModelsPicker');
+  if (!root) {
+    return;
+  }
+  const query = getFetchedModelSearchText(root.querySelector('[data-fetched-models-search]')?.value);
+  const items = Array.from(root.querySelectorAll('[data-fetched-model-item]'));
+  let visibleCount = 0;
+  items.forEach(item => {
+    const model = getFetchedModelSearchText(item.dataset.fetchedModelItem);
+    const visible = !query || model.includes(query);
+    item.hidden = !visible;
+    if (visible) {
+      visibleCount += 1;
+    }
+  });
+  const countEl = root.querySelector('[data-fetched-models-count]');
+  if (countEl) {
+    countEl.textContent = query ? `显示 ${visibleCount} / ${items.length} 个模型` : `${items.length} 个模型`;
+  }
+}
+
 function openFetchedModelsPicker(card, providerId, models) {
   if (!card) {
     return;
@@ -673,6 +706,7 @@ function openFetchedModelsPicker(card, providerId, models) {
   const title = picker.querySelector('#customProviderFetchedModelsTitle');
   const desc = picker.querySelector('[data-fetched-models-desc]');
   const list = picker.querySelector('[data-fetched-models-list]');
+  const searchInput = picker.querySelector('[data-fetched-models-search]');
   const providerLabel = buildCardTitle({ label: card.querySelector('[data-custom-provider-field="label"]')?.value });
 
   activeFetchedModelsPicker = { providerId, card };
@@ -701,7 +735,7 @@ function openFetchedModelsPicker(card, providerId, models) {
           `;
         }).join('');
         return `
-          <div class="settings-fetched-model-item">
+          <div class="settings-fetched-model-item" data-fetched-model-item="${escapeHtml(model)}">
             <div class="settings-fetched-model-name" title="${escapeHtml(model)}">${escapeHtml(model)}</div>
             <div class="settings-fetched-model-targets">${targets}</div>
           </div>
@@ -709,9 +743,14 @@ function openFetchedModelsPicker(card, providerId, models) {
       })
       .join('');
   }
+  if (searchInput) {
+    searchInput.value = '';
+  }
+  updateFetchedModelsSearchResults(picker);
   picker.dataset.existingTargets = String(existingTargets);
   picker.hidden = false;
   picker.classList.add('is-open');
+  searchInput?.focus();
 }
 
 function closeFetchedModelsPicker() {
@@ -721,13 +760,6 @@ function closeFetchedModelsPicker() {
     picker.classList.remove('is-open');
   }
   activeFetchedModelsPicker = null;
-}
-
-function setFetchedModelsTargetSelection(capability, selected) {
-  const picker = document.getElementById('customProviderFetchedModelsPicker');
-  picker?.querySelectorAll(`[data-fetched-model-target="${capability}"]:not(:disabled)`).forEach(input => {
-    input.checked = selected;
-  });
 }
 
 function clearFetchedModelsSelection() {
@@ -784,13 +816,11 @@ function handleFetchedModelsPickerClick(event) {
     closeFetchedModelsPicker();
     return;
   }
-  const selectTargetButton = event.target.closest('[data-fetched-models-select-target]');
-  if (selectTargetButton) {
-    setFetchedModelsTargetSelection(normalizeString(selectTargetButton.dataset.fetchedModelsSelectTarget), true);
-    return;
-  }
   if (event.target.closest('[data-fetched-models-clear]')) {
     clearFetchedModelsSelection();
+    return;
+  }
+  if (event.target.matches?.('[data-fetched-models-search]')) {
     return;
   }
   if (event.target.closest('[data-fetched-models-save]')) {
@@ -818,14 +848,18 @@ function ensureFetchedModelsPicker() {
         <button type="button" class="settings-model-editor-close" data-fetched-models-close aria-label="关闭模型选择">×</button>
       </div>
       <div class="settings-desc settings-input--mb10" data-fetched-models-desc></div>
-      <div class="settings-fetched-model-toolbar">
-        ${CUSTOM_PROVIDER_MODEL_CAPABILITIES.map(capability => `
-          <button
-            type="button"
-            class="settings-fetched-model-action"
-            data-fetched-models-select-target="${escapeHtml(capability)}"
-          >全选${escapeHtml(MODEL_LABELS[capability] || capability)}</button>
-        `).join('')}
+      <div class="settings-fetched-model-search-row">
+        <label class="settings-fetched-model-search">
+          <span>搜索模型</span>
+          <input
+            type="search"
+            class="settings-input"
+            data-fetched-models-search
+            placeholder="输入模型名称筛选"
+            autocomplete="off"
+          />
+        </label>
+        <span class="settings-fetched-model-count" data-fetched-models-count></span>
         <button type="button" class="settings-fetched-model-action" data-fetched-models-clear>清空选择</button>
       </div>
       <div class="settings-fetched-model-list" data-fetched-models-list></div>
@@ -837,6 +871,11 @@ function ensureFetchedModelsPicker() {
   `;
   document.body.appendChild(picker);
   picker.addEventListener('click', handleFetchedModelsPickerClick);
+  picker.addEventListener('input', event => {
+    if (event.target.matches?.('[data-fetched-models-search]')) {
+      updateFetchedModelsSearchResults(picker);
+    }
+  });
   return picker;
 }
 
@@ -1027,10 +1066,28 @@ function toggleProviderCapability(button) {
   notifyProviderEdited(providerId);
 }
 
+function getProviderHeaderToggleCard(event) {
+  const head = event.target.closest('.settings-custom-provider-head');
+  if (!head) {
+    return null;
+  }
+  const interactiveTarget = event.target.closest('button, a, input, textarea, select, label, [role="button"]');
+  if (interactiveTarget) {
+    return null;
+  }
+  return head.closest('[data-custom-provider-card]');
+}
+
 function handleListClick(event) {
   const collapseButton = event.target.closest('[data-custom-provider-collapse]');
   if (collapseButton) {
     toggleProviderCollapsed(collapseButton);
+    return;
+  }
+
+  const headerToggleCard = getProviderHeaderToggleCard(event);
+  if (headerToggleCard) {
+    toggleProviderCardCollapsed(headerToggleCard);
     return;
   }
 

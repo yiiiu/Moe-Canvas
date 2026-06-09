@@ -1,5 +1,5 @@
 import appStore from './stores/appStore.js';
-import { restoreAsyncTaskLoadingFromStore } from './asyncTaskRuntime.js';
+import { installAsyncTaskLoadingRecovery } from './asyncTaskRuntime.js';
 import { upsertAsyncTaskRecord } from './asyncTaskStore.js';
 import { coordinateRestoredGenerationRecovery } from './unifiedTaskCenterGenerationRecoveryCoordinator.js';
 
@@ -814,8 +814,9 @@ export function restoreTaskCenterPersistence(manager, options = {}) {
     manager.upsertTask(task, { silent: true });
   }
   if (typeof manager.render === 'function') manager.render();
-  restoreAsyncTaskLoadingFromStore({
+  installAsyncTaskLoadingRecovery({
     ...options,
+    asyncTaskLoadingSource: 'task-center-persistence',
     store: options.store || appStore,
   });
   coordinateRestoredGenerationRecovery(tasks, manager, {

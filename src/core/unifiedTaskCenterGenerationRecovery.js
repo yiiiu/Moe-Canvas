@@ -89,6 +89,22 @@ function buildResultPatch(taskType, result, context = {}) {
   return asObject(result);
 }
 
+function hasRecoverableTaskId(task = {}) {
+  const recoverySpec = resolveRecoverySpec(task);
+  return Boolean(trimString(recoverySpec.taskId || task.remoteTaskId || task.asyncTaskId));
+}
+
+function requiresTaskIdForRecovery(task = {}) {
+  const recoverySpec = resolveRecoverySpec(task);
+  const provider = normalizeLower(recoverySpec.provider || recoverySpec.payload?.provider || task.provider);
+  const taskType = resolveTaskType(recoverySpec, task);
+  return provider === 'grsai' && taskType === 'image-generation';
+}
+
+function canResumeRestoredTask(task = {}) {
+  return !requiresTaskIdForRecovery(task) || hasRecoverableTaskId(task);
+}
+
 function buildGenerationLoadingPatch(task = {}) {
   const recoverySpec = resolveRecoverySpec(task);
   const taskType = resolveTaskType(recoverySpec, task);
@@ -279,6 +295,7 @@ export function reconcileRestoredGenerationActiveTasks(tasks = [], options = {})
   for (const task of Array.isArray(tasks) ? tasks : []) {
     const status = task?.status || task?.unifiedTask?.status;
     if (!isRestoredGenerationActiveStatus(status) || !isRestoredGenerationTask(task)) continue;
+    if (!canResumeRestoredTask(task)) continue;
     const nodeId = resolveGenerationNodeId(task);
     const node = asObject(nodes[nodeId]);
     if (!nodeId || !node.id && !nodes[nodeId]) continue;
@@ -387,6 +404,26 @@ export function buildRestoredGenerationSpec(task = {}) {
 }
 
 export async function resumeRestoredGenerationTask(task = {}, options = {}) {
+  if (!canResumeRestoredTask(task)) {
+    const message = '刷新前未取得远端任务 ID，生成已中断，请重新生成';
+    options.taskCenterManager?.upsertTask?.({
+      ...task,
+      status: 'interrupted',
+      message,
+      error: '',
+      finishedAt: Date.now(),
+      updatedAt: Date.now(),
+      unifiedTask: task.unifiedTask ? {
+        ...task.unifiedTask,
+        status: 'interrupted',
+        canCancel: false,
+        canRetry: false,
+        canResume: false,
+        error: null,
+      } : null,
+    });
+    return { ok: false, status: 'interrupted', error: new Error(message) };
+  }
   const spec = buildRestoredGenerationSpec(task);
   if (!spec) {
     const message = '生成状态恢复中';

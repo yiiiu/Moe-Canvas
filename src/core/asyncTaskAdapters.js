@@ -122,9 +122,10 @@ export function buildAsyncTaskLoadingPatch(record = {}) {
   const kind = normalizeKind(record);
   const provider = resolveProvider(record);
   const startedAt = Number(record.createdAt || Date.now()) || Date.now();
+  const remoteTaskId = trimString(record.remoteTaskId);
   const basePatch = {
     asyncRuntimeTaskId: record.runtimeTaskId,
-    remoteTaskId: record.remoteTaskId,
+    ...(remoteTaskId ? { remoteTaskId, asyncTaskId: remoteTaskId } : {}),
     taskProvider: provider,
     taskModelId: record.modelId,
     taskResumable: record.canResume !== false,
@@ -132,7 +133,6 @@ export function buildAsyncTaskLoadingPatch(record = {}) {
     jobStatus: 'loading',
     jobError: null,
     generationStartTime: startedAt,
-    asyncTaskId: record.remoteTaskId,
     asyncTaskProvider: provider,
     asyncTaskKind: kind,
     asyncTaskStatus: 'running',

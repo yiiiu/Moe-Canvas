@@ -164,6 +164,10 @@ import {
 import { applyCanvasControlsPlacement } from "./src/modules/settings/canvasControlsPlacementSettings.js";
 import { bootstrapAppProject } from "./src/modules/app/projectBootstrap.js";
 import { installCustomProviderRuntimeMenuRefresh } from "./src/modules/customProviderRuntimeMenuRefresh.js";
+import {
+	installAsyncTaskCanvasHydrationPatch,
+	installAsyncTaskLoadingRecovery,
+} from "./src/core/asyncTaskRuntime.js";
 ((window["_isSessionActive"] = !![]),
 	initToastService(),
 	initDiagnosticsService(),
@@ -171,6 +175,8 @@ import { installCustomProviderRuntimeMenuRefresh } from "./src/modules/customPro
 	initKeyboardService(),
 	initFloatingMenuKeyboard(),
 	initTextInputContextMenu(),
+	installAsyncTaskLoadingRecovery({ asyncTaskLoadingSource: 'main-early' }),
+	installAsyncTaskCanvasHydrationPatch(CanvasTabManager, { asyncTaskLoadingSource: 'main-hydration' }),
 	initTaskCenterManager(),
 	installTooltipUnifier(),
 	installCustomProviderRuntimeMenuRefresh(),

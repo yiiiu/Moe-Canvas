@@ -3121,6 +3121,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 patterns = [
                     r'"task_id"\s*:\s*"([^"]+)"',
                     r'"taskId"\s*:\s*"([^"]+)"',
+                    r'"data"\s*:\s*\{[^{}]*"id"\s*:\s*"([^"]{3,})"',
+                    r'"id"\s*:\s*"([^"]{3,})"',
                     r'"data"\s*:\s*"([^"]{8,})"',
                     r'\btask[_-]?id\b\s*[:=]\s*["\']?([a-zA-Z0-9._:-]+)["\']?',
                 ]
@@ -3141,7 +3143,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 re.search(r"/openapi/v2/query(?:$|[/?])", api_url, flags=re.IGNORECASE)
             )
             # 仅在“提交任务”类端点启用 task_id 快速探测；
-            # 查询类端点和 GRSAI 新 JSON 端点必须透传完整响应，否则前端无法拿到最终出图 URL。
+            # 查询类端点必须透传完整响应，否则前端无法拿到最终出图 URL。
             is_grsai_query_endpoint = bool(
                 re.search(
                     r"/v1/(?:draw/(?:result|query)|api/result)(?:$|[/?])",
@@ -3149,14 +3151,101 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     flags=re.IGNORECASE,
                 )
             )
-            is_grsai_generate_endpoint = bool(
+            is_grsai_submit_endpoint = bool(
                 re.search(r"/v1/api/generate(?:$|[/?])", api_url, flags=re.IGNORECASE)
             )
+            if is_grsai_submit_endpoint:
+                data["webHook"] = "-1"
+                data["shutProgress"] = False
+                data.pop("replyType", None)
+            grsai_submit_timeout_seconds = 600
             allow_task_probe_short_circuit = not (
                 is_runninghub_query_endpoint
                 or is_grsai_query_endpoint
-                or is_grsai_generate_endpoint
             )
+            def _extract_task_id_from_json(payload):
+                if not isinstance(payload, dict):
+                    return ""
+                candidates = [
+                    payload.get("task_id"),
+                    payload.get("taskId"),
+                    payload.get("asyncTaskId"),
+                    payload.get("providerTaskId"),
+                    payload.get("jobId"),
+                ]
+                for container_key in ("data", "result", "output"):
+                    nested = payload.get(container_key)
+                    if isinstance(nested, dict):
+                        candidates.extend([
+                            nested.get("task_id"),
+                            nested.get("taskId"),
+                            nested.get("id"),
+                            nested.get("jobId"),
+                        ])
+                    elif isinstance(nested, str):
+                        candidates.append(nested)
+                for candidate in candidates:
+                    value = str(candidate or "").strip()
+                    if len(value) >= 3:
+                        return value
+                return ""
+            def _has_grsai_direct_image_result(payload):
+                result_key_markers = (
+                    "image",
+                    "images",
+                    "imageurl",
+                    "imageurls",
+                    "url",
+                    "urls",
+                    "output",
+                    "outputurl",
+                    "result",
+                    "resulturl",
+                )
+                def _is_image_url(value):
+                    text = str(value or "").strip()
+                    if not text:
+                        return False
+                    lower_text = text.lower()
+                    if lower_text.startswith("data:image/"):
+                        return True
+                    if not lower_text.startswith(("http://", "https://")):
+                        return False
+                    return True
+                def _walk(value, key_hint=""):
+                    if isinstance(value, str):
+                        normalized_key = re.sub(r"[^a-z0-9]", "", str(key_hint or "").lower())
+                        if normalized_key and any(marker in normalized_key for marker in result_key_markers):
+                            return _is_image_url(value)
+                        return False
+                    if isinstance(value, list):
+                        return any(_walk(item, key_hint) for item in value)
+                    if isinstance(value, dict):
+                        for key, item in value.items():
+                            if _walk(item, key):
+                                return True
+                    return False
+                return _walk(payload)
+            def _send_image_proxy_task_id_response(task_id, source="grsai-submit"):
+                value = str(task_id or "").strip()
+                payload = {
+                    "task_id": value,
+                    "taskId": value,
+                    "id": value,
+                    "status": "submitted",
+                    "source": source,
+                    "data": {
+                        "id": value,
+                        "task_id": value,
+                        "taskId": value,
+                    },
+                }
+                raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                _send_cors_origin_header(self)
+                self.end_headers()
+                self.wfile.write(raw)
             if workflow_id in VIDEO_VIP_WORKFLOW_IDS:
                 if not _enforce_vip_subscription_gate(
                     self,
@@ -3167,6 +3256,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream, */*",
+                # 保持上游响应可探测，避免 gzip/br 压缩把 task_id 缓冲到最终结果后才释放
+                "Accept-Encoding": "identity",
                 "User-Agent": "Mozilla/5.0",
                 # 减少代理复用连接被远端提前关闭导致的偶发断链
                 "Connection": "close",
@@ -3184,11 +3276,61 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if delay_sec > 0:
                         time.sleep(delay_sec)
                     try:
+                        request_timeout = grsai_submit_timeout_seconds if is_grsai_submit_endpoint else 900
+                        if is_grsai_submit_endpoint:
+                            resp = _req.post(
+                                api_url,
+                                json=data,
+                                headers=headers,
+                                timeout=request_timeout,
+                            )
+                            content_type = str(resp.headers.get("Content-Type", "") or "")
+                            content = resp.content or b""
+                            header_task_id = ""
+                            for key in (
+                                "x-task-id",
+                                "x-taskid",
+                                "task-id",
+                                "taskid",
+                                "x-job-id",
+                                "job-id",
+                            ):
+                                value = str(resp.headers.get(key, "") or "").strip()
+                                if value:
+                                    header_task_id = value
+                                    break
+                            response_text = content.decode("utf-8", "ignore")
+                            response_json = None
+                            try:
+                                response_json = resp.json()
+                            except Exception:
+                                response_json = None
+                            if _has_grsai_direct_image_result(response_json):
+                                self.send_response(resp.status_code)
+                                self.send_header("Content-Type", content_type or "application/json; charset=utf-8")
+                                _send_cors_origin_header(self)
+                                self.end_headers()
+                                self.wfile.write(content)
+                                return
+                            found_task_id = header_task_id
+                            if not found_task_id and response_json is not None:
+                                found_task_id = _extract_task_id_from_json(response_json)
+                            if not found_task_id:
+                                found_task_id = _extract_task_id_from_text(response_text)
+                            if found_task_id:
+                                _send_image_proxy_task_id_response(found_task_id, "grsai-submit")
+                                return
+                            self.send_response(resp.status_code)
+                            self.send_header("Content-Type", content_type or "application/json; charset=utf-8")
+                            _send_cors_origin_header(self)
+                            self.end_headers()
+                            self.wfile.write(content)
+                            return
                         resp = _req.post(
                             api_url,
                             json=data,
                             headers=headers,
-                            timeout=900,
+                            timeout=request_timeout,
                             stream=True,
                         )
                         header_task_id = ""
@@ -3205,14 +3347,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 header_task_id = value
                                 break
                         if header_task_id and allow_task_probe_short_circuit:
-                            _json_ok(
-                                self,
-                                {
-                                    "task_id": header_task_id,
-                                    "status": "submitted",
-                                    "source": "header",
-                                },
-                            )
+                            _send_image_proxy_task_id_response(header_task_id, "header")
                             try:
                                 resp.close()
                             except Exception:
@@ -3234,14 +3369,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 probe_text = b"".join(chunks).decode("utf-8", "ignore")
                                 found_task_id = _extract_task_id_from_text(probe_text)
                                 if found_task_id and allow_task_probe_short_circuit:
-                                    _json_ok(
-                                        self,
-                                        {
-                                            "task_id": found_task_id,
-                                            "status": "submitted",
-                                            "source": "body-probe",
-                                        },
-                                    )
+                                    _send_image_proxy_task_id_response(found_task_id, "body-probe")
                                     try:
                                         resp.close()
                                     except Exception:
@@ -3255,6 +3383,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         self.end_headers()
                         self.wfile.write(full_content)
                         return
+                    except _req.exceptions.Timeout as e:
+                        if is_grsai_submit_endpoint:
+                            _json_err(
+                                self,
+                                504,
+                                "GRSAI submit endpoint did not return task_id before local proxy timeout; provider=grsai endpoint=/v1/api/generate reason=submit_timeout_before_task_id timeoutSeconds=%s" % grsai_submit_timeout_seconds,
+                            )
+                            return
+                        raise
                     except _req.exceptions.ProxyError:
                         if attempt_idx == len(retry_delays) - 1:
                             raise
@@ -3283,10 +3420,35 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if delay_sec > 0:
                         time.sleep(delay_sec)
                     try:
-                        with urllib.request.urlopen(req, timeout=900) as resp:
+                        request_timeout = grsai_submit_timeout_seconds if is_grsai_submit_endpoint else 900
+                        with urllib.request.urlopen(req, timeout=request_timeout) as resp:
                             resp_data = resp.read()
-                        self.send_response(resp.status)
-                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                            status_code = getattr(resp, "status", 200)
+                            content_type = str(resp.headers.get("Content-Type", "") or "")
+                        if is_grsai_submit_endpoint:
+                            response_text = (resp_data or b"").decode("utf-8", "ignore")
+                            response_json = None
+                            try:
+                                response_json = json.loads(response_text)
+                            except Exception:
+                                response_json = None
+                            if _has_grsai_direct_image_result(response_json):
+                                self.send_response(status_code)
+                                self.send_header("Content-Type", content_type or "application/json; charset=utf-8")
+                                _send_cors_origin_header(self)
+                                self.end_headers()
+                                self.wfile.write(resp_data)
+                                return
+                            found_task_id = ""
+                            if response_json is not None:
+                                found_task_id = _extract_task_id_from_json(response_json)
+                            if not found_task_id:
+                                found_task_id = _extract_task_id_from_text(response_text)
+                            if found_task_id:
+                                _send_image_proxy_task_id_response(found_task_id, "grsai-submit")
+                                return
+                        self.send_response(status_code)
+                        self.send_header("Content-Type", content_type or "application/json; charset=utf-8")
                         _send_cors_origin_header(self)
                         self.end_headers()
                         self.wfile.write(resp_data)
@@ -3298,6 +3460,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         self.end_headers()
                         self.wfile.write(e.read())
                         return
+                    except TimeoutError as e:
+                        if is_grsai_submit_endpoint:
+                            _json_err(
+                                self,
+                                504,
+                                "GRSAI submit endpoint did not return task_id before local proxy timeout; provider=grsai endpoint=/v1/api/generate reason=submit_timeout_before_task_id timeoutSeconds=%s" % grsai_submit_timeout_seconds,
+                            )
+                            return
+                        raise
                     except urllib.error.URLError as e:
                         msg = repr(e)
                         is_proxy_chain_error = any(

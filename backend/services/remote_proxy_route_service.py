@@ -135,6 +135,203 @@ class RemoteProxyRouteService:
             "Accept": "application/json",
             "User-Agent": "Mozilla/5.0",
         }
+        parsed_api_url = urllib.parse.urlparse(api_url)
+        result_endpoint_path = str(parsed_api_url.path or "").rstrip("/")
+        if result_endpoint_path in ("/v1/api/result", "/v1/draw/result"):
+            result_query = urllib.parse.parse_qs(
+                parsed_api_url.query,
+                keep_blank_values=True,
+                max_num_fields=20,
+            )
+            task_id = ""
+            for key in ("id", "taskId", "task_id"):
+                value = result_query.get(key, [""])[0].strip() if key in result_query else ""
+                if value:
+                    task_id = value
+                    break
+            if task_id:
+                current_result_url = urllib.parse.urlunparse(
+                    (
+                        parsed_api_url.scheme,
+                        parsed_api_url.netloc,
+                        parsed_api_url.path,
+                        "",
+                        "",
+                        "",
+                    )
+                )
+                candidate_paths = [parsed_api_url.path]
+                if result_endpoint_path == "/v1/api/result":
+                    candidate_paths.append("/v1/draw/result")
+                elif result_endpoint_path == "/v1/draw/result":
+                    candidate_paths.append("/v1/api/result")
+                candidate_result_urls = []
+                for candidate_path in candidate_paths:
+                    candidate_url = urllib.parse.urlunparse(
+                        (
+                            parsed_api_url.scheme,
+                            parsed_api_url.netloc,
+                            candidate_path,
+                            "",
+                            "",
+                            "",
+                        )
+                    )
+                    if candidate_url and candidate_url not in candidate_result_urls:
+                        candidate_result_urls.append(candidate_url)
+                if current_result_url and current_result_url not in candidate_result_urls:
+                    candidate_result_urls.insert(0, current_result_url)
+                candidate_get_urls = []
+                for candidate_url in candidate_result_urls:
+                    parsed_candidate_url = urllib.parse.urlparse(candidate_url)
+                    for task_id_key in ("id", "taskId", "task_id"):
+                        get_url = urllib.parse.urlunparse(
+                            (
+                                parsed_candidate_url.scheme,
+                                parsed_candidate_url.netloc,
+                                parsed_candidate_url.path,
+                                "",
+                                urllib.parse.urlencode({task_id_key: task_id}),
+                                "",
+                            )
+                        )
+                        if get_url and get_url not in candidate_get_urls:
+                            candidate_get_urls.append(get_url)
+                if api_url and api_url not in candidate_get_urls:
+                    candidate_get_urls.insert(0, api_url)
+                post_headers = {
+                    **headers,
+                    "Content-Type": "application/json",
+                }
+                candidate_payloads = [
+                    {"id": task_id},
+                    {"taskId": task_id},
+                    {"task_id": task_id},
+                ]
+                pending_message = "result not exist, valid for 2 hours"
+                def _pending_result_response():
+                    pending_payload = json.dumps(
+                        {
+                            "id": task_id,
+                            "task_id": task_id,
+                            "taskId": task_id,
+                            "status": "pending",
+                            "message": pending_message,
+                        }
+                    ).encode("utf-8")
+                    return self._proxy_response(200, pending_payload)
+                def _is_result_not_exist(status_code, content):
+                    return int(status_code or 0) in (200, 400, 404) and b"result not exist" in (content or b"").lower()
+                def _is_id_required(status_code, content):
+                    return int(status_code or 0) in (200, 400, 404) and b"id is required" in (content or b"").lower()
+                def _is_candidate_protocol_error(status_code, content):
+                    lower_content = (content or b"").lower()
+                    return int(status_code or 0) in (200, 400, 401, 403, 404) and (
+                        b"apikey error" in lower_content
+                        or b"api key error" in lower_content
+                        or b"api_key error" in lower_content
+                        or b"model not register" in lower_content
+                        or b"page not found" in lower_content
+                    )
+                try:
+                    try:
+                        requests = self._requests_module()
+                        last_status_code = 404
+                        last_content = b""
+                        saw_result_not_exist = False
+                        for candidate_get_url in candidate_get_urls:
+                            original_resp = requests.get(candidate_get_url, headers=headers, timeout=30)
+                            original_content = original_resp.content or b""
+                            last_status_code = original_resp.status_code
+                            last_content = original_content
+                            if _is_result_not_exist(original_resp.status_code, original_content):
+                                saw_result_not_exist = True
+                                continue
+                            if _is_id_required(original_resp.status_code, original_content) or _is_candidate_protocol_error(original_resp.status_code, original_content):
+                                continue
+                            return self._proxy_response(original_resp.status_code, original_content)
+                        for candidate_url in candidate_result_urls:
+                            for payload in candidate_payloads:
+                                resp = requests.post(
+                                    candidate_url,
+                                    json=payload,
+                                    headers=post_headers,
+                                    timeout=30,
+                                )
+                                content = resp.content or b""
+                                last_status_code = resp.status_code
+                                last_content = content
+                                if _is_result_not_exist(resp.status_code, content):
+                                    saw_result_not_exist = True
+                                    continue
+                                if _is_id_required(resp.status_code, content) or _is_candidate_protocol_error(resp.status_code, content):
+                                    continue
+                                return self._proxy_response(resp.status_code, content)
+                        if saw_result_not_exist:
+                            return _pending_result_response()
+                        if _is_candidate_protocol_error(last_status_code, last_content) or _is_id_required(last_status_code, last_content):
+                            return _pending_result_response()
+                        return self._proxy_response(last_status_code, last_content)
+                    except ImportError:
+                        pass
+                    last_status_code = 404
+                    last_content = b""
+                    saw_result_not_exist = False
+                    for candidate_get_url in candidate_get_urls:
+                        try:
+                            original_req = urllib.request.Request(candidate_get_url, headers=headers, method="GET")
+                            with urllib.request.urlopen(original_req, timeout=30) as original_resp:
+                                original_data = original_resp.read()
+                            last_status_code = original_resp.status
+                            last_content = original_data
+                            if _is_result_not_exist(original_resp.status, original_data):
+                                saw_result_not_exist = True
+                                continue
+                            if _is_id_required(original_resp.status, original_data) or _is_candidate_protocol_error(original_resp.status, original_data):
+                                continue
+                            return self._proxy_response(original_resp.status, original_data)
+                        except urllib.error.HTTPError as exc:
+                            error_body = exc.read()
+                            last_status_code = exc.code
+                            last_content = error_body
+                            if _is_result_not_exist(exc.code, error_body):
+                                saw_result_not_exist = True
+                                continue
+                            if _is_id_required(exc.code, error_body) or _is_candidate_protocol_error(exc.code, error_body):
+                                continue
+                            return self._proxy_response(exc.code, error_body)
+                    for candidate_url in candidate_result_urls:
+                        for payload in candidate_payloads:
+                            req_body = json.dumps(payload).encode("utf-8")
+                            req = urllib.request.Request(candidate_url, data=req_body, headers=post_headers, method="POST")
+                            try:
+                                with urllib.request.urlopen(req, timeout=30) as resp:
+                                    resp_data = resp.read()
+                                last_status_code = resp.status
+                                last_content = resp_data
+                                if _is_result_not_exist(resp.status, resp_data):
+                                    saw_result_not_exist = True
+                                    continue
+                                if _is_id_required(resp.status, resp_data) or _is_candidate_protocol_error(resp.status, resp_data):
+                                    continue
+                                return self._proxy_response(resp.status, resp_data)
+                            except urllib.error.HTTPError as exc:
+                                error_body = exc.read()
+                                last_status_code = exc.code
+                                last_content = error_body
+                                if _is_result_not_exist(exc.code, error_body):
+                                    saw_result_not_exist = True
+                                    continue
+                                if _is_id_required(exc.code, error_body) or _is_candidate_protocol_error(exc.code, error_body):
+                                    continue
+                                return self._proxy_response(exc.code, error_body)
+                    if saw_result_not_exist:
+                        return _pending_result_response()
+                    if _is_candidate_protocol_error(last_status_code, last_content) or _is_id_required(last_status_code, last_content):
+                        return _pending_result_response()
+                    return self._proxy_response(last_status_code, last_content)
+                except Exception as exc:
+                    return self._json_err(500, f"GRSAI result proxy error: {str(exc)}")
         try:
             try:
                 requests = self._requests_module()

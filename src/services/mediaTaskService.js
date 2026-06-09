@@ -35,6 +35,7 @@ function a604_0x3915(_0x84a6eb, _0x537641) {
   );
 }
 import { logDiagnosticEvent } from "./diagnosticsService.js";
+import { syncMediaTaskUpdateToTaskCenter } from "../core/unifiedMediaTaskCenterBridge.js";
 let installed = ![];
 function normalizeStatus(_0x3923ef) {
   return String(_0x3923ef || "")["trim"]();
@@ -253,6 +254,14 @@ export function installMediaTaskUpdateListener() {
       console[_0x48c4b3(0xa6)](
         "[mediaTaskService]\x20failed\x20to\x20apply\x20media\x20task\x20update:",
         _0xe598f1,
+      );
+    }
+    try {
+      syncMediaTaskUpdateToTaskCenter(_0x530d41 || {});
+    } catch (_0x132cb5) {
+      console[_0x48c4b3(0xa6)](
+        "[mediaTaskService]\x20failed\x20to\x20sync\x20media\x20task\x20center:",
+        _0x132cb5,
       );
     }
   });

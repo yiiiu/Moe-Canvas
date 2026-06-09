@@ -23125,6 +23125,7 @@ html[data-app-theme="dawn"] #appThemeGroup .cursor-size-btn[data-app-theme="dawn
     opacity 0.16s,
     transform 0.16s;
   overflow: hidden;
+  overscroll-behavior: contain;
   color: var(--text-primary);
 }
 .v2-task-center-panel.show {
@@ -23174,6 +23175,7 @@ html[data-app-theme="dawn"] #appThemeGroup .cursor-size-btn[data-app-theme="dawn
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--space-10);
 }
 .v2-task-center-empty {
@@ -23253,6 +23255,10 @@ html[data-app-theme="dawn"] #appThemeGroup .cursor-size-btn[data-app-theme="dawn
   background: var(--green-15);
   color: var(--text-primary);
 }
+.v2-task-status--interrupted {
+  background: var(--fill-hover-strong);
+  color: var(--text-secondary);
+}
 .v2-task-progress {
   height: 5px;
   border-radius: 999px;
@@ -23272,6 +23278,51 @@ html[data-app-theme="dawn"] #appThemeGroup .cursor-size-btn[data-app-theme="dawn
   line-height: 1.45;
   max-height: 52px;
   overflow: hidden;
+}
+.v2-task-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--space-14) var(--space-8);
+  box-sizing: border-box;
+}
+.v2-task-filter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+.v2-task-filter-chip {
+  height: 26px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--stroke-default);
+  border-radius: 999px;
+  background: var(--fill-hover);
+  color: var(--text-secondary);
+  font-size: var(--font-12);
+  cursor: var(--link-cursor);
+}
+.v2-task-filter-chip[aria-pressed='true'] {
+  border-color: var(--stroke-active);
+  background: var(--blue-15);
+  color: var(--text-primary);
+}
+.v2-task-center-filter-empty {
+  margin-top: var(--space-8);
+}
+.v2-task-node-focus-pulse {
+  outline: 2px solid var(--accent, #6ea8ff);
+  outline-offset: 4px;
+  animation: v2-task-node-focus-pulse 1.6s ease;
+}
+@keyframes v2-task-node-focus-pulse {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  35% {
+    box-shadow: 0 0 0 8px rgba(110, 168, 255, 0.22);
+  }
 }
 .v2-task-card-actions {
   display: flex;

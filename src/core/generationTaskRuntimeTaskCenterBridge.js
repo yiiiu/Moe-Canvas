@@ -14,6 +14,7 @@ import { ensureConfig, getProviderConfig } from '../../api/configApi.js';
 
 const TASK_CENTER_IMAGE_SLOW_PROVIDERS = new Set(['runninghub', 'runninghubwf', 'runninghub-workflow', 'runninghub_workflow', 'dreamina', 'apimart', 'grsai']);
 const TASK_CENTER_IMAGE_LARGE_SIZE_PATTERN = /(?:^|[^a-z0-9])(?:hd|uhd|2k|3k|4k|2048|4096)(?:[^a-z0-9]|$)/i;
+const GENERATION_TERMINAL_STATUSES = new Set(['success', 'complete', 'completed', 'done', 'failed', 'cancelled', 'canceled', 'interrupted']);
 
 function asObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -151,6 +152,7 @@ function getNodeStartedAt(node = {}) {
 function collectNodeRemoteTaskIds(node = {}) {
   return [
     node.asyncTaskId,
+    node.pollingTaskId,
     node.rhTaskId,
     node.dreaminaSubmitId,
     node.remoteTaskId,
@@ -162,6 +164,7 @@ function collectNodeRemoteTaskIds(node = {}) {
 function collectPrimaryNodeRemoteTaskIds(node = {}) {
   return [
     node.asyncTaskId,
+    node.pollingTaskId,
     node.rhTaskId,
     node.dreaminaSubmitId,
     node.taskId,
@@ -170,11 +173,11 @@ function collectPrimaryNodeRemoteTaskIds(node = {}) {
 }
 
 function shouldClearGenerationNodeForTask(node = {}, spec = {}, result = {}) {
-  const remoteTaskId = resolveRemoteTaskId(spec, result);
+  const pollingTaskId = resolvePollingTaskId(spec, result);
   const primaryTaskIds = collectPrimaryNodeRemoteTaskIds(node);
-  if (remoteTaskId && primaryTaskIds.length > 0) return primaryTaskIds.includes(remoteTaskId);
+  if (pollingTaskId && primaryTaskIds.length > 0) return primaryTaskIds.includes(pollingTaskId);
   const nodeRemoteTaskIds = collectNodeRemoteTaskIds(node);
-  if (remoteTaskId && nodeRemoteTaskIds.length > 0) return nodeRemoteTaskIds.includes(remoteTaskId);
+  if (pollingTaskId && nodeRemoteTaskIds.length > 0) return nodeRemoteTaskIds.includes(pollingTaskId);
   return node.isGenerating === true || normalizeLower(node.jobStatus) === 'loading';
 }
 
@@ -194,6 +197,7 @@ function snapshotGenerationNodeRunningState(node = {}) {
     dreaminaTaskStatus: node.dreaminaTaskStatus,
     dreaminaTaskPhase: node.dreaminaTaskPhase,
     dreaminaTaskRecovering: node.dreaminaTaskRecovering,
+    pollingTaskId: node.pollingTaskId,
     remoteTaskId: node.remoteTaskId,
     taskId: node.taskId,
     generationTaskId: node.generationTaskId,
@@ -248,13 +252,78 @@ function markTaskCenterGenerationCancelled(nodeId = '', options = {}, spec = {},
   });
 }
 
-function resolveRemoteTaskId(spec = {}, result = {}) {
-  const taskSpec = asObject(spec);
+function hasTerminalResultContent(result = {}) {
+  const value = asObject(result);
+  const nested = asObject(value.result);
+  const candidates = [
+    value.imageUrl,
+    value.videoUrl,
+    value.audioUrl,
+    value.localPath,
+    value.outputUrl,
+    nested.imageUrl,
+    nested.videoUrl,
+    nested.audioUrl,
+    nested.localPath,
+    nested.outputUrl,
+  ];
+  return candidates.some((entry) => trimString(entry))
+    || (Array.isArray(value.images) && value.images.length > 0)
+    || (Array.isArray(nested.images) && nested.images.length > 0);
+}
+
+function isTerminalGenerationResult(result = {}) {
+  const value = asObject(result);
+  const nested = asObject(value.result);
+  return GENERATION_TERMINAL_STATUSES.has(normalizeLower(value.status))
+    || GENERATION_TERMINAL_STATUSES.has(normalizeLower(nested.status))
+    || hasTerminalResultContent(value);
+}
+
+function resolveResultRemoteTaskId(result = {}) {
   const taskResult = asObject(result);
   const taskMeta = asObject(taskResult.taskMeta);
   const nestedResult = asObject(taskResult.result);
   return trimString(
-    taskResult.taskId
+    taskResult.remoteTaskId
+      || taskResult.resultRemoteTaskId
+      || taskMeta.remoteTaskId
+      || nestedResult.remoteTaskId
+      || nestedResult.resultRemoteTaskId
+      || taskResult.id
+      || nestedResult.id
+  );
+}
+
+function resolveTerminalRemoteTaskId(spec = {}, result = {}) {
+  const taskSpec = asObject(spec);
+  const taskResult = asObject(result);
+  const nestedResult = asObject(taskResult.result);
+  const explicitRemoteTaskId = resolveResultRemoteTaskId(taskResult);
+  if (explicitRemoteTaskId) return explicitRemoteTaskId;
+  if (!isTerminalGenerationResult(taskResult)) return '';
+  const existingPollingTaskId = trimString(taskSpec.pollingTaskId || taskSpec.recoveryTaskId || taskSpec.taskId || taskSpec.asyncTaskId);
+  const wrappedTaskId = trimString(taskResult.taskId || taskResult.task_id || nestedResult.taskId || nestedResult.task_id);
+  return wrappedTaskId && wrappedTaskId !== existingPollingTaskId ? wrappedTaskId : '';
+}
+
+function resolvePollingTaskId(spec = {}, result = {}) {
+  const taskSpec = asObject(spec);
+  const taskResult = asObject(result);
+  const taskMeta = asObject(taskResult.taskMeta);
+  const nestedResult = asObject(taskResult.result);
+  const terminalResultId = isTerminalGenerationResult(taskResult) ? resolveTerminalRemoteTaskId(taskSpec, taskResult) : '';
+  const candidate = trimString(
+    taskResult.pollingTaskId
+      || taskResult.recoveryTaskId
+      || taskMeta.pollingTaskId
+      || taskMeta.recoveryTaskId
+      || taskSpec.pollingTaskId
+      || taskSpec.recoveryTaskId
+      || taskSpec.taskId
+      || nestedResult.pollingTaskId
+      || nestedResult.recoveryTaskId
+      || taskResult.taskId
       || taskResult.task_id
       || taskResult.id
       || taskMeta.taskId
@@ -263,18 +332,23 @@ function resolveRemoteTaskId(spec = {}, result = {}) {
       || nestedResult.taskId
       || nestedResult.task_id
       || nestedResult.id
-      || taskSpec.taskId
       || taskSpec.remoteTaskId
       || taskSpec.asyncTaskId
   );
+  return candidate && candidate !== terminalResultId ? candidate : '';
+}
+
+function resolveRemoteTaskId(spec = {}, result = {}) {
+  const taskSpec = asObject(spec);
+  return trimString(resolveTerminalRemoteTaskId(taskSpec, result) || taskSpec.remoteTaskId);
 }
 
 function buildGenerationRecoverySpec({ spec = {}, result = {}, nodeId = '' } = {}) {
   const taskSpec = asObject(spec);
   const taskResult = asObject(result);
-  const remoteTaskId = resolveRemoteTaskId(taskSpec, taskResult);
+  const pollingTaskId = resolvePollingTaskId(taskSpec, taskResult);
   const targetNodeId = trimString(nodeId || resolveTargetNodeId(taskSpec, taskResult));
-  if (!remoteTaskId || !targetNodeId) return null;
+  if (!pollingTaskId || !targetNodeId) return null;
   const payload = asObject(taskSpec.payload);
   const taskMeta = asObject(taskResult.taskMeta || taskSpec.taskMeta);
   return {
@@ -286,7 +360,9 @@ function buildGenerationRecoverySpec({ spec = {}, result = {}, nodeId = '' } = {
     executionId: trimString(taskSpec.executionId),
     sourceNodeId: trimString(taskSpec.sourceNodeId),
     targetNodeId,
-    taskId: remoteTaskId,
+    taskId: pollingTaskId,
+    pollingTaskId,
+    remoteTaskId: resolveRemoteTaskId(taskSpec, taskResult),
     startedAt: firstFiniteNumber(taskSpec.startedAt, taskResult.startedAt) || 0,
     resumable: taskSpec.resumable !== false,
     cancellable: taskSpec.cancellable !== false,
@@ -305,40 +381,77 @@ function resolveAsyncTaskRecordKind(recoverySpec = {}) {
 }
 
 function persistAsyncTaskIdRecord({ spec = {}, options = {}, result = {}, status = 'polling' } = {}) {
-  const recoverySpec = buildGenerationRecoverySpec({ spec, result });
-  if (!recoverySpec) return null;
+  const taskSpec = asObject(spec);
+  const taskResult = asObject(result);
+  const recoverySpec = buildGenerationRecoverySpec({ spec: taskSpec, result: taskResult });
+  const targetNodeId = recoverySpec?.targetNodeId || trimString(resolveTargetNodeId(taskSpec, taskResult));
+  const nestedResultStatus = normalizeLower(asObject(taskResult.result).status);
+  const providerTerminalStatus = GENERATION_TERMINAL_STATUSES.has(nestedResultStatus) ? nestedResultStatus : '';
+  const inferredSuccessStatus = hasTerminalResultContent(taskResult) ? 'success' : '';
+  const normalizedStatus = providerTerminalStatus || normalizeLower(status || taskResult.status || inferredSuccessStatus || 'polling') || 'polling';
+  const terminalRemoteTaskId = GENERATION_TERMINAL_STATUSES.has(normalizedStatus) ? resolveTerminalRemoteTaskId(taskSpec, taskResult) : '';
+  if (!recoverySpec && (!terminalRemoteTaskId || !targetNodeId)) return null;
   const now = resolveNow(options);
-  const kind = resolveAsyncTaskRecordKind(recoverySpec);
+  const payload = asObject(taskSpec.payload);
+  const fallbackRecordSpec = recoverySpec || {
+    kind: 'generation',
+    taskType: trimString(taskSpec.taskType || taskSpec.taskKind || taskSpec.kind),
+    provider: trimString(taskSpec.provider || payload.provider || taskResult.taskMeta?.provider),
+    adapterType: trimString(taskSpec.adapterType),
+    modelId: trimString(taskSpec.modelId || taskSpec.model || payload.model || payload.modelId),
+    sourceNodeId: trimString(taskSpec.sourceNodeId),
+    targetNodeId,
+    pollingTaskId: '',
+    taskId: '',
+    remoteTaskId: terminalRemoteTaskId,
+    startedAt: firstFiniteNumber(taskSpec.startedAt, taskResult.startedAt) || 0,
+    resumable: taskSpec.resumable !== false,
+    cancellable: taskSpec.cancellable !== false,
+    taskMeta: asObject(taskResult.taskMeta || taskSpec.taskMeta),
+    payload,
+  };
+  const kind = resolveAsyncTaskRecordKind(fallbackRecordSpec);
   const store = resolveStore(options);
-  const node = resolveNode(store, recoverySpec.targetNodeId) || {};
+  const node = resolveNode(store, fallbackRecordSpec.targetNodeId) || {};
+  const recordPollingTaskId = recoverySpec && (!terminalRemoteTaskId || terminalRemoteTaskId !== (fallbackRecordSpec.pollingTaskId || fallbackRecordSpec.taskId))
+    ? (fallbackRecordSpec.pollingTaskId || fallbackRecordSpec.taskId)
+    : '';
   const record = upsertAsyncTaskRecord({
-    remoteTaskId: recoverySpec.taskId,
+    pollingTaskId: recordPollingTaskId,
+    remoteTaskId: terminalRemoteTaskId || fallbackRecordSpec.remoteTaskId,
     kind,
-    provider: recoverySpec.provider || recoverySpec.payload?.provider,
-    modelId: recoverySpec.modelId,
-    nodeId: recoverySpec.targetNodeId,
-    canvasId: trimString(spec.canvasId || result.canvasId || node.canvasId),
-    sourceNodeId: recoverySpec.sourceNodeId,
-    status: status || result.status || 'polling',
-    canCancel: recoverySpec.cancellable !== false,
-    canResume: recoverySpec.resumable !== false,
-    pollingSpec: recoverySpec,
-    payload: recoverySpec.payload,
-    createdAt: firstFiniteNumber(recoverySpec.startedAt, spec.createdAt, result.createdAt) || now,
-    updatedAt: firstFiniteNumber(result.updatedAt, spec.updatedAt) || now,
+    provider: fallbackRecordSpec.provider || fallbackRecordSpec.payload?.provider,
+    modelId: fallbackRecordSpec.modelId,
+    nodeId: fallbackRecordSpec.targetNodeId,
+    canvasId: trimString(taskSpec.canvasId || taskResult.canvasId || node.canvasId),
+    sourceNodeId: fallbackRecordSpec.sourceNodeId,
+    status: normalizedStatus,
+    error: taskResult.error || asObject(taskResult.result).error || taskResult.message || asObject(taskResult.result).message || '',
+    resultSpec: taskResult.result || taskResult,
+    canCancel: fallbackRecordSpec.cancellable !== false,
+    canResume: recoverySpec ? fallbackRecordSpec.resumable !== false : false,
+    pollingSpec: recoverySpec || null,
+    payload: fallbackRecordSpec.payload,
+    createdAt: firstFiniteNumber(fallbackRecordSpec.startedAt, taskSpec.createdAt, taskResult.createdAt) || now,
+    updatedAt: firstFiniteNumber(taskResult.updatedAt, taskSpec.updatedAt) || now,
+    finishedAt: GENERATION_TERMINAL_STATUSES.has(normalizedStatus)
+      ? firstFiniteNumber(taskResult.finishedAt, taskResult.updatedAt, now) || now
+      : 0,
   }, {
     ...options,
     storage: options.asyncTaskStorage || options.storage,
     now,
   });
-  if (record && typeof store?.updateNodeData === 'function') {
-    store.updateNodeData(recoverySpec.targetNodeId, {
+  if (record && recoverySpec && typeof store?.updateNodeData === 'function') {
+    store.updateNodeData(fallbackRecordSpec.targetNodeId, {
       asyncRuntimeTaskId: record.runtimeTaskId,
       remoteTaskId: record.remoteTaskId,
+      pollingTaskId: record.pollingTaskId,
+      asyncTaskId: record.pollingTaskId || record.remoteTaskId,
       taskProvider: record.provider,
       taskModelId: record.modelId,
-      taskType: trimString(recoverySpec.taskType),
-      taskAdapterType: trimString(recoverySpec.adapterType) || 'modelApi',
+      taskType: trimString(fallbackRecordSpec.taskType),
+      taskAdapterType: trimString(fallbackRecordSpec.adapterType) || 'modelApi',
       taskResumable: record.canResume,
     });
   }
@@ -399,6 +512,8 @@ function persistGenerationNodeRecoveryState({ spec = {}, options = {}, result = 
   const store = resolveStore(options);
   if (typeof store?.updateNodeData !== 'function') return;
   const taskStatus = normalizeLower(status || result.status || 'polling') || 'polling';
+  const terminalStatuses = ['success', 'complete', 'completed', 'done', 'failed', 'cancelled', 'canceled', 'interrupted'];
+  if (terminalStatuses.includes(taskStatus)) return;
   const startedAt = firstFiniteNumber(recoverySpec.startedAt, Date.now()) || Date.now();
   store.updateNodeData(recoverySpec.targetNodeId, {
     isGenerating: true,
@@ -414,6 +529,7 @@ function persistGenerationNodeRecoveryState({ spec = {}, options = {}, result = 
     taskCancellable: recoverySpec.cancellable !== false,
     taskResumable: recoverySpec.resumable !== false,
     asyncTaskId: trimString(recoverySpec.taskId),
+    pollingTaskId: trimString(recoverySpec.pollingTaskId || recoverySpec.taskId),
     asyncTaskProvider: trimString(recoverySpec.provider || recoverySpec.payload?.provider),
     asyncTaskKind: 'image',
     asyncTaskStatus: ['success', 'complete', 'completed', 'done', 'failed', 'cancelled', 'canceled'].includes(taskStatus) ? taskStatus : 'running',
@@ -427,6 +543,12 @@ function syncGenerationTaskRecovery({ spec = {}, options = {}, result = {}, stat
   persistGenerationNodeRecoveryState({ spec, options, result, status });
   const task = syncGenerationTaskToTaskCenter({ spec, options, result, status });
   return task;
+}
+
+function syncGenerationTaskTerminalState({ spec = {}, options = {}, result = {}, status = '' } = {}) {
+  const normalizedStatus = normalizeLower(status || result.status);
+  if (!['success', 'complete', 'completed', 'done', 'failed', 'cancelled', 'canceled', 'interrupted'].includes(normalizedStatus)) return null;
+  return persistAsyncTaskIdRecord({ spec, options, result, status: normalizedStatus });
 }
 
 function wrapSpecForTaskCenterRecovery(spec = {}, options = {}) {
@@ -519,6 +641,7 @@ export async function resumeTask(spec, options = {}) {
   const taskSpec = attachRestoredCancelSpec(spec, options);
   syncGenerationTaskToTaskCenter({ spec: taskSpec, options, status: 'polling' });
   const result = await resumeGenerationTask(taskSpec, options);
+  syncGenerationTaskTerminalState({ spec: taskSpec, options, result, status: result?.status });
   syncGenerationTaskToTaskCenter({
     spec: taskSpec,
     options,
@@ -561,6 +684,12 @@ export async function cancelTask(targetNodeId, options = {}) {
   const result = await cancelGenerationTask(nodeId || targetNodeId, cancelOptions);
   restoreGenerationNodeRunningStateIfStale(nodeId || targetNodeId, options, effectiveCancelSpec, result, nodeBeforeCancel);
   clearGenerationNodeCancelledState(nodeId || targetNodeId, options, effectiveCancelSpec, result);
+  syncGenerationTaskTerminalState({
+    spec: { ...effectiveCancelSpec, targetNodeId: nodeId || targetNodeId },
+    options,
+    result: { ...result, targetNodeId: nodeId || targetNodeId },
+    status: 'cancelled',
+  });
   syncGenerationTaskToTaskCenter({
     spec: { ...effectiveCancelSpec, targetNodeId: nodeId || targetNodeId },
     options,

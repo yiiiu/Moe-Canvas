@@ -129,7 +129,7 @@ function sanitizePayload(payload) {
 
 function sanitizeRecoverySpec(spec) {
   const source = asObject(spec);
-  const taskId = trimString(source.taskId || source.remoteTaskId || source.asyncTaskId);
+  const taskId = trimString(source.taskId || source.pollingTaskId || source.recoveryTaskId || source.asyncTaskId || source.remoteTaskId);
   const targetNodeId = trimString(source.targetNodeId || source.nodeId);
   if (!taskId || !targetNodeId) return null;
   return {
@@ -143,6 +143,8 @@ function sanitizeRecoverySpec(spec) {
     sourceNodeId: trimString(source.sourceNodeId),
     targetNodeId,
     taskId,
+    pollingTaskId: taskId,
+    remoteTaskId: trimString(source.remoteTaskId || source.resultRemoteTaskId),
     startedAt: finiteNumber(source.startedAt, 0),
     resumable: source.resumable !== false,
     cancellable: source.cancellable !== false,
@@ -243,22 +245,27 @@ function isObsoleteGenerationInterruptionTask(task) {
   return /刷新|重启|中断/.test(message);
 }
 
-function resolveTaskRemoteId(task = {}) {
+function resolveTaskRecoveryId(task = {}) {
   const recoverySpec = asObject(task.recoverySpec || task.unifiedTask?.recoverySpec);
   return trimString(
-    task.remoteTaskId
+    task.pollingTaskId
+      || task.recoveryTaskId
       || task.asyncTaskId
       || task.providerTaskId
       || recoverySpec.taskId
-      || recoverySpec.remoteTaskId
+      || recoverySpec.pollingTaskId
+      || recoverySpec.recoveryTaskId
       || recoverySpec.asyncTaskId
+      || recoverySpec.providerTaskId
+      || task.remoteTaskId
+      || recoverySpec.remoteTaskId
   );
 }
 
 function isSameGenerationAttempt(previous = {}, incoming = {}) {
-  const previousRemoteTaskId = resolveTaskRemoteId(previous);
-  const incomingRemoteTaskId = resolveTaskRemoteId(incoming);
-  if (previousRemoteTaskId && incomingRemoteTaskId) return previousRemoteTaskId === incomingRemoteTaskId;
+  const previousRecoveryId = resolveTaskRecoveryId(previous);
+  const incomingRecoveryId = resolveTaskRecoveryId(incoming);
+  if (previousRecoveryId && incomingRecoveryId) return previousRecoveryId === incomingRecoveryId;
   const previousFinishedAt = finiteNumber(previous.finishedAt || previous.updatedAt, 0);
   const incomingStartedAt = finiteNumber(incoming.startedAt || incoming.createdAt, 0);
   return !incomingStartedAt || !previousFinishedAt || incomingStartedAt <= previousFinishedAt;
@@ -274,9 +281,9 @@ function shouldKeepCancelledTerminalTask(previous = {}, incoming = {}) {
 function shouldKeepActiveGenerationTask(previous = {}, incoming = {}) {
   if (!ACTIVE_STATUSES.has(previous.status) || !TERMINAL_STATUSES.has(incoming.status)) return false;
   if (!isGenerationTask(previous) || !isGenerationTask(incoming)) return false;
-  const previousRemoteTaskId = resolveTaskRemoteId(previous);
-  const incomingRemoteTaskId = resolveTaskRemoteId(incoming);
-  if (previousRemoteTaskId && incomingRemoteTaskId) return previousRemoteTaskId !== incomingRemoteTaskId;
+  const previousRecoveryId = resolveTaskRecoveryId(previous);
+  const incomingRecoveryId = resolveTaskRecoveryId(incoming);
+  if (previousRecoveryId && incomingRecoveryId) return previousRecoveryId !== incomingRecoveryId;
   const previousStartedAt = finiteNumber(previous.startedAt || previous.createdAt, 0);
   const incomingStartedAt = finiteNumber(incoming.startedAt || incoming.createdAt, 0);
   if (previousStartedAt && incomingStartedAt) return incomingStartedAt < previousStartedAt;
@@ -415,44 +422,53 @@ function resolveTaskCenterTaskAsyncFields(task = {}, options = {}) {
   const payload = asObject(source.payload || recoverySpec.payload || source.unifiedTask?.payload);
   const taskMeta = asObject(source.taskMeta || recoverySpec.taskMeta || source.unifiedTask?.taskMeta);
   const result = asObject(source.result);
-  const remoteTaskId = [
-    source.remoteTaskId,
+  const pollingTaskId = [
+    source.pollingTaskId,
+    source.recoveryTaskId,
     source.asyncTaskId,
     source.providerTaskId,
     source.providerTaskID,
     source.jobId,
     source.job_id,
+    result.pollingTaskId,
+    result.recoveryTaskId,
     result.taskId,
-    result.remoteTaskId,
     result.asyncTaskId,
     result.providerTaskId,
     result.jobId,
     result.job_id,
+    taskMeta.pollingTaskId,
+    taskMeta.recoveryTaskId,
     taskMeta.taskId,
-    taskMeta.remoteTaskId,
     taskMeta.asyncTaskId,
     taskMeta.providerTaskId,
     taskMeta.jobId,
     taskMeta.job_id,
     recoverySpec.taskId,
-    recoverySpec.remoteTaskId,
+    recoverySpec.pollingTaskId,
+    recoverySpec.recoveryTaskId,
     recoverySpec.asyncTaskId,
     recoverySpec.providerTaskId,
     recoverySpec.jobId,
     recoverySpec.job_id,
     nodeSnapshot.asyncTaskId,
+    nodeSnapshot.pollingTaskId,
     nodeSnapshot.rhTaskId,
     nodeSnapshot.dreaminaSubmitId,
-    nodeSnapshot.remoteTaskId,
     nodeSnapshot.providerTaskId,
     nodeSnapshot.jobId,
     nodeSnapshot.taskId,
     nodeSnapshot.generationTaskId,
     source.taskId,
+    source.remoteTaskId,
+    result.remoteTaskId,
+    taskMeta.remoteTaskId,
+    recoverySpec.remoteTaskId,
+    nodeSnapshot.remoteTaskId,
   ]
     .map(trimString)
     .find((value) => value && !value.startsWith('generation:') && !value.startsWith('media:')) || '';
-  if (!remoteTaskId) return null;
+  if (!pollingTaskId) return null;
   const nodeId = trimString(
     recoverySpec.targetNodeId
       || recoverySpec.nodeId
@@ -465,7 +481,8 @@ function resolveTaskCenterTaskAsyncFields(task = {}, options = {}) {
   );
   if (!nodeId) return null;
   return {
-    remoteTaskId,
+    pollingTaskId,
+    remoteTaskId: trimString(source.remoteTaskId || result.remoteTaskId || taskMeta.remoteTaskId || recoverySpec.remoteTaskId),
     nodeId,
     recoverySpec,
     payload,
@@ -482,6 +499,7 @@ function mirrorTaskCenterTaskToAsyncTaskStore(task = {}, options = {}, nowValue 
   if (!fields) return null;
   const now = finiteNumber(nowValue ?? options.now, Date.now());
   const record = upsertAsyncTaskRecord({
+    pollingTaskId: fields.pollingTaskId,
     remoteTaskId: fields.remoteTaskId,
     kind: resolveAsyncTaskKindFromTaskCenterTask(task),
     provider: fields.provider,

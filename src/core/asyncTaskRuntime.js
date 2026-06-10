@@ -303,23 +303,32 @@ function isNodeGenerationSettled(node = {}) {
   return statuses.some((status) => NODE_TERMINAL_STATUSES.has(status)) || hasNodeGenerationResult(node);
 }
 
-function hasRecoverableRemoteTaskId(record = {}) {
-  return Boolean(trimString(record.remoteTaskId || record.taskId || record.asyncTaskId || record.pollingSpec?.taskId));
+function hasRecoverablePollingTaskId(record = {}) {
+  return Boolean(trimString(record.pollingTaskId || record.taskId || record.asyncTaskId || record.pollingSpec?.taskId || record.remoteTaskId));
 }
 
-function requiresRemoteTaskIdForRecovery(record = {}) {
+function requiresPollingTaskIdForRecovery(record = {}) {
   const provider = normalizeStatusText(record.provider || record.pollingSpec?.provider || record.payload?.provider);
   const kind = normalizeStatusText(record.kind || record.taskType || record.pollingSpec?.taskType);
-  return provider === 'grsai' && (kind.includes('image') || kind.includes('generation'));
+  if (kind.includes('media') || provider === 'localruntime') return false;
+  return record.canResume !== false
+    || kind.includes('image')
+    || kind.includes('video')
+    || kind.includes('audio')
+    || kind.includes('text')
+    || kind.includes('chat')
+    || kind.includes('generation')
+    || kind.includes('provider_async');
 }
 
 function isRecoverableAsyncTaskRecord(record = {}) {
-  return !requiresRemoteTaskIdForRecovery(record) || hasRecoverableRemoteTaskId(record);
+  return !requiresPollingTaskIdForRecovery(record) || hasRecoverablePollingTaskId(record);
 }
 
 function collectPrimaryNodeTaskIds(node = {}) {
   return [
     node.asyncTaskId,
+    node.pollingTaskId,
     node.rhTaskId,
     node.dreaminaSubmitId,
     node.taskId,
@@ -337,14 +346,14 @@ export function canRestoreAsyncTaskLoading(record = {}, node = {}) {
   const runtimeTaskId = trimString(record.runtimeTaskId);
   const nodeRuntimeTaskId = trimString(nodeData.asyncRuntimeTaskId || nodeData.runtimeTaskId);
   if (runtimeTaskId && nodeRuntimeTaskId && runtimeTaskId !== nodeRuntimeTaskId) return false;
-  const remoteTaskId = trimString(record.remoteTaskId);
+  const pollingTaskId = trimString(record.pollingTaskId || record.remoteTaskId || record.pollingSpec?.taskId);
   const primaryTaskIds = collectPrimaryNodeTaskIds(nodeData);
-  if (!remoteTaskId && primaryTaskIds.length > 0 && !(runtimeTaskId && nodeRuntimeTaskId === runtimeTaskId)) return false;
-  if (remoteTaskId && primaryTaskIds.length > 0 && !primaryTaskIds.includes(remoteTaskId)) return false;
+  if (!pollingTaskId && primaryTaskIds.length > 0 && !(runtimeTaskId && nodeRuntimeTaskId === runtimeTaskId)) return false;
+  if (pollingTaskId && primaryTaskIds.length > 0 && !primaryTaskIds.includes(pollingTaskId)) return false;
   const nodeStartedAt = getNodeStartedAt(nodeData);
   const recordStartedAt = Number(record.createdAt || 0) || 0;
   if (nodeStartedAt && recordStartedAt && nodeStartedAt > recordStartedAt) {
-    if (remoteTaskId && primaryTaskIds.includes(remoteTaskId)) return true;
+    if (pollingTaskId && primaryTaskIds.includes(pollingTaskId)) return true;
     if (runtimeTaskId && nodeRuntimeTaskId === runtimeTaskId) return true;
     return false;
   }

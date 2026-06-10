@@ -82,6 +82,179 @@ function buildAudioResultPatch(result = {}) {
   };
 }
 
+function readPathValue(source = {}, path = '') {
+  const segments = trimString(path).split('.').filter(Boolean);
+  if (!segments.length) return undefined;
+  return segments.reduce((value, segment) => {
+    if (value == null) return undefined;
+    const isArraySegment = segment.endsWith('[]');
+    const key = isArraySegment ? segment.slice(0, -2) : segment;
+    if (Array.isArray(value)) {
+      const index = Number(key);
+      if (Number.isInteger(index)) return value[index];
+      const mapped = value.map((item) => item?.[key]).filter((item) => item !== undefined);
+      return isArraySegment ? mapped.flatMap((item) => Array.isArray(item) ? item : [item]) : mapped;
+    }
+    const next = value?.[key];
+    if (isArraySegment) return Array.isArray(next) ? next : next === undefined ? undefined : [next];
+    return next;
+  }, source);
+}
+
+function flattenResultValues(value, output = []) {
+  if (value == null) return output;
+  if (Array.isArray(value)) {
+    value.forEach((item) => flattenResultValues(item, output));
+    return output;
+  }
+  output.push(value);
+  return output;
+}
+
+function collectMappedResultPathHits(result = {}, responseMapping = {}) {
+  const resultPaths = Array.isArray(responseMapping?.resultPaths) ? responseMapping.resultPaths : [];
+  const hits = [];
+  for (const path of resultPaths) {
+    const values = flattenResultValues(readPathValue(result, path));
+    if (values.some((value) => trimString(value) || (value && typeof value === 'object'))) hits.push(path);
+  }
+  return hits;
+}
+
+function collectExplicitResultHits(taskType = '', patch = {}) {
+  const hits = [];
+  const add = (field, value) => {
+    if (Array.isArray(value) ? value.length > 0 : trimString(value)) hits.push(field);
+  };
+  if (taskType === 'image-generation') {
+    add('imageUrl', patch.imageUrl);
+    add('sourceUrl', patch.sourceUrl);
+    add('thumbUrl', patch.thumbUrl);
+    add('localPath', patch.localPath);
+    add('images', patch.images);
+  } else if (taskType === 'video') {
+    add('videoUrl', patch.videoUrl);
+    add('sourceUrl', patch.sourceUrl);
+    add('localPath', patch.localPath);
+    add('videos', patch.videos);
+  } else if (taskType === 'audio') {
+    add('audioUrl', patch.audioUrl);
+    add('src', patch.src);
+    add('localPath', patch.localPath);
+    add('audios', patch.audios);
+  }
+  return hits;
+}
+
+function hasRestoredResultAsset(taskType = '', patch = {}) {
+  return collectExplicitResultHits(taskType, patch).length > 0;
+}
+
+function resolveStatusValue(result = {}) {
+  const value = asObject(result);
+  return trimString(
+    value.status
+      || value.taskStatus
+      || value.task_status
+      || value.state
+      || value.phase
+      || value.data?.status
+      || value.data?.taskStatus
+      || value.data?.task_status
+      || value.result?.status
+      || value.output?.status
+  ).toLowerCase();
+}
+
+function resolvePollStrategy(provider = '', taskType = '', resumeOptions = {}) {
+  const value = normalizeLower(provider);
+  if (value === 'dreamina') return `${taskType}:dreamina-submit-poll`;
+  if (value === 'runninghub' || value === 'runninghubwf') return `${taskType}:runninghub-poll`;
+  if (taskType === 'audio') return `${taskType}:runninghub-audio-poll`;
+  if (resumeOptions.taskPolling?.urlTemplate) return `${taskType}:manifest-taskPolling`;
+  return `${taskType}:provider-resume`;
+}
+
+function buildRecoveryPollingTrace(recoverySpec = {}, taskType = '') {
+  const resumeOptions = buildRestoredResumeOptions(recoverySpec);
+  const payload = buildRestoredPayload(recoverySpec);
+  const provider = normalizeLower(recoverySpec.provider || payload.provider);
+  const responseMapping = asObject(resumeOptions.responseMapping);
+  const taskPolling = asObject(resumeOptions.taskPolling);
+  const pollingTaskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId);
+  return {
+    provider,
+    modelId: trimString(recoverySpec.modelId || payload.model || payload.modelId),
+    pollingTaskId,
+    recoveryTaskId: pollingTaskId,
+    remoteTaskId: trimString(recoverySpec.remoteTaskId || recoverySpec.resultRemoteTaskId),
+    taskType,
+    pollStrategy: resolvePollStrategy(provider, taskType, resumeOptions),
+    pollUrlTemplate: trimString(taskPolling.urlTemplate),
+    pollUrl: trimString(taskPolling.urlTemplate).replace('{taskId}', encodeURIComponent(pollingTaskId)),
+    pollMethod: trimString(taskPolling.method || 'GET').toUpperCase(),
+    statusPath: trimString(taskPolling.statusPath || responseMapping.statusPath),
+    errorPath: trimString(taskPolling.errorPath || responseMapping.errorPath),
+    resultPaths: Array.isArray(responseMapping.resultPaths) ? [...responseMapping.resultPaths] : [],
+    statusValue: '',
+    resultPathHit: '',
+    explicitResultHit: '',
+    failureReason: '',
+    attempts: 0,
+    updatedAt: Date.now(),
+  };
+}
+
+function markRecoveryPollingTrace(trace = {}, patch = {}) {
+  Object.assign(trace, {
+    ...patch,
+    updatedAt: Date.now(),
+  });
+  return trace;
+}
+
+function firstMappedResultValue(result = {}, responseMapping = {}) {
+  const resultPaths = Array.isArray(responseMapping?.resultPaths) ? responseMapping.resultPaths : [];
+  for (const path of resultPaths) {
+    const values = flattenResultValues(readPathValue(result, path));
+    const hit = values.find((value) => trimString(value) || (value && typeof value === 'object'));
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
+function buildPatchFromMappedValue(taskType = '', value, context = {}) {
+  if (value === undefined) return {};
+  if (taskType === 'image-generation') return buildImageResultPatch(typeof value === 'object' ? value : { imageUrl: String(value || '') }, context);
+  if (taskType === 'video') return buildVideoResultPatch(typeof value === 'object' ? value : { videoUrl: String(value || '') });
+  if (taskType === 'audio') return buildAudioResultPatch(typeof value === 'object' ? value : { audioUrl: String(value || '') });
+  return asObject(value);
+}
+
+function buildGuardedRestoredResultPatch(taskType = '', result = {}, context = {}, trace = {}, responseMapping = {}) {
+  const resultPathHits = collectMappedResultPathHits(result, responseMapping);
+  const mappedPatch = resultPathHits.length
+    ? buildPatchFromMappedValue(taskType, firstMappedResultValue(result, responseMapping), context)
+    : {};
+  const rawPatch = buildResultPatch(taskType, result, context);
+  const patch = hasRestoredResultAsset(taskType, mappedPatch) ? mappedPatch : rawPatch;
+  const explicitHits = collectExplicitResultHits(taskType, patch);
+  const statusValue = resolveStatusValue(result);
+  markRecoveryPollingTrace(trace, {
+    statusValue,
+    resultPathHit: resultPathHits[0] || '',
+    explicitResultHit: explicitHits[0] || '',
+    failureReason: '',
+  });
+  if (!hasRestoredResultAsset(taskType, patch)) {
+    const isStatusRefresh = trimString(trace.pollUrlTemplate || trace.pollUrl).includes('status?refresh=1');
+    const reason = isStatusRefresh ? 'status-refresh-without-result' : 'terminal-status-without-result';
+    markRecoveryPollingTrace(trace, { failureReason: reason });
+    throw new Error('远端任务状态查询未返回可用结果，不能作为生成结果回填');
+  }
+  return patch;
+}
+
 function buildResultPatch(taskType, result, context = {}) {
   if (taskType === 'video') return buildVideoResultPatch(result);
   if (taskType === 'image-generation') return buildImageResultPatch(result, context);
@@ -89,27 +262,26 @@ function buildResultPatch(taskType, result, context = {}) {
   return asObject(result);
 }
 
-function hasRecoverableTaskId(task = {}) {
+function hasRecoverablePollingTaskId(task = {}) {
   const recoverySpec = resolveRecoverySpec(task);
-  return Boolean(trimString(recoverySpec.taskId || task.remoteTaskId || task.asyncTaskId));
+  return Boolean(trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || task.pollingTaskId || task.asyncTaskId));
 }
 
-function requiresTaskIdForRecovery(task = {}) {
+function requiresPollingTaskIdForRecovery(task = {}) {
   const recoverySpec = resolveRecoverySpec(task);
-  const provider = normalizeLower(recoverySpec.provider || recoverySpec.payload?.provider || task.provider);
   const taskType = resolveTaskType(recoverySpec, task);
-  return provider === 'grsai' && taskType === 'image-generation';
+  return ['image-generation', 'video', 'audio', 'text', 'provider_async'].includes(taskType) || taskType.includes('generation');
 }
 
 function canResumeRestoredTask(task = {}) {
-  return !requiresTaskIdForRecovery(task) || hasRecoverableTaskId(task);
+  return !requiresPollingTaskIdForRecovery(task) || hasRecoverablePollingTaskId(task);
 }
 
 function buildGenerationLoadingPatch(task = {}) {
   const recoverySpec = resolveRecoverySpec(task);
   const taskType = resolveTaskType(recoverySpec, task);
   const provider = normalizeLower(recoverySpec.provider || recoverySpec.payload?.provider);
-  const taskId = trimString(recoverySpec.taskId || task.remoteTaskId || task.asyncTaskId);
+  const taskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || task.pollingTaskId || task.asyncTaskId);
   const startedAt = getTaskAttemptTime(task) || Date.now();
   const basePatch = {
     isGenerating: true,
@@ -194,13 +366,14 @@ function resolveGenerationNodeId(task = {}) {
   return trimString(task.nodeId || task.unifiedTask?.nodeId || recoverySpec.targetNodeId || recoverySpec.sourceNodeId);
 }
 
-function collectNodeRemoteTaskIds(node = {}) {
+function collectNodeRecoveryTaskIds(node = {}) {
   return [
     node.asyncTaskId,
+    node.pollingTaskId,
     node.rhTaskId,
     node.dreaminaSubmitId,
-    node.remoteTaskId,
     node.taskId,
+    node.remoteTaskId,
   ].map(trimString).filter(Boolean);
 }
 
@@ -221,9 +394,9 @@ function getNodeAttemptTime(node = {}) {
 
 function isSameOrUntrackedGenerationTask(task = {}, node = {}) {
   const recoverySpec = resolveRecoverySpec(task);
-  const restoredRemoteTaskId = trimString(recoverySpec.taskId || task.remoteTaskId || task.asyncTaskId);
-  const nodeRemoteTaskIds = collectNodeRemoteTaskIds(node);
-  if (restoredRemoteTaskId && nodeRemoteTaskIds.length) return nodeRemoteTaskIds.includes(restoredRemoteTaskId);
+  const restoredPollingTaskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || task.pollingTaskId || task.asyncTaskId || task.remoteTaskId);
+  const nodeRecoveryTaskIds = collectNodeRecoveryTaskIds(node);
+  if (restoredPollingTaskId && nodeRecoveryTaskIds.length) return nodeRecoveryTaskIds.includes(restoredPollingTaskId);
   const taskAttemptTime = getTaskAttemptTime(task);
   const nodeAttemptTime = getNodeAttemptTime(node);
   if (taskAttemptTime && nodeAttemptTime && nodeAttemptTime > taskAttemptTime) return false;
@@ -232,9 +405,9 @@ function isSameOrUntrackedGenerationTask(task = {}, node = {}) {
 
 function canRestoreActiveGenerationTaskToNode(task = {}, node = {}) {
   const recoverySpec = resolveRecoverySpec(task);
-  const restoredRemoteTaskId = trimString(recoverySpec.taskId || task.remoteTaskId || task.asyncTaskId);
-  const nodeRemoteTaskIds = collectNodeRemoteTaskIds(node);
-  if (restoredRemoteTaskId && nodeRemoteTaskIds.length && !nodeRemoteTaskIds.includes(restoredRemoteTaskId)) return false;
+  const restoredPollingTaskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || task.pollingTaskId || task.asyncTaskId || task.remoteTaskId);
+  const nodeRecoveryTaskIds = collectNodeRecoveryTaskIds(node);
+  if (restoredPollingTaskId && nodeRecoveryTaskIds.length && !nodeRecoveryTaskIds.includes(restoredPollingTaskId)) return false;
   const taskAttemptTime = getTaskAttemptTime(task);
   const nodeAttemptTime = getNodeAttemptTime(node);
   if (taskAttemptTime && nodeAttemptTime && nodeAttemptTime > taskAttemptTime) return false;
@@ -373,13 +546,15 @@ function createPollFunction(recoverySpec = {}, taskType = '') {
 export function buildRestoredGenerationSpec(task = {}) {
   const recoverySpec = resolveRecoverySpec(task);
   const targetNodeId = trimString(recoverySpec.targetNodeId || task.nodeId);
-  const taskId = trimString(recoverySpec.taskId);
+  const taskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || task.pollingTaskId || task.asyncTaskId);
   if (!targetNodeId || !taskId) return null;
 
   const taskType = resolveTaskType(recoverySpec, task);
   const payload = buildRestoredPayload(recoverySpec);
   const poll = createPollFunction(recoverySpec, taskType);
   if (typeof poll !== 'function') return null;
+  const recoveryPollingTrace = buildRecoveryPollingTrace(recoverySpec, taskType);
+  const resumeOptions = buildRestoredResumeOptions(recoverySpec);
 
   return {
     sourceNodeId: trimString(recoverySpec.sourceNodeId) || targetNodeId,
@@ -391,15 +566,33 @@ export function buildRestoredGenerationSpec(task = {}) {
     modelId: trimString(recoverySpec.modelId),
     executionId: trimString(recoverySpec.executionId) || `restore.${taskType}`,
     payload,
+    taskMeta: {
+      ...asObject(recoverySpec.taskMeta),
+      recoveryPollingTrace,
+    },
+    recoveryPollingTrace,
     startedAt: Number(recoverySpec.startedAt || task.startedAt || task.createdAt || 0) || Date.now(),
     cancellable: recoverySpec.cancellable !== false,
     resumable: true,
     taskCenterVisibility: 'visible',
-    poll,
-    resultBuilder: (result, context = {}) => buildResultPatch(taskType, result, {
+    poll: async (pollContext = {}) => {
+      markRecoveryPollingTrace(recoveryPollingTrace, { attempts: Number(recoveryPollingTrace.attempts || 0) + 1 });
+      try {
+        const result = await poll(pollContext);
+        markRecoveryPollingTrace(recoveryPollingTrace, {
+          statusValue: resolveStatusValue(result),
+          resultPathHit: collectMappedResultPathHits(result, resumeOptions.responseMapping)[0] || '',
+        });
+        return result;
+      } catch (error) {
+        markRecoveryPollingTrace(recoveryPollingTrace, { failureReason: trimString(error?.message) || 'poll-failed' });
+        throw error;
+      }
+    },
+    resultBuilder: (result, context = {}) => buildGuardedRestoredResultPatch(taskType, result, {
       ...asObject(context),
       startedAt: Number(context?.startedAt || recoverySpec.startedAt || task.startedAt || task.createdAt || 0) || 0,
-    }),
+    }, recoveryPollingTrace, resumeOptions.responseMapping),
   };
 }
 
@@ -463,9 +656,14 @@ export async function resumeRestoredGenerationTasks(tasks = [], options = {}) {
 
 export const __test__ = {
   buildAudioResultPatch,
+  buildGuardedRestoredResultPatch,
   buildImageResultPatch,
+  buildRecoveryPollingTrace,
   buildResultPatch,
   buildVideoResultPatch,
+  buildRestoredGenerationSpec,
   buildRestoredResumeOptions,
+  collectMappedResultPathHits,
   createPollFunction,
+  hasRestoredResultAsset,
 };

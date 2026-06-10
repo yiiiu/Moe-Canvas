@@ -2,6 +2,7 @@ import {
   reconcileRestoredGenerationActiveTasks,
   resumeRestoredGenerationTasks,
 } from './unifiedTaskCenterGenerationRecovery.js';
+import { isAsyncTaskRecordActive, loadAsyncTaskRecords } from './asyncTaskStore.js';
 
 const ACTIVE_STATUSES = new Set(['waiting', 'processing', 'running', 'queued', 'pending', 'polling']);
 const GENERATION_KINDS = new Set(['imageGeneration', 'videoGeneration', 'audioGeneration', 'providerAsyncGeneration']);
@@ -38,9 +39,9 @@ function resolveNodeId(task = {}) {
   return trimString(task.nodeId || task.unifiedTask?.nodeId || recoverySpec.targetNodeId || recoverySpec.sourceNodeId);
 }
 
-function resolveRemoteTaskId(task = {}) {
+function resolvePollingTaskId(task = {}) {
   const recoverySpec = getRecoverySpec(task);
-  return trimString(recoverySpec.taskId || task.remoteTaskId || task.asyncTaskId || task.providerTaskId);
+  return trimString(recoverySpec.taskId || task.pollingTaskId || task.recoveryTaskId || task.asyncTaskId || task.providerTaskId || task.remoteTaskId);
 }
 
 function resolveNodeProvider(node = {}) {
@@ -114,14 +115,77 @@ function buildNodeRecoveryTask(nodeId = '', node = {}) {
   };
 }
 
-function collectNodeRecoveryTasks(store, existingTasks = []) {
+function resolveRecordTaskType(record = {}) {
+  const kind = normalizeLower(record.kind || record.pollingSpec?.taskType || record.pollingSpec?.kind);
+  if (kind.includes('video')) return 'video';
+  if (kind.includes('audio')) return 'audio';
+  if (kind.includes('image')) return 'image-generation';
+  if (kind.includes('text') || kind.includes('chat') || kind.includes('llm')) return 'text';
+  return kind || 'provider_async';
+}
+
+function buildRecordRecoveryTask(record = {}) {
+  if (!isAsyncTaskRecordActive(record)) return null;
+  const taskId = trimString(record.pollingTaskId || record.pollingSpec?.taskId || record.remoteTaskId);
+  const nodeId = trimString(record.nodeId || record.pollingSpec?.targetNodeId || record.pollingSpec?.sourceNodeId);
+  const provider = trimString(record.provider || record.pollingSpec?.provider || record.payload?.provider);
+  if (!taskId || !nodeId || !provider) return null;
+  const taskType = resolveRecordTaskType(record);
+  const startedAt = Number(record.pollingSpec?.startedAt || record.createdAt || record.updatedAt || 0) || 0;
+  const recoverySpec = {
+    ...asObject(record.pollingSpec),
+    kind: trimString(record.pollingSpec?.kind) || 'generation',
+    taskType,
+    provider,
+    adapterType: trimString(record.pollingSpec?.adapterType) || 'modelApi',
+    modelId: trimString(record.modelId || record.pollingSpec?.modelId || record.payload?.model || record.payload?.modelId),
+    sourceNodeId: trimString(record.sourceNodeId || record.pollingSpec?.sourceNodeId),
+    targetNodeId: nodeId,
+    taskId,
+    startedAt,
+    resumable: record.canResume !== false,
+    cancellable: record.canCancel === true,
+    payload: { ...asObject(record.payload), ...asObject(record.pollingSpec?.payload) },
+  };
+  const unifiedKind = taskType === 'image-generation' ? 'image' : taskType;
+  return {
+    taskId: `generation:${nodeId}:${taskId}`,
+    nodeId,
+    kind: `${unifiedKind}Generation`,
+    status: 'processing',
+    provider,
+    model: recoverySpec.modelId,
+    modelId: recoverySpec.modelId,
+    startedAt,
+    createdAt: startedAt || record.createdAt || Date.now(),
+    updatedAt: record.updatedAt || Date.now(),
+    message: record.message || '恢复中',
+    recoverySpec,
+    unifiedTask: {
+      id: `generation:${nodeId}:${taskId}`,
+      kind: unifiedKind,
+      status: 'running',
+      nodeId,
+      provider,
+      model: recoverySpec.modelId,
+      canCancel: false,
+      canRetry: false,
+      canResume: true,
+      createdAt: startedAt || record.createdAt || Date.now(),
+      updatedAt: record.updatedAt || Date.now(),
+    },
+  };
+}
+
+function collectAsyncTaskStoreRecoveryTasks(options = {}, existingTasks = []) {
   const existingKeys = new Set((Array.isArray(existingTasks) ? existingTasks : [])
-    .map((task) => `${resolveNodeId(task)}:${resolveRemoteTaskId(task)}`));
+    .map((task) => `${resolveNodeId(task)}:${resolvePollingTaskId(task)}`));
+  const records = loadAsyncTaskRecords({ ...options, storage: options.asyncTaskStorage || options.storage });
   const tasks = [];
-  for (const [nodeId, node] of Object.entries(getNodes(store))) {
-    const task = buildNodeRecoveryTask(nodeId, asObject(node));
+  for (const record of records) {
+    const task = buildRecordRecoveryTask(record);
     if (!task) continue;
-    const key = `${resolveNodeId(task)}:${resolveRemoteTaskId(task)}`;
+    const key = `${resolveNodeId(task)}:${resolvePollingTaskId(task)}`;
     if (existingKeys.has(key)) continue;
     existingKeys.add(key);
     tasks.push(task);
@@ -129,9 +193,29 @@ function collectNodeRecoveryTasks(store, existingTasks = []) {
   return tasks;
 }
 
-function collectRecoveryTasks(tasks = [], store = null) {
+function collectNodeRecoveryTasks(store, existingTasks = []) {
+  const existingKeys = new Set((Array.isArray(existingTasks) ? existingTasks : [])
+    .map((task) => `${resolveNodeId(task)}:${resolvePollingTaskId(task)}`));
+  const tasks = [];
+  for (const [nodeId, node] of Object.entries(getNodes(store))) {
+    const task = buildNodeRecoveryTask(nodeId, asObject(node));
+    if (!task) continue;
+    const key = `${resolveNodeId(task)}:${resolvePollingTaskId(task)}`;
+    if (existingKeys.has(key)) continue;
+    existingKeys.add(key);
+    tasks.push(task);
+  }
+  return tasks;
+}
+
+function collectRecoveryTasks(tasks = [], store = null, options = {}) {
   const activeTasks = (Array.isArray(tasks) ? tasks : []).filter(isActiveGenerationTask);
-  return [...activeTasks, ...collectNodeRecoveryTasks(store, activeTasks)].filter(isActiveGenerationTask);
+  const asyncStoreTasks = collectAsyncTaskStoreRecoveryTasks(options, activeTasks);
+  return [
+    ...activeTasks,
+    ...asyncStoreTasks,
+    ...collectNodeRecoveryTasks(store, [...activeTasks, ...asyncStoreTasks]),
+  ].filter(isActiveGenerationTask);
 }
 
 function isGenerationTask(task = {}) {
@@ -153,7 +237,7 @@ function isActiveGenerationTask(task = {}) {
 
 function canResumeTask(task = {}) {
   const recoverySpec = getRecoverySpec(task);
-  return Boolean(recoverySpec.taskId && recoverySpec.targetNodeId);
+  return Boolean((recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || task.pollingTaskId || task.asyncTaskId) && recoverySpec.targetNodeId);
 }
 
 function hasTargetNode(task = {}, store) {
@@ -174,7 +258,7 @@ function getResumeRegistry(manager) {
 }
 
 function getResumeKey(task = {}) {
-  return `${trimString(task.taskId)}:${resolveNodeId(task)}:${resolveRemoteTaskId(task)}`;
+  return `${trimString(task.taskId)}:${resolveNodeId(task)}:${resolvePollingTaskId(task)}`;
 }
 
 function pickReadyResumeTasks(tasks = [], store, manager) {
@@ -221,7 +305,7 @@ function subscribeStoreNodes(store, callback) {
 export function coordinateRestoredGenerationRecovery(tasks = [], manager, options = {}) {
   const store = options.store;
   const snapshotTasks = Array.isArray(tasks) ? tasks : [];
-  const initialActiveTasks = collectRecoveryTasks(snapshotTasks, store);
+  const initialActiveTasks = collectRecoveryTasks(snapshotTasks, store, options);
   if (initialActiveTasks.length === 0 && !store) return { activeTasks: [], readyResumeTasks: [] };
 
   const delays = Array.isArray(options.generationRecoveryRetryDelays)
@@ -236,7 +320,7 @@ export function coordinateRestoredGenerationRecovery(tasks = [], manager, option
 
   const run = () => {
     if (stopped) return latestResult;
-    const activeTasks = collectRecoveryTasks(snapshotTasks, store);
+    const activeTasks = collectRecoveryTasks(snapshotTasks, store, options);
     const restorableTasks = resumeEnabled ? activeTasks.filter(canResumeTask) : [];
     if (reconcileEnabled) runActiveReconcile(activeTasks, options);
     const readyResumeTasks = pickReadyResumeTasks(restorableTasks, store, manager);
@@ -271,7 +355,10 @@ export function coordinateRestoredGenerationRecovery(tasks = [], manager, option
 }
 
 export const __test__ = {
+  buildRecordRecoveryTask,
   canResumeTask,
+  collectAsyncTaskStoreRecoveryTasks,
+  collectRecoveryTasks,
   getResumeKey,
   hasTargetNode,
   isActiveGenerationTask,

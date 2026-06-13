@@ -1,5 +1,10 @@
 import { buildAsyncTaskLoadingPatch } from './asyncTaskAdapters.js';
 import { isAsyncTaskRecordActive, loadAsyncTaskRecords } from './asyncTaskStore.js';
+import {
+  hasAsyncTaskLocalRecoveryCredential,
+  resolveAsyncTaskQueryableTaskId,
+  resolveAsyncTaskRecoveryCapability,
+} from './asyncTaskRecoveryCapabilities.js';
 import appStore from './stores/appStore.js';
 import { startPreviewNodeLoading, syncPreviewNodeLoading, isPreviewNodeLoading } from '../modules/previewMode.js';
 
@@ -129,8 +134,21 @@ function getStoreState(store) {
   return asObject(store.state);
 }
 
+function normalizeNodesById(nodes) {
+  if (Array.isArray(nodes)) {
+    return nodes.reduce((map, node) => {
+      const item = asObject(node);
+      const data = asObject(item.data);
+      const nodeId = trimString(item.id || item.nodeId || data.id || data.nodeId);
+      if (nodeId) map[nodeId] = { ...data, ...item, data };
+      return map;
+    }, {});
+  }
+  return asObject(nodes);
+}
+
 function getNodes(store) {
-  return asObject(getStoreState(store).nodes);
+  return normalizeNodesById(getStoreState(store).nodes);
 }
 
 function getNodeData(node = {}) {
@@ -292,7 +310,7 @@ function hasNodeGenerationResult(node = {}) {
 }
 
 function isNodeGenerationSettled(node = {}) {
-  if (node.isGenerating === true) return false;
+  if (hasNodeGenerationResult(node)) return true;
   const statuses = [
     node.jobStatus,
     node.asyncTaskStatus,
@@ -304,25 +322,19 @@ function isNodeGenerationSettled(node = {}) {
 }
 
 function hasRecoverablePollingTaskId(record = {}) {
-  return Boolean(trimString(record.pollingTaskId || record.taskId || record.asyncTaskId || record.pollingSpec?.taskId || record.remoteTaskId));
+  return Boolean(resolveAsyncTaskQueryableTaskId(record));
 }
 
 function requiresPollingTaskIdForRecovery(record = {}) {
-  const provider = normalizeStatusText(record.provider || record.pollingSpec?.provider || record.payload?.provider);
-  const kind = normalizeStatusText(record.kind || record.taskType || record.pollingSpec?.taskType);
-  if (kind.includes('media') || provider === 'localruntime') return false;
-  return record.canResume !== false
-    || kind.includes('image')
-    || kind.includes('video')
-    || kind.includes('audio')
-    || kind.includes('text')
-    || kind.includes('chat')
-    || kind.includes('generation')
-    || kind.includes('provider_async');
+  const capability = resolveAsyncTaskRecoveryCapability(record);
+  return capability.supportsRemotePoll === true;
 }
 
 function isRecoverableAsyncTaskRecord(record = {}) {
-  return !requiresPollingTaskIdForRecovery(record) || hasRecoverablePollingTaskId(record);
+  const capability = resolveAsyncTaskRecoveryCapability(record);
+  if (capability.supportsRemotePoll) return hasRecoverablePollingTaskId(record);
+  if (capability.supportsLocalProxyRecovery) return hasAsyncTaskLocalRecoveryCredential(record);
+  return !requiresPollingTaskIdForRecovery(record);
 }
 
 function collectPrimaryNodeTaskIds(node = {}) {
@@ -336,28 +348,55 @@ function collectPrimaryNodeTaskIds(node = {}) {
   ].map(trimString).filter(Boolean);
 }
 
-export function canRestoreAsyncTaskLoading(record = {}, node = {}) {
+export function canRestoreAsyncTaskLoading(record = {}, node = {}, options = {}) {
   if (!record?.nodeId || !isAsyncTaskRecordActive(record)) return false;
+  const expiresAt = Number(record.expiresAt || 0) || 0;
+  const now = Number(options.now || Date.now()) || Date.now();
+  if (expiresAt && expiresAt <= now) return false;
   if (!isRecoverableAsyncTaskRecord(record)) return false;
   if (!node || typeof node !== 'object') return false;
   const nodeData = getNodeData(node);
-  if (!isSameCanvas(record, nodeData)) return false;
-  if (isNodeGenerationSettled(nodeData)) return false;
-  const runtimeTaskId = trimString(record.runtimeTaskId);
-  const nodeRuntimeTaskId = trimString(nodeData.asyncRuntimeTaskId || nodeData.runtimeTaskId);
-  if (runtimeTaskId && nodeRuntimeTaskId && runtimeTaskId !== nodeRuntimeTaskId) return false;
-  const pollingTaskId = trimString(record.pollingTaskId || record.remoteTaskId || record.pollingSpec?.taskId);
-  const primaryTaskIds = collectPrimaryNodeTaskIds(nodeData);
-  if (!pollingTaskId && primaryTaskIds.length > 0 && !(runtimeTaskId && nodeRuntimeTaskId === runtimeTaskId)) return false;
-  if (pollingTaskId && primaryTaskIds.length > 0 && !primaryTaskIds.includes(pollingTaskId)) return false;
-  const nodeStartedAt = getNodeStartedAt(nodeData);
-  const recordStartedAt = Number(record.createdAt || 0) || 0;
-  if (nodeStartedAt && recordStartedAt && nodeStartedAt > recordStartedAt) {
-    if (pollingTaskId && primaryTaskIds.includes(pollingTaskId)) return true;
-    if (runtimeTaskId && nodeRuntimeTaskId === runtimeTaskId) return true;
-    return false;
+  const capability = resolveAsyncTaskRecoveryCapability(record);
+  const debugNodeSettled = isNodeGenerationSettled(nodeData);
+  let debugDecision = 'continue';
+  let debugResult = false;
+  if (!isSameCanvas(record, nodeData)) {
+    debugDecision = 'canvas-mismatch';
+  } else if (debugNodeSettled) {
+    debugDecision = 'node-settled';
+  } else {
+    const runtimeTaskId = trimString(record.runtimeTaskId);
+    const nodeRuntimeTaskId = trimString(nodeData.asyncRuntimeTaskId || nodeData.runtimeTaskId);
+    if (runtimeTaskId && nodeRuntimeTaskId && runtimeTaskId !== nodeRuntimeTaskId) {
+      debugDecision = 'runtime-mismatch';
+    } else {
+      const pollingTaskId = resolveAsyncTaskQueryableTaskId(record);
+      const primaryTaskIds = collectPrimaryNodeTaskIds(nodeData);
+      if (!pollingTaskId && primaryTaskIds.length > 0 && !(runtimeTaskId && nodeRuntimeTaskId === runtimeTaskId)) {
+        debugDecision = 'primary-task-without-match';
+      } else if (pollingTaskId && primaryTaskIds.length > 0 && !primaryTaskIds.includes(pollingTaskId)) {
+        debugDecision = 'polling-mismatch';
+      } else {
+        const nodeStartedAt = getNodeStartedAt(nodeData);
+        const recordStartedAt = Number(record.createdAt || 0) || 0;
+        if (nodeStartedAt && recordStartedAt && nodeStartedAt > recordStartedAt) {
+          if (pollingTaskId && primaryTaskIds.includes(pollingTaskId)) {
+            debugDecision = 'node-newer-but-polling-match';
+            debugResult = true;
+          } else if (runtimeTaskId && nodeRuntimeTaskId === runtimeTaskId) {
+            debugDecision = 'node-newer-but-runtime-match';
+            debugResult = true;
+          } else {
+            debugDecision = 'node-newer';
+          }
+        } else {
+          debugDecision = 'accepted';
+          debugResult = true;
+        }
+      }
+    }
   }
-  return true;
+  return debugResult;
 }
 
 function cloneNodeWithAsyncTaskPatch(record = {}, node = {}, canvasId = '') {

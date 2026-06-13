@@ -1396,6 +1396,19 @@ def _get_custom_ai_config():
     return CONFIG_ROUTE_SERVICE.get_custom_ai_config()
 
 
+def _get_grsai_proxy_config():
+    cfg = CONFIG_ROUTE_SERVICE._read_public_config()
+    providers = cfg.get("providers", {}) if isinstance(cfg, dict) else {}
+    grsai = providers.get("grsai", {}) if isinstance(providers, dict) else {}
+    if not isinstance(grsai, dict):
+        grsai = {}
+    legacy_api_key = str(cfg.get("apiKey") or cfg.get("apiKeyInput") or "").strip() if isinstance(cfg, dict) else ""
+    return {
+        "apiUrl": str(grsai.get("apiUrl") or cfg.get("apiUrl") or "").strip() if isinstance(cfg, dict) else "",
+        "apiKey": str(grsai.get("apiKey") or legacy_api_key or "").strip(),
+    }
+
+
 def _request_server_port(handler):
     try:
         return int(handler.server.server_address[1])
@@ -1524,6 +1537,144 @@ def _enforce_vip_subscription_gate(handler, payload=None, required_model_id=""):
         return True
     _json_ok(handler, SUBSCRIPTION_GATE_SERVICE.build_subscription_denial_payload(decision))
     return False
+
+
+LOCAL_PROXY_TASK_REGISTRY = {}
+LOCAL_PROXY_TASK_LOCK = threading.Lock()
+LOCAL_PROXY_TASK_TTL_SECONDS = 2 * 60 * 60
+LOCAL_PROXY_TASK_DEBUG = str(os.environ.get("AICANVAS_LOCAL_PROXY_DEBUG", "0")).strip().lower() not in ("", "0", "false", "off")
+
+
+def _local_proxy_debug(event, **fields):
+    if not LOCAL_PROXY_TASK_DEBUG:
+        return
+    try:
+        parts = " ".join(f"{key}={fields[key]!r}" for key in fields)
+        sys.stderr.write(f"[local-proxy] {event} {parts}\n")
+        sys.stderr.flush()
+    except Exception:
+        pass
+
+
+def _local_proxy_task_now_ms():
+    return int(time.time() * 1000)
+
+
+def _normalize_local_proxy_task_key(runtime_task_id="", client_task_id=""):
+    runtime_id = str(runtime_task_id or "").strip()
+    client_id = str(client_task_id or "").strip()
+    return runtime_id or client_id
+
+
+def _local_proxy_task_alias_keys(runtime_task_id="", client_task_id=""):
+    keys = []
+    for value in (runtime_task_id, client_task_id):
+        key = str(value or "").strip()
+        if key and key not in keys:
+            keys.append(key)
+    return keys
+
+
+def _compact_local_proxy_tasks(now=None):
+    current = float(time.time() if now is None else now)
+    expired_keys = []
+    for key, task in list(LOCAL_PROXY_TASK_REGISTRY.items()):
+        try:
+            updated_at_ms = float(task.get("updatedAt") or 0)
+        except Exception:
+            updated_at_ms = 0
+        if updated_at_ms and current - (updated_at_ms / 1000.0) > LOCAL_PROXY_TASK_TTL_SECONDS:
+            expired_keys.append(key)
+    for key in expired_keys:
+        LOCAL_PROXY_TASK_REGISTRY.pop(key, None)
+
+
+def _upsert_local_proxy_task(task_ref=None, **patch):
+    ref = task_ref if isinstance(task_ref, dict) else {}
+    runtime_task_id = str(ref.get("runtimeTaskId") or patch.get("runtimeTaskId") or "").strip()
+    client_task_id = str(ref.get("clientTaskId") or patch.get("clientTaskId") or "").strip()
+    key = _normalize_local_proxy_task_key(runtime_task_id, client_task_id)
+    if not key:
+        return None
+    now_ms = _local_proxy_task_now_ms()
+    with LOCAL_PROXY_TASK_LOCK:
+        _compact_local_proxy_tasks()
+        previous = LOCAL_PROXY_TASK_REGISTRY.get(key, {})
+        next_task = {
+            **previous,
+            "runtimeTaskId": runtime_task_id or previous.get("runtimeTaskId", ""),
+            "clientTaskId": client_task_id or previous.get("clientTaskId", ""),
+            "nodeId": str(ref.get("nodeId") or patch.get("nodeId") or previous.get("nodeId", "") or "").strip(),
+            "canvasId": str(ref.get("canvasId") or patch.get("canvasId") or previous.get("canvasId", "") or "").strip(),
+            "provider": str(ref.get("provider") or patch.get("provider") or previous.get("provider", "") or "").strip(),
+            "kind": str(ref.get("kind") or patch.get("kind") or previous.get("kind", "") or "").strip(),
+            "status": str(patch.get("status") or previous.get("status") or "running").strip() or "running",
+            "createdAt": previous.get("createdAt") or now_ms,
+            "updatedAt": now_ms,
+        }
+        for field in ("result", "error", "httpStatus", "contentType", "remoteResultId"):
+            if field in patch:
+                next_task[field] = patch.get(field)
+        for alias_key in _local_proxy_task_alias_keys(runtime_task_id, client_task_id):
+            LOCAL_PROXY_TASK_REGISTRY[alias_key] = next_task
+        _local_proxy_debug(
+            "registry.upsert",
+            status=next_task.get("status"),
+            keys=_local_proxy_task_alias_keys(runtime_task_id, client_task_id),
+            node=next_task.get("nodeId"),
+            provider=next_task.get("provider"),
+        )
+        return dict(next_task)
+
+
+def _get_local_proxy_task(runtime_task_id="", client_task_id=""):
+    key = _normalize_local_proxy_task_key(runtime_task_id, client_task_id)
+    if not key:
+        return {"status": "missing", "reason": "missing_local_task_id"}
+    with LOCAL_PROXY_TASK_LOCK:
+        _compact_local_proxy_tasks()
+        task = LOCAL_PROXY_TASK_REGISTRY.get(key)
+        if not task:
+            return {"status": "missing", "reason": "request_lost"}
+        return dict(task)
+
+
+def _get_local_proxy_task_from_request(handler):
+    parsed = urllib.parse.urlparse(str(getattr(handler, "path", "") or ""))
+    query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True, max_num_fields=20)
+    runtime_task_id = query.get("runtimeTaskId", [""])[0]
+    client_task_id = query.get("clientTaskId", [""])[0]
+    result = _get_local_proxy_task(runtime_task_id, client_task_id)
+    _local_proxy_debug(
+        "query.local-task",
+        runtimeTaskId=runtime_task_id,
+        clientTaskId=client_task_id,
+        hit_status=result.get("status"),
+        reason=result.get("reason", ""),
+        registry_size=len(LOCAL_PROXY_TASK_REGISTRY),
+    )
+    return result
+
+
+def _build_image_proxy_upstream_payload(payload):
+    data = dict(payload) if isinstance(payload, dict) else {}
+    data.pop("apiUrl", None)
+    data.pop("apiKey", None)
+    local_recovery_payload = {
+        "runtimeTaskId": str(data.pop("runtimeTaskId", "") or "").strip(),
+        "clientTaskId": str(data.pop("clientTaskId", "") or "").strip(),
+        "nodeId": str(data.pop("nodeId", "") or "").strip(),
+        "canvasId": str(data.pop("canvasId", "") or "").strip(),
+        "provider": str(data.pop("provider", "") or "").strip(),
+        "kind": str(data.pop("kind", "") or "").strip(),
+    }
+    for key in SUBSCRIPTION_AUTHORIZATION_ID_KEYS:
+        data.pop(key, None)
+    if str(local_recovery_payload.get("provider") or "").strip().lower() == "grsai":
+        data["webHook"] = "-1"
+        data["shutProgress"] = False
+        data.pop("replyType", None)
+    return data, local_recovery_payload
 
 
 def _json_ok(handler, data):
@@ -2587,6 +2738,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not _enforce_local_api_access(self, path):
             return
 
+        if path == "/api/v2/proxy/local-task":
+            _json_ok(self, _get_local_proxy_task_from_request(self))
+            return
+
         if HTTP_ROUTE_DISPATCHER.handle_get(self, path):
             return
 
@@ -2961,8 +3116,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     return u
                 except ImportError:
                     import uuid
-                    import urllib.request
-                    import urllib.error
                     boundary = "----WebKitFormBoundary" + uuid.uuid4().hex
                     head = (
                         f"--{boundary}\r\n"
@@ -3076,7 +3229,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(resp.content)
                 except ImportError:
-                    import urllib.request, urllib.error
                     req_body = json.dumps(payload).encode("utf-8")
                     req = urllib.request.Request(api_url, data=req_body, method="POST")
                     req.add_header("Authorization", f"Bearer {api_key}")
@@ -3107,13 +3259,32 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 data = json.loads(body)
                 api_url = data.pop("apiUrl", "").strip().rstrip("/")
                 api_key = data.pop("apiKey", "").strip()
+                provider_hint = str(data.get("provider", "") or "").strip().lower()
+                if provider_hint == "grsai" and (not api_url or not api_key):
+                    grsai_proxy_config = _get_grsai_proxy_config()
+                    api_url = api_url or str(grsai_proxy_config.get("apiUrl") or "").strip().rstrip("/")
+                    api_key = api_key or str(grsai_proxy_config.get("apiKey") or "").strip()
             except json.JSONDecodeError:
                 _json_err(self, 400, "Invalid JSON"); return
             if not api_url or not api_key:
                 _json_err(self, 400, "Missing apiUrl or apiKey"); return
             local_authorization_payload = dict(data) if isinstance(data, dict) else {}
-            for key in SUBSCRIPTION_AUTHORIZATION_ID_KEYS:
-                data.pop(key, None)
+            data, local_recovery_payload = _build_image_proxy_upstream_payload(data)
+            if local_recovery_payload.get("runtimeTaskId") or local_recovery_payload.get("clientTaskId"):
+                _local_proxy_debug(
+                    "image.register",
+                    runtimeTaskId=local_recovery_payload.get("runtimeTaskId"),
+                    clientTaskId=local_recovery_payload.get("clientTaskId"),
+                    provider=local_recovery_payload.get("provider"),
+                    node=local_recovery_payload.get("nodeId"),
+                )
+                _upsert_local_proxy_task(local_recovery_payload, status="running")
+            else:
+                _local_proxy_debug(
+                    "image.register.skipped",
+                    provider=local_recovery_payload.get("provider"),
+                    body_keys=sorted(local_authorization_payload.keys()),
+                )
             def _extract_task_id_from_text(raw_text):
                 text = str(raw_text or "")
                 if not text:
@@ -3226,6 +3397,46 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 return True
                     return False
                 return _walk(payload)
+            def _cache_local_proxy_result(status, *, result=None, error="", http_status=0, content_type=""):
+                if not (local_recovery_payload.get("runtimeTaskId") or local_recovery_payload.get("clientTaskId")):
+                    _local_proxy_debug("image.cache.skipped", status=status, reason="no_local_task_id")
+                    return None
+                patch = {
+                    "status": status,
+                    "httpStatus": int(http_status or 0),
+                    "contentType": str(content_type or ""),
+                }
+                if result is not None:
+                    patch["result"] = result
+                if error:
+                    patch["error"] = str(error)
+                _local_proxy_debug(
+                    "image.cache",
+                    status=status,
+                    http=int(http_status or 0),
+                    has_result=result is not None,
+                    error=str(error or "")[:80],
+                )
+                return _upsert_local_proxy_task(local_recovery_payload, **patch)
+            def _cache_local_proxy_success_bytes(content, status_code=200, content_type="application/json; charset=utf-8"):
+                raw = bytes(content or b"")
+                result = None
+                try:
+                    result = json.loads(raw.decode("utf-8", "ignore") or "{}")
+                except Exception:
+                    result = {"rawText": raw.decode("utf-8", "ignore")}
+                if int(status_code or 0) >= 400:
+                    _cache_local_proxy_result(
+                        "failed",
+                        result=result,
+                        error=f"Proxy upstream returned HTTP {int(status_code or 0)}",
+                        http_status=status_code,
+                        content_type=content_type,
+                    )
+                    return
+                _cache_local_proxy_result("success", result=result, http_status=status_code, content_type=content_type)
+            def _cache_local_proxy_failure(error, status_code=500):
+                _cache_local_proxy_result("failed", error=str(error or "Proxy request failed"), http_status=status_code)
             def _send_image_proxy_task_id_response(task_id, source="grsai-submit"):
                 value = str(task_id or "").strip()
                 payload = {
@@ -3240,6 +3451,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         "taskId": value,
                     },
                 }
+                _cache_local_proxy_result(
+                    "success",
+                    result=payload,
+                    http_status=200,
+                    content_type="application/json; charset=utf-8",
+                )
                 raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -3306,6 +3523,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             except Exception:
                                 response_json = None
                             if _has_grsai_direct_image_result(response_json):
+                                _cache_local_proxy_success_bytes(
+                                    content,
+                                    status_code=resp.status_code,
+                                    content_type=content_type or "application/json; charset=utf-8",
+                                )
                                 self.send_response(resp.status_code)
                                 self.send_header("Content-Type", content_type or "application/json; charset=utf-8")
                                 _send_cors_origin_header(self)
@@ -3320,6 +3542,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             if found_task_id:
                                 _send_image_proxy_task_id_response(found_task_id, "grsai-submit")
                                 return
+                            _cache_local_proxy_success_bytes(
+                                content,
+                                status_code=resp.status_code,
+                                content_type=content_type or "application/json; charset=utf-8",
+                            )
                             self.send_response(resp.status_code)
                             self.send_header("Content-Type", content_type or "application/json; charset=utf-8")
                             _send_cors_origin_header(self)
@@ -3377,6 +3604,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                     return
 
                         full_content = b"".join(chunks)
+                        _cache_local_proxy_success_bytes(
+                            full_content,
+                            status_code=resp.status_code,
+                            content_type=str(resp.headers.get("Content-Type", "") or "application/json; charset=utf-8"),
+                        )
                         self.send_response(resp.status_code)
                         self.send_header("Content-Type", "application/json; charset=utf-8")
                         _send_cors_origin_header(self)
@@ -3385,12 +3617,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         return
                     except _req.exceptions.Timeout as e:
                         if is_grsai_submit_endpoint:
+                            _cache_local_proxy_failure(
+                                "GRSAI submit endpoint did not return task_id before local proxy timeout; provider=grsai endpoint=/v1/api/generate reason=submit_timeout_before_task_id timeoutSeconds=%s" % grsai_submit_timeout_seconds,
+                                504,
+                            )
                             _json_err(
                                 self,
                                 504,
                                 "GRSAI submit endpoint did not return task_id before local proxy timeout; provider=grsai endpoint=/v1/api/generate reason=submit_timeout_before_task_id timeoutSeconds=%s" % grsai_submit_timeout_seconds,
                             )
                             return
+                        _cache_local_proxy_failure(repr(e), 504)
                         raise
                     except _req.exceptions.ProxyError:
                         if attempt_idx == len(retry_delays) - 1:
@@ -3406,7 +3643,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             continue
                         raise
             except ImportError:
-                import urllib.request, urllib.error
                 req_body = json.dumps(data).encode("utf-8")
                 req = urllib.request.Request(api_url, data=req_body, headers=headers, method="POST")
                 retry_delays = (0.0, 0.3, 0.9)
@@ -3433,6 +3669,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             except Exception:
                                 response_json = None
                             if _has_grsai_direct_image_result(response_json):
+                                _cache_local_proxy_success_bytes(
+                                    resp_data,
+                                    status_code=status_code,
+                                    content_type=content_type or "application/json; charset=utf-8",
+                                )
                                 self.send_response(status_code)
                                 self.send_header("Content-Type", content_type or "application/json; charset=utf-8")
                                 _send_cors_origin_header(self)
@@ -3447,6 +3688,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             if found_task_id:
                                 _send_image_proxy_task_id_response(found_task_id, "grsai-submit")
                                 return
+                        _cache_local_proxy_success_bytes(
+                            resp_data,
+                            status_code=status_code,
+                            content_type=content_type or "application/json; charset=utf-8",
+                        )
                         self.send_response(status_code)
                         self.send_header("Content-Type", content_type or "application/json; charset=utf-8")
                         _send_cors_origin_header(self)
@@ -3454,20 +3700,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         self.wfile.write(resp_data)
                         return
                     except urllib.error.HTTPError as e:
+                        error_body = e.read()
+                        _cache_local_proxy_success_bytes(
+                            error_body,
+                            status_code=e.code,
+                            content_type="application/json; charset=utf-8",
+                        )
                         self.send_response(e.code)
                         self.send_header("Content-Type", "application/json; charset=utf-8")
                         _send_cors_origin_header(self)
                         self.end_headers()
-                        self.wfile.write(e.read())
+                        self.wfile.write(error_body)
                         return
                     except TimeoutError as e:
                         if is_grsai_submit_endpoint:
+                            _cache_local_proxy_failure(
+                                "GRSAI submit endpoint did not return task_id before local proxy timeout; provider=grsai endpoint=/v1/api/generate reason=submit_timeout_before_task_id timeoutSeconds=%s" % grsai_submit_timeout_seconds,
+                                504,
+                            )
                             _json_err(
                                 self,
                                 504,
                                 "GRSAI submit endpoint did not return task_id before local proxy timeout; provider=grsai endpoint=/v1/api/generate reason=submit_timeout_before_task_id timeoutSeconds=%s" % grsai_submit_timeout_seconds,
                             )
                             return
+                        _cache_local_proxy_failure(repr(e), 504)
                         raise
                     except urllib.error.URLError as e:
                         msg = repr(e)
@@ -3480,6 +3737,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             continue
                         raise
             except Exception as e:
+                _cache_local_proxy_failure(repr(e), 500)
                 _json_err(self, 500, f"Proxy error: {repr(e)}")
             return
 
@@ -3579,7 +3837,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(resp_text.encode('utf-8'))
             except ImportError:
                 # Fallback to urllib if requests is not installed
-                import urllib.request
                 req_body = json.dumps(data).encode("utf-8")
                 req = urllib.request.Request(endpoint, data=req_body, headers=headers, method="POST")
                 try:
@@ -3642,7 +3899,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # 若未指定完整端点，则默认拼接 /chat/completions
             endpoint = api_url if api_url.endswith("/chat/completions") else f"{api_url}/chat/completions"
             
-            import urllib.request
             req_body = json.dumps({
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}]

@@ -1,5 +1,6 @@
 import { mergeGrsaiImageResponseMapping } from '../manifests/image/modelApi/grsaiImageResultMapping.js';
 import { buildImageGenerationResultPatch, normalizeImageGenerationResult } from '../components/aigenImage/imageGenerationResultRenderer.js';
+import { localPathToUrl, normalizeLocalPath } from '../utils/localMediaPath.js';
 import {
   resumeAsyncImageTask,
   resumeDreaminaImageTask,
@@ -13,19 +14,34 @@ import {
 import { resumeRunningHubAudioTask } from '../../api/aiAudioApi.js';
 import appStore from './stores/appStore.js';
 import {
-  buildGenerationCancelledPatch,
-  buildGenerationFailurePatch,
-  buildGenerationSuccessPatch,
-  isGenerationTaskCancelledStatus,
-  isGenerationTaskFailureStatus,
   isGenerationTaskTerminalStatus,
 } from './generationTaskLifecycle.js';
 import { resumeTask as resumeGenerationTask } from './generationTaskRuntimeTaskCenterBridge.js';
+import {
+  resolveAsyncTaskLocalRecoveryTaskId,
+  resolveAsyncTaskRecoveryCapability,
+} from './asyncTaskRecoveryCapabilities.js';
+import {
+  buildGenerationNodeStateProjection,
+} from './generationTaskNodeStateProjection.js';
 
 const ACTIVE_TASK_CENTER_STATUSES = new Set(['waiting', 'processing', 'running', 'queued', 'pending', 'polling']);
 
 function asObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function parseJsonObject(value) {
+  if (value && typeof value === 'object') return asObject(value);
+  if (typeof value !== 'string') return {};
+  const text = value.trim();
+  if (!text || !/^[{[]/.test(text)) return {};
+  try {
+    const parsed = JSON.parse(text);
+    return asObject(parsed);
+  } catch {
+    return {};
+  }
 }
 
 function trimString(value) {
@@ -34,6 +50,29 @@ function trimString(value) {
 
 function normalizeLower(value) {
   return trimString(value).toLowerCase();
+}
+
+function stripLocalProxyRemotePollingOptions(value = {}) {
+  const output = { ...asObject(value) };
+  delete output.taskPolling;
+  delete output.pollingSpec;
+  delete output.pollUrlTemplate;
+  delete output.pollUrl;
+  delete output.pollMethod;
+  delete output.pollingTaskId;
+  delete output.queryableTaskId;
+  delete output.recoveryTaskId;
+  return output;
+}
+
+function isLocalProxyRecoverySpec(recoverySpec = {}, task = {}) {
+  const capability = resolveAsyncTaskRecoveryCapability({
+    ...asObject(task),
+    ...asObject(recoverySpec),
+    pollingSpec: recoverySpec,
+    payload: recoverySpec.payload,
+  });
+  return capability.recoveryMode === 'local_proxy_poll' || capability.supportsLocalProxyRecovery === true;
 }
 
 function resolveRecoverySpec(task = {}) {
@@ -48,23 +87,110 @@ function resolveTaskType(spec = {}, task = {}) {
   return direct || 'provider_async';
 }
 
+function firstTextValue(...values) {
+  for (const value of values) {
+    const text = trimString(value);
+    if (text) return text;
+  }
+  return '';
+}
+
+function firstArrayValue(...values) {
+  for (const value of values) {
+    if (Array.isArray(value) && value.length) return value;
+  }
+  return null;
+}
+
+function firstUrlFromResultItems(...values) {
+  const fields = ['imageUrl', 'image_url', 'outputUrl', 'output_url', 'url', 'sourceUrl', 'thumbUrl'];
+  for (const value of values) {
+    const items = Array.isArray(value) ? value : [];
+    for (const item of items) {
+      if (typeof item === 'string') {
+        const url = trimString(item);
+        if (url) return url;
+        continue;
+      }
+      const object = asObject(item);
+      for (const field of fields) {
+        const url = trimString(object[field]);
+        if (url) return url;
+      }
+    }
+  }
+  return '';
+}
+
 function buildVideoResultPatch(result = {}) {
   const value = asObject(result);
+  const nested = asObject(value.result);
+  const output = asObject(value.output);
+  const data = asObject(value.data);
+  const videoUrl = firstTextValue(value.videoUrl, value.outputUrl, value.url, nested.videoUrl, nested.outputUrl, nested.url, output.videoUrl, output.outputUrl, output.url, data.videoUrl, data.outputUrl, data.url);
+  const videos = firstArrayValue(value.videos, nested.videos, output.videos, data.videos);
   return {
-    ...(value.videoUrl ? { videoUrl: value.videoUrl } : {}),
-    ...(Array.isArray(value.videos) ? { videos: value.videos } : {}),
-    ...(value.thumbUrl ? { thumbUrl: value.thumbUrl } : {}),
-    ...(value.localPath ? { localPath: value.localPath } : {}),
-    ...(value.displayLocalPath ? { displayLocalPath: value.displayLocalPath } : {}),
-    ...(value.posterLocalPath ? { posterLocalPath: value.posterLocalPath } : {}),
-    ...(value.sourceUrl ? { sourceUrl: value.sourceUrl } : {}),
+    ...(videoUrl ? { videoUrl } : {}),
+    ...(videos ? { videos } : {}),
+    ...(firstTextValue(value.thumbUrl, nested.thumbUrl, output.thumbUrl, data.thumbUrl) ? { thumbUrl: firstTextValue(value.thumbUrl, nested.thumbUrl, output.thumbUrl, data.thumbUrl) } : {}),
+    ...(firstTextValue(value.localPath, nested.localPath, output.localPath, data.localPath) ? { localPath: firstTextValue(value.localPath, nested.localPath, output.localPath, data.localPath) } : {}),
+    ...(firstTextValue(value.displayLocalPath, nested.displayLocalPath, output.displayLocalPath, data.displayLocalPath) ? { displayLocalPath: firstTextValue(value.displayLocalPath, nested.displayLocalPath, output.displayLocalPath, data.displayLocalPath) } : {}),
+    ...(firstTextValue(value.posterLocalPath, nested.posterLocalPath, output.posterLocalPath, data.posterLocalPath) ? { posterLocalPath: firstTextValue(value.posterLocalPath, nested.posterLocalPath, output.posterLocalPath, data.posterLocalPath) } : {}),
+    ...(firstTextValue(value.sourceUrl, nested.sourceUrl, output.sourceUrl, data.sourceUrl) ? { sourceUrl: firstTextValue(value.sourceUrl, nested.sourceUrl, output.sourceUrl, data.sourceUrl) } : {}),
     ...(value.videoProxyStatus ? { videoProxyStatus: value.videoProxyStatus } : {}),
     ...(value.saveError ? { saveError: value.saveError } : {}),
   };
 }
 
+function collectResultEnvelopeObjects(result = {}) {
+  const value = asObject(result);
+  const response = asObject(value.response);
+  const body = parseJsonObject(value.body || response.body);
+  const candidates = [
+    value,
+    asObject(value.result),
+    asObject(value.output),
+    asObject(value.data),
+    response,
+    asObject(response.result),
+    asObject(response.output),
+    asObject(response.data),
+    body,
+    asObject(body.result),
+    asObject(body.output),
+    asObject(body.data),
+  ];
+  return candidates.filter((item, index) => item && Object.keys(item).length && candidates.indexOf(item) === index);
+}
+
 function buildImageResultPatch(result = {}, options = {}) {
-  const normalized = normalizeImageGenerationResult(result);
+  const value = asObject(result);
+  const candidates = collectResultEnvelopeObjects(value);
+  const resultCollections = candidates.flatMap((item) => [
+    item.results,
+    item.images,
+    item.data,
+    item.urls,
+    item.imageUrls,
+    item.image_urls,
+  ]);
+  const resultsUrl = firstUrlFromResultItems(...resultCollections);
+  const imageUrl = firstTextValue(...candidates.flatMap((item) => [
+    item.imageUrl,
+    item.image_url,
+    item.outputUrl,
+    item.output_url,
+    item.url,
+    item.sourceUrl,
+    item.resultUrl,
+    item.result_url,
+  ]), resultsUrl);
+  const images = firstArrayValue(...resultCollections);
+  const normalized = normalizeImageGenerationResult({
+    ...value,
+    ...(imageUrl ? { imageUrl } : {}),
+    ...(images ? { images } : {}),
+  });
   return buildImageGenerationResultPatch(normalized, {
     startedAt: Number(options.startedAt || 0) || 0,
     duration: options.duration ?? null,
@@ -73,13 +199,27 @@ function buildImageResultPatch(result = {}, options = {}) {
 
 function buildAudioResultPatch(result = {}) {
   const value = asObject(result);
+  const nested = asObject(value.result);
+  const output = asObject(value.output);
+  const data = asObject(value.data);
+  const audioUrl = firstTextValue(value.audioUrl, value.outputUrl, value.url, nested.audioUrl, nested.outputUrl, nested.url, output.audioUrl, output.outputUrl, output.url, data.audioUrl, data.outputUrl, data.url);
+  const audios = firstArrayValue(value.audios, nested.audios, output.audios, data.audios);
   return {
-    ...(value.audioUrl ? { audioUrl: value.audioUrl, src: value.audioUrl } : {}),
-    ...(Array.isArray(value.audios) ? { audios: value.audios } : {}),
-    ...(value.vocalsAudioUrl ? { vocalsAudioUrl: value.vocalsAudioUrl } : {}),
-    ...(value.backgroundAudioUrl ? { backgroundAudioUrl: value.backgroundAudioUrl } : {}),
-    ...(value.localPath ? { localPath: value.localPath } : {}),
+    ...(audioUrl ? { audioUrl, src: audioUrl } : {}),
+    ...(audios ? { audios } : {}),
+    ...(firstTextValue(value.vocalsAudioUrl, nested.vocalsAudioUrl, output.vocalsAudioUrl, data.vocalsAudioUrl) ? { vocalsAudioUrl: firstTextValue(value.vocalsAudioUrl, nested.vocalsAudioUrl, output.vocalsAudioUrl, data.vocalsAudioUrl) } : {}),
+    ...(firstTextValue(value.backgroundAudioUrl, nested.backgroundAudioUrl, output.backgroundAudioUrl, data.backgroundAudioUrl) ? { backgroundAudioUrl: firstTextValue(value.backgroundAudioUrl, nested.backgroundAudioUrl, output.backgroundAudioUrl, data.backgroundAudioUrl) } : {}),
+    ...(firstTextValue(value.localPath, nested.localPath, output.localPath, data.localPath) ? { localPath: firstTextValue(value.localPath, nested.localPath, output.localPath, data.localPath) } : {}),
   };
+}
+
+function buildTextResultPatch(result = {}) {
+  const value = asObject(result);
+  const nested = asObject(value.result);
+  const output = asObject(value.output);
+  const data = asObject(value.data);
+  const text = firstTextValue(value.text, value.content, nested.text, nested.content, output.text, output.content, data.text, data.content);
+  return text ? { text, content: text } : {};
 }
 
 function readPathValue(source = {}, path = '') {
@@ -142,6 +282,9 @@ function collectExplicitResultHits(taskType = '', patch = {}) {
     add('src', patch.src);
     add('localPath', patch.localPath);
     add('audios', patch.audios);
+  } else if (taskType === 'text') {
+    add('text', patch.text);
+    add('content', patch.content);
   }
   return hits;
 }
@@ -231,13 +374,62 @@ function buildPatchFromMappedValue(taskType = '', value, context = {}) {
   return asObject(value);
 }
 
+function normalizeRestoredImagePatchForCanvas(patch = {}) {
+  const output = { ...asObject(patch) };
+  const normalizeDisplayUrl = (value) => {
+    const text = trimString(value);
+    if (!text) return '';
+    if (/^https?:\/\//i.test(text) || text.startsWith('/')) return text;
+    const localPath = normalizeLocalPath(text);
+    return localPath ? localPathToUrl(localPath) : text;
+  };
+  const normalizeItem = (item) => {
+    if (!item || typeof item !== 'object') return item;
+    const next = { ...item };
+    const displayUrl = normalizeDisplayUrl(next.imageUrl || next.url || next.sourceUrl || next.outputUrl);
+    if (displayUrl) {
+      next.imageUrl = displayUrl;
+      next.url = normalizeDisplayUrl(next.url) || displayUrl;
+      next.sourceUrl = normalizeDisplayUrl(next.sourceUrl) || displayUrl;
+      next.thumbUrl = normalizeDisplayUrl(next.thumbUrl) || displayUrl;
+    }
+    return next;
+  };
+  const imageUrl = normalizeDisplayUrl(output.imageUrl || output.url || output.sourceUrl || output.outputUrl);
+  if (imageUrl) {
+    output.imageUrl = imageUrl;
+    output.sourceUrl = normalizeDisplayUrl(output.sourceUrl) || imageUrl;
+    output.thumbUrl = normalizeDisplayUrl(output.thumbUrl) || imageUrl;
+  }
+  if (Array.isArray(output.images)) output.images = output.images.map(normalizeItem);
+  if (!trimString(output.localPath)) {
+    const localPath = normalizeLocalPath(patch.imageUrl || patch.sourceUrl || patch.url || patch.outputUrl || output.images?.[0]);
+    if (localPath) output.localPath = localPath;
+  }
+  return output;
+}
+
+function buildRestoredTaskTerminalAsyncPatch(taskType = '') {
+  if (taskType !== 'image-generation') return {};
+  return {
+    generationStartTime: null,
+    asyncTaskStatus: 'success',
+    asyncTaskRecovering: false,
+    rhTaskRecovering: false,
+    dreaminaTaskRecovering: false,
+  };
+}
+
 function buildGuardedRestoredResultPatch(taskType = '', result = {}, context = {}, trace = {}, responseMapping = {}) {
   const resultPathHits = collectMappedResultPathHits(result, responseMapping);
   const mappedPatch = resultPathHits.length
     ? buildPatchFromMappedValue(taskType, firstMappedResultValue(result, responseMapping), context)
     : {};
   const rawPatch = buildResultPatch(taskType, result, context);
-  const patch = hasRestoredResultAsset(taskType, mappedPatch) ? mappedPatch : rawPatch;
+  const selectedPatch = hasRestoredResultAsset(taskType, mappedPatch) ? mappedPatch : rawPatch;
+  const patch = taskType === 'image-generation'
+    ? normalizeRestoredImagePatchForCanvas(selectedPatch)
+    : selectedPatch;
   const explicitHits = collectExplicitResultHits(taskType, patch);
   const statusValue = resolveStatusValue(result);
   markRecoveryPollingTrace(trace, {
@@ -252,77 +444,148 @@ function buildGuardedRestoredResultPatch(taskType = '', result = {}, context = {
     markRecoveryPollingTrace(trace, { failureReason: reason });
     throw new Error('远端任务状态查询未返回可用结果，不能作为生成结果回填');
   }
-  return patch;
+  return {
+    ...patch,
+    ...buildRestoredTaskTerminalAsyncPatch(taskType),
+  };
 }
 
 function buildResultPatch(taskType, result, context = {}) {
   if (taskType === 'video') return buildVideoResultPatch(result);
   if (taskType === 'image-generation') return buildImageResultPatch(result, context);
   if (taskType === 'audio') return buildAudioResultPatch(result);
+  if (taskType === 'text') return buildTextResultPatch(result);
   return asObject(result);
+}
+
+function resolveRecoveryMode(recoverySpec = {}, task = {}) {
+  const capability = resolveAsyncTaskRecoveryCapability({
+    ...asObject(task),
+    ...asObject(recoverySpec),
+    pollingSpec: recoverySpec,
+    payload: recoverySpec.payload,
+  });
+  return trimString(capability.recoveryMode || recoverySpec.recoveryMode || task.recoveryMode);
+}
+
+function resolveLocalProxyTaskId(recoverySpec = {}, task = {}) {
+  return resolveAsyncTaskLocalRecoveryTaskId({
+    ...asObject(task),
+    ...asObject(recoverySpec),
+    recoverySpec,
+    pollingSpec: recoverySpec,
+    payload: recoverySpec.payload,
+  });
+}
+
+function buildLocalProxyTaskUrl(recoverySpec = {}, task = {}) {
+  const localRecoveryTaskId = resolveLocalProxyTaskId(recoverySpec, task);
+  const runtimeTaskId = trimString(recoverySpec.runtimeTaskId || task.runtimeTaskId || localRecoveryTaskId);
+  const clientTaskId = trimString(recoverySpec.clientTaskId || task.clientTaskId);
+  const params = new URLSearchParams();
+  if (runtimeTaskId) params.set('runtimeTaskId', runtimeTaskId);
+  if (clientTaskId) params.set('clientTaskId', clientTaskId);
+  return `/api/v2/proxy/local-task?${params.toString()}`;
+}
+
+const DEFAULT_LOCAL_PROXY_MISSING_GRACE_MS = 60_000;
+
+function normalizeLocalProxyStatus(value = '') {
+  const status = normalizeLower(value);
+  if (['success', 'succeeded', 'complete', 'completed', 'done', 'finished'].includes(status)) return 'success';
+  if (['failed', 'fail', 'failure', 'errored', 'error'].includes(status)) return 'failed';
+  if (['missing', 'not_found', 'not-found', 'expired', 'interrupted', 'request_lost'].includes(status)) return 'missing';
+  if (['running', 'processing', 'polling', 'pending', 'queued', 'submitted', 'waiting'].includes(status)) return 'running';
+  return status || 'missing';
+}
+
+async function fetchLocalProxyTaskStatus(recoverySpec = {}, task = {}, context = {}) {
+  const fetcher = context.localProxyTaskFetcher || recoverySpec.localProxyTaskFetcher || globalThis.fetch;
+  if (typeof fetcher !== 'function') throw new Error('本地代理恢复接口不可用');
+  const url = buildLocalProxyTaskUrl(recoverySpec, task);
+  const response = await fetcher(url, { method: 'GET', signal: context.signal });
+  if (response && typeof response.json === 'function') return response.json();
+  return response;
+}
+
+function resolveLocalProxyMissingGraceMs(recoverySpec = {}, task = {}, context = {}) {
+  const value = Number(context.localProxyMissingGraceMs
+    ?? recoverySpec.localProxyMissingGraceMs
+    ?? task.localProxyMissingGraceMs
+    ?? DEFAULT_LOCAL_PROXY_MISSING_GRACE_MS);
+  return Number.isFinite(value) ? Math.max(0, value) : DEFAULT_LOCAL_PROXY_MISSING_GRACE_MS;
+}
+
+function resolveLocalProxyNowMs(context = {}) {
+  const nowValue = typeof context.now === 'function' ? context.now() : context.now;
+  return Number(nowValue || Date.now()) || Date.now();
+}
+
+function createLocalProxyPollFunction(recoverySpec = {}, task = {}) {
+  let missingFirstSeenAt = 0;
+  return async (context = {}) => {
+    const payload = await fetchLocalProxyTaskStatus(recoverySpec, task, context);
+    const status = normalizeLocalProxyStatus(payload?.status);
+    if (status === 'running') {
+      return {
+        pending: true,
+        status: 'running',
+        message: payload?.message || '生成仍在本地代理处理中',
+        localProxyTask: payload,
+      };
+    }
+    if (status === 'success') return asObject(payload?.result || payload);
+    const reason = trimString(payload?.reason || payload?.error || payload?.message || status || 'request_lost');
+    if (status === 'missing' && reason !== 'missing_local_task_id') {
+      const now = resolveLocalProxyNowMs(context);
+      if (!missingFirstSeenAt) missingFirstSeenAt = now;
+      const ageMs = Math.max(0, now - missingFirstSeenAt);
+      const graceMs = resolveLocalProxyMissingGraceMs(recoverySpec, task, context);
+      if (ageMs <= graceMs) {
+        return {
+          pending: true,
+          status: 'running',
+          message: payload?.message || '本地代理任务状态暂未登记，继续等待结果',
+          localProxyTask: payload,
+          localProxyMissing: true,
+          localProxyMissingReason: reason,
+        };
+      }
+    }
+    const error = new Error(`本地代理任务不可恢复：${reason}`);
+    error.localProxyStatus = status;
+    error.localProxyReason = reason;
+    throw error;
+  };
 }
 
 function hasRecoverablePollingTaskId(task = {}) {
   const recoverySpec = resolveRecoverySpec(task);
-  return Boolean(trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || task.pollingTaskId || task.asyncTaskId));
+  return Boolean(trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || recoverySpec.queryableTaskId || task.queryableTaskId || task.pollingTaskId || task.asyncTaskId));
+}
+
+function hasRecoverableLocalProxyTaskId(task = {}) {
+  const recoverySpec = resolveRecoverySpec(task);
+  return Boolean(resolveLocalProxyTaskId(recoverySpec, task));
 }
 
 function requiresPollingTaskIdForRecovery(task = {}) {
   const recoverySpec = resolveRecoverySpec(task);
+  const mode = resolveRecoveryMode(recoverySpec, task);
+  if (mode === 'local_proxy_poll') return false;
   const taskType = resolveTaskType(recoverySpec, task);
   return ['image-generation', 'video', 'audio', 'text', 'provider_async'].includes(taskType) || taskType.includes('generation');
 }
 
 function canResumeRestoredTask(task = {}) {
+  const recoverySpec = resolveRecoverySpec(task);
+  const mode = resolveRecoveryMode(recoverySpec, task);
+  if (mode === 'local_proxy_poll') return hasRecoverableLocalProxyTaskId(task);
   return !requiresPollingTaskIdForRecovery(task) || hasRecoverablePollingTaskId(task);
 }
 
 function buildGenerationLoadingPatch(task = {}) {
-  const recoverySpec = resolveRecoverySpec(task);
-  const taskType = resolveTaskType(recoverySpec, task);
-  const provider = normalizeLower(recoverySpec.provider || recoverySpec.payload?.provider);
-  const taskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || task.pollingTaskId || task.asyncTaskId);
-  const startedAt = getTaskAttemptTime(task) || Date.now();
-  const basePatch = {
-    isGenerating: true,
-    jobStatus: 'loading',
-    jobError: null,
-    generationStartTime: startedAt,
-  };
-
-  if (taskType === 'image-generation') {
-    if (provider === 'runninghub' || provider === 'runninghubwf') {
-      return {
-        ...basePatch,
-        rhTaskId: taskId,
-        rhTaskStatus: 'pending',
-        rhTaskRecovering: true,
-        rhTaskStartedAt: startedAt,
-      };
-    }
-    if (provider === 'dreamina') {
-      return {
-        ...basePatch,
-        dreaminaSubmitId: taskId,
-        dreaminaTaskStatus: 'pending',
-        dreaminaTaskPhase: 'generating',
-        dreaminaTaskLabel: '生成中',
-        dreaminaTaskRecovering: true,
-        dreaminaTaskStartedAt: startedAt,
-      };
-    }
-    return {
-      ...basePatch,
-      asyncTaskId: taskId,
-      asyncTaskProvider: provider,
-      asyncTaskKind: 'image',
-      asyncTaskStatus: 'pending',
-      asyncTaskRecovering: true,
-      asyncTaskStartedAt: startedAt,
-    };
-  }
-
-  return basePatch;
+  return buildGenerationNodeStateProjection({ phase: 'running', task });
 }
 
 function isRestoredGenerationActiveStatus(status) {
@@ -333,21 +596,8 @@ function isRestoredGenerationInterruptedStatus(status) {
   return normalizeLower(status) === 'interrupted';
 }
 
-function buildGenerationInterruptedPatch() {
-  return {
-    isGenerating: false,
-    jobStatus: 'idle',
-    jobError: null,
-  };
-}
-
 function buildGenerationTerminalPatch(task = {}) {
-  const status = task.status || task.unifiedTask?.status;
-  const error = trimString(task.error || task.unifiedTask?.error?.message);
-  if (isRestoredGenerationInterruptedStatus(status)) return buildGenerationInterruptedPatch();
-  if (isGenerationTaskFailureStatus(status)) return buildGenerationFailurePatch({ error: error || '任务失败' });
-  if (isGenerationTaskCancelledStatus(status)) return buildGenerationCancelledPatch({ status: 'cancelled', message: task.message || '状态: 已取消' });
-  return buildGenerationSuccessPatch({});
+  return buildGenerationNodeStateProjection({ phase: 'terminal', task });
 }
 
 function getStoreState(store) {
@@ -357,8 +607,21 @@ function getStoreState(store) {
   return asObject(store.state);
 }
 
+function normalizeNodesById(nodes) {
+  if (Array.isArray(nodes)) {
+    return nodes.reduce((map, node) => {
+      const item = asObject(node);
+      const data = asObject(item.data);
+      const nodeId = trimString(item.id || item.nodeId || data.id || data.nodeId);
+      if (nodeId) map[nodeId] = { ...data, ...item, data };
+      return map;
+    }, {});
+  }
+  return asObject(nodes);
+}
+
 function getNodes(store) {
-  return asObject(getStoreState(store).nodes);
+  return normalizeNodesById(getStoreState(store).nodes);
 }
 
 function resolveGenerationNodeId(task = {}) {
@@ -368,12 +631,15 @@ function resolveGenerationNodeId(task = {}) {
 
 function collectNodeRecoveryTaskIds(node = {}) {
   return [
+    node.asyncRuntimeTaskId,
+    node.runtimeTaskId,
+    node.asyncClientTaskId,
+    node.clientTaskId,
     node.asyncTaskId,
     node.pollingTaskId,
     node.rhTaskId,
     node.dreaminaSubmitId,
     node.taskId,
-    node.remoteTaskId,
   ].map(trimString).filter(Boolean);
 }
 
@@ -394,7 +660,7 @@ function getNodeAttemptTime(node = {}) {
 
 function isSameOrUntrackedGenerationTask(task = {}, node = {}) {
   const recoverySpec = resolveRecoverySpec(task);
-  const restoredPollingTaskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || task.pollingTaskId || task.asyncTaskId || task.remoteTaskId);
+  const restoredPollingTaskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || recoverySpec.queryableTaskId || task.queryableTaskId || task.pollingTaskId || task.asyncTaskId || recoverySpec.runtimeTaskId || task.runtimeTaskId || recoverySpec.clientTaskId || task.clientTaskId);
   const nodeRecoveryTaskIds = collectNodeRecoveryTaskIds(node);
   if (restoredPollingTaskId && nodeRecoveryTaskIds.length) return nodeRecoveryTaskIds.includes(restoredPollingTaskId);
   const taskAttemptTime = getTaskAttemptTime(task);
@@ -403,9 +669,25 @@ function isSameOrUntrackedGenerationTask(task = {}, node = {}) {
   return node.isGenerating === true || trimString(node.jobStatus) === 'loading';
 }
 
-function canRestoreActiveGenerationTaskToNode(task = {}, node = {}) {
+function isRestoredGenerationTerminalNode(task = {}, node = {}) {
   const recoverySpec = resolveRecoverySpec(task);
-  const restoredPollingTaskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || task.pollingTaskId || task.asyncTaskId || task.remoteTaskId);
+  const taskType = resolveTaskType(recoverySpec, task);
+  const statuses = [
+    node.asyncTaskStatus,
+    node.rhTaskStatus,
+    node.dreaminaTaskStatus,
+    node.jobStatus,
+    node.status,
+  ].map(normalizeLower).filter(Boolean);
+  if (statuses.some((status) => isGenerationTaskTerminalStatus(status) || isRestoredGenerationInterruptedStatus(status))) return true;
+  const isActive = node.isGenerating === true || statuses.some((status) => ACTIVE_TASK_CENTER_STATUSES.has(status) || status === 'loading');
+  return !isActive && hasRestoredResultAsset(taskType, node);
+}
+
+function canRestoreActiveGenerationTaskToNode(task = {}, node = {}) {
+  if (isRestoredGenerationTerminalNode(task, node)) return false;
+  const recoverySpec = resolveRecoverySpec(task);
+  const restoredPollingTaskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || recoverySpec.queryableTaskId || task.queryableTaskId || task.pollingTaskId || task.asyncTaskId || recoverySpec.runtimeTaskId || task.runtimeTaskId || recoverySpec.clientTaskId || task.clientTaskId);
   const nodeRecoveryTaskIds = collectNodeRecoveryTaskIds(node);
   if (restoredPollingTaskId && nodeRecoveryTaskIds.length && !nodeRecoveryTaskIds.includes(restoredPollingTaskId)) return false;
   const taskAttemptTime = getTaskAttemptTime(task);
@@ -483,8 +765,11 @@ function buildRestoredPayload(recoverySpec = {}) {
   const payload = asObject(recoverySpec.payload);
   const provider = trimString(payload.provider || recoverySpec.provider);
   const model = trimString(payload.model || payload.modelId || recoverySpec.modelId || recoverySpec.model);
+  const normalizedPayload = isLocalProxyRecoverySpec(recoverySpec)
+    ? stripLocalProxyRemotePollingOptions(payload)
+    : payload;
   return {
-    ...payload,
+    ...normalizedPayload,
     ...(provider ? { provider } : {}),
     ...(model ? { model, modelId: trimString(payload.modelId || recoverySpec.modelId || model) } : {}),
     ...(trimString(payload.adapterType || recoverySpec.adapterType) ? { adapterType: trimString(payload.adapterType || recoverySpec.adapterType) } : {}),
@@ -496,16 +781,24 @@ function buildRestoredResumeOptions(recoverySpec = {}) {
   const payload = asObject(recoverySpec.payload);
   const taskMeta = asObject(recoverySpec.taskMeta);
   const provider = normalizeLower(recoverySpec.provider || payload.provider || taskMeta.provider);
+  const normalizedTaskMeta = isLocalProxyRecoverySpec(recoverySpec)
+    ? stripLocalProxyRemotePollingOptions(taskMeta)
+    : taskMeta;
+  const normalizedPayload = isLocalProxyRecoverySpec(recoverySpec)
+    ? stripLocalProxyRemotePollingOptions(payload)
+    : payload;
   const baseOptions = {
-    ...taskMeta,
-    ...(!taskMeta.taskPolling && payload.taskPolling ? { taskPolling: payload.taskPolling } : {}),
-    ...(!taskMeta.responseMapping && payload.responseMapping ? { responseMapping: payload.responseMapping } : {}),
-    ...(!taskMeta.useOpenapiQuery && payload.useOpenapiQuery !== undefined ? { useOpenapiQuery: payload.useOpenapiQuery } : {}),
+    ...normalizedTaskMeta,
+    ...(!normalizedTaskMeta.taskPolling && normalizedPayload.taskPolling ? { taskPolling: normalizedPayload.taskPolling } : {}),
+    ...(!normalizedTaskMeta.responseMapping && normalizedPayload.responseMapping ? { responseMapping: normalizedPayload.responseMapping } : {}),
+    ...(!normalizedTaskMeta.useOpenapiQuery && normalizedPayload.useOpenapiQuery !== undefined ? { useOpenapiQuery: normalizedPayload.useOpenapiQuery } : {}),
   };
   if (provider === 'grsai') {
+    const grsaiOptions = { ...baseOptions };
+    delete grsaiOptions.taskPolling;
     return {
-      ...baseOptions,
-      responseMapping: mergeGrsaiImageResponseMapping(baseOptions.responseMapping),
+      ...grsaiOptions,
+      responseMapping: mergeGrsaiImageResponseMapping(grsaiOptions.responseMapping),
     };
   }
   return baseOptions;
@@ -546,28 +839,40 @@ function createPollFunction(recoverySpec = {}, taskType = '') {
 export function buildRestoredGenerationSpec(task = {}) {
   const recoverySpec = resolveRecoverySpec(task);
   const targetNodeId = trimString(recoverySpec.targetNodeId || task.nodeId);
-  const taskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || task.pollingTaskId || task.asyncTaskId);
+  const recoveryMode = resolveRecoveryMode(recoverySpec, task);
+  const localProxyTaskId = resolveLocalProxyTaskId(recoverySpec, task);
+  const remoteTaskId = trimString(recoverySpec.taskId || recoverySpec.pollingTaskId || recoverySpec.recoveryTaskId || recoverySpec.queryableTaskId || task.queryableTaskId || task.pollingTaskId || task.asyncTaskId);
+  const taskId = recoveryMode === 'local_proxy_poll' ? localProxyTaskId : remoteTaskId;
   if (!targetNodeId || !taskId) return null;
 
   const taskType = resolveTaskType(recoverySpec, task);
   const payload = buildRestoredPayload(recoverySpec);
-  const poll = createPollFunction(recoverySpec, taskType);
+  const poll = recoveryMode === 'local_proxy_poll'
+    ? createLocalProxyPollFunction(recoverySpec, task)
+    : createPollFunction(recoverySpec, taskType);
   if (typeof poll !== 'function') return null;
-  const recoveryPollingTrace = buildRecoveryPollingTrace(recoverySpec, taskType);
+  const recoveryPollingTrace = buildRecoveryPollingTrace({ ...recoverySpec, taskId }, taskType);
   const resumeOptions = buildRestoredResumeOptions(recoverySpec);
+  const taskMeta = recoveryMode === 'local_proxy_poll'
+    ? stripLocalProxyRemotePollingOptions(recoverySpec.taskMeta)
+    : asObject(recoverySpec.taskMeta);
 
   return {
     sourceNodeId: trimString(recoverySpec.sourceNodeId) || targetNodeId,
     targetNodeId,
+    trigger: 'restore',
     taskId,
     taskType,
     provider: trimString(recoverySpec.provider),
+    recoveryMode,
+    runtimeTaskId: trimString(recoverySpec.runtimeTaskId || task.runtimeTaskId || (recoveryMode === 'local_proxy_poll' ? localProxyTaskId : '')),
+    clientTaskId: trimString(recoverySpec.clientTaskId || task.clientTaskId),
     adapterType: trimString(recoverySpec.adapterType) || 'modelApi',
     modelId: trimString(recoverySpec.modelId),
     executionId: trimString(recoverySpec.executionId) || `restore.${taskType}`,
     payload,
     taskMeta: {
-      ...asObject(recoverySpec.taskMeta),
+      ...taskMeta,
       recoveryPollingTrace,
     },
     recoveryPollingTrace,

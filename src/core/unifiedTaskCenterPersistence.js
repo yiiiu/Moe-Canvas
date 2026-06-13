@@ -1,7 +1,16 @@
 import appStore from './stores/appStore.js';
 import { installAsyncTaskLoadingRecovery } from './asyncTaskRuntime.js';
 import { upsertAsyncTaskRecord } from './asyncTaskStore.js';
+import {
+  hasAsyncTaskLocalRecoveryCredential,
+  resolveAsyncTaskLocalRecoveryTaskId,
+  resolveAsyncTaskRecoveryCapability,
+} from './asyncTaskRecoveryCapabilities.js';
 import { coordinateRestoredGenerationRecovery } from './unifiedTaskCenterGenerationRecoveryCoordinator.js';
+import {
+  buildGenerationRecoveryV2Tickets,
+  startGenerationRecoveryV2,
+} from './generationRecoveryV2.js';
 
 const DEFAULT_STORAGE_KEY = 'ai-canvas:unified-task-center:snapshot:v1';
 const DEFAULT_MAX_TASKS = 120;
@@ -31,6 +40,19 @@ function asObject(value) {
 
 function trimString(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function stripLocalProxyRemotePollingOptions(value = {}) {
+  const output = { ...asObject(value) };
+  delete output.taskPolling;
+  delete output.pollingSpec;
+  delete output.pollUrlTemplate;
+  delete output.pollUrl;
+  delete output.pollMethod;
+  delete output.pollingTaskId;
+  delete output.queryableTaskId;
+  delete output.recoveryTaskId;
+  return output;
 }
 
 function finiteNumber(value, fallback = 0) {
@@ -117,7 +139,8 @@ function sanitizePayload(payload) {
     'size', 'imageSize', 'width', 'height', 'duration', 'durationSec', 'batchSize', 'cameraAngle',
     'mode', 'style', 'quality', 'taskKind', 'taskType', 'adapterType', 'executionId', 'modelVersion',
     'useOpenapiQuery', 'rhInstanceType', 'audioWorkflowKey', 'audioWorkflowLabel', 'sourceNodeId',
-    'targetNodeId', 'nodeId', 'installId', 'responseMapping', 'taskPolling',
+    'targetNodeId', 'nodeId', 'installId', 'responseMapping', 'taskPolling', 'runtimeTaskId',
+    'clientTaskId', 'recoveryMode', 'queryableTaskId', 'pollingTaskId',
   ];
   for (const key of allowedKeys) {
     if (!(key in source)) continue;
@@ -127,29 +150,66 @@ function sanitizePayload(payload) {
   return output;
 }
 
+function resolveSnapshotQueryableTaskId(source = {}) {
+  return trimString(source.queryableTaskId
+    || source.pollingTaskId
+    || source.recoveryTaskId
+    || source.asyncTaskId
+    || source.providerTaskId
+    || source.pollTaskId
+    || source.taskId);
+}
+
 function sanitizeRecoverySpec(spec) {
   const source = asObject(spec);
-  const taskId = trimString(source.taskId || source.pollingTaskId || source.recoveryTaskId || source.asyncTaskId || source.remoteTaskId);
+  const payload = asObject(source.payload);
+  const capability = resolveAsyncTaskRecoveryCapability({
+    ...source,
+    recoverySpec: source,
+    payload,
+    pollingSpec: source,
+  });
   const targetNodeId = trimString(source.targetNodeId || source.nodeId);
-  if (!taskId || !targetNodeId) return null;
+  if (!targetNodeId) return null;
+  const queryableTaskId = capability.supportsRemotePoll ? resolveSnapshotQueryableTaskId(source) : '';
+  const localRecoveryTaskId = resolveAsyncTaskLocalRecoveryTaskId({ ...source, recoverySpec: source, pollingSpec: source, payload });
+  const runtimeTaskId = trimString(source.runtimeTaskId || payload.runtimeTaskId || localRecoveryTaskId);
+  const clientTaskId = trimString(source.clientTaskId || payload.clientTaskId);
+  const taskId = capability.supportsRemotePoll ? queryableTaskId : trimString(localRecoveryTaskId || runtimeTaskId || clientTaskId);
+  const normalizedTaskMeta = capability.supportsLocalProxyRecovery
+    ? stripLocalProxyRemotePollingOptions(source.taskMeta)
+    : asObject(source.taskMeta);
+  const normalizedPayload = capability.supportsLocalProxyRecovery
+    ? stripLocalProxyRemotePollingOptions(payload)
+    : payload;
+  if (!taskId) return null;
+  if (capability.supportsRemotePoll && !queryableTaskId) return null;
+  if (capability.supportsLocalProxyRecovery && !hasAsyncTaskLocalRecoveryCredential({ ...source, recoverySpec: source, pollingSpec: source, payload, runtimeTaskId, clientTaskId })) return null;
+  if (!capability.supportsRemotePoll && !capability.supportsLocalProxyRecovery) return null;
   return {
     version: 1,
     kind: trimString(source.kind) || 'generation',
     taskType: trimString(source.taskType || source.type),
     provider: trimString(source.provider),
+    recoveryMode: capability.recoveryMode,
+    recoveryCapability: capability,
     adapterType: trimString(source.adapterType),
     modelId: trimString(source.modelId || source.model),
     executionId: trimString(source.executionId),
     sourceNodeId: trimString(source.sourceNodeId),
     targetNodeId,
     taskId,
-    pollingTaskId: taskId,
+    queryableTaskId,
+    pollingTaskId: queryableTaskId,
+    runtimeTaskId,
+    clientTaskId,
     remoteTaskId: trimString(source.remoteTaskId || source.resultRemoteTaskId),
+    remoteResultId: trimString(source.remoteResultId || source.resultId),
     startedAt: finiteNumber(source.startedAt, 0),
     resumable: source.resumable !== false,
     cancellable: source.cancellable !== false,
-    taskMeta: sanitizePayload(source.taskMeta),
-    payload: sanitizePayload(source.payload),
+    taskMeta: sanitizePayload(normalizedTaskMeta),
+    payload: sanitizePayload({ ...normalizedPayload, runtimeTaskId, clientTaskId }),
   };
 }
 
@@ -166,7 +226,7 @@ function sanitizeUnifiedTask(task) {
     model: trimString(source.model),
     title: trimString(source.title),
     promptSummary: trimString(source.promptSummary).slice(0, 500),
-    progress: Number.isFinite(Number(source.progress)) ? Number(source.progress) : null,
+    progress: source.progress == null ? null : (Number.isFinite(Number(source.progress)) ? Number(source.progress) : null),
     canCancel: source.canCancel === true,
     canRetry: source.canRetry === true,
     canResume: source.canResume === true,
@@ -247,19 +307,32 @@ function isObsoleteGenerationInterruptionTask(task) {
 
 function resolveTaskRecoveryId(task = {}) {
   const recoverySpec = asObject(task.recoverySpec || task.unifiedTask?.recoverySpec);
-  return trimString(
-    task.pollingTaskId
-      || task.recoveryTaskId
-      || task.asyncTaskId
-      || task.providerTaskId
-      || recoverySpec.taskId
-      || recoverySpec.pollingTaskId
-      || recoverySpec.recoveryTaskId
-      || recoverySpec.asyncTaskId
-      || recoverySpec.providerTaskId
-      || task.remoteTaskId
-      || recoverySpec.remoteTaskId
-  );
+  const capability = resolveAsyncTaskRecoveryCapability({
+    ...task,
+    ...recoverySpec,
+    recoverySpec,
+    payload: recoverySpec.payload,
+    pollingSpec: recoverySpec,
+  });
+  if (capability.supportsRemotePoll) {
+    return trimString(
+      task.queryableTaskId
+        || task.pollingTaskId
+        || task.recoveryTaskId
+        || task.asyncTaskId
+        || task.providerTaskId
+        || recoverySpec.queryableTaskId
+        || recoverySpec.pollingTaskId
+        || recoverySpec.recoveryTaskId
+        || recoverySpec.asyncTaskId
+        || recoverySpec.providerTaskId
+        || recoverySpec.taskId
+    );
+  }
+  if (capability.supportsLocalProxyRecovery) {
+    return trimString(task.runtimeTaskId || task.clientTaskId || recoverySpec.runtimeTaskId || recoverySpec.clientTaskId || recoverySpec.taskId);
+  }
+  return '';
 }
 
 function isSameGenerationAttempt(previous = {}, incoming = {}) {
@@ -355,6 +428,27 @@ function normalizeRestoredGenerationPendingTask(task, now) {
   };
 }
 
+function normalizeRestoredGenerationInterruptedTask(task, now) {
+  const message = task.message || '生成请求已中断，需要重新发起';
+  return {
+    ...task,
+    status: 'interrupted',
+    message,
+    error: task.error || message,
+    finishedAt: finiteNumber(task.finishedAt, now),
+    updatedAt: now,
+    unifiedTask: task.unifiedTask ? {
+      ...task.unifiedTask,
+      status: 'interrupted',
+      canCancel: false,
+      canRetry: false,
+      canResume: false,
+      error: { message },
+      updatedAt: now,
+    } : null,
+  };
+}
+
 function normalizeRestoredActiveTask(task, now) {
   if (isObsoleteGenerationInterruptionTask(task)) return normalizeRestoredGenerationPendingTask(task, now);
   if (isObsoleteMediaInterruptionTask(task)) return normalizeRestoredMediaTask(task, now);
@@ -378,7 +472,7 @@ function normalizeRestoredActiveTask(task, now) {
       } : null,
     };
   }
-  return normalizeRestoredGenerationPendingTask(task, now);
+  return normalizeRestoredGenerationInterruptedTask(task, now);
 }
 
 function shouldKeepTask(task, now, retentionMs) {
@@ -422,53 +516,59 @@ function resolveTaskCenterTaskAsyncFields(task = {}, options = {}) {
   const payload = asObject(source.payload || recoverySpec.payload || source.unifiedTask?.payload);
   const taskMeta = asObject(source.taskMeta || recoverySpec.taskMeta || source.unifiedTask?.taskMeta);
   const result = asObject(source.result);
-  const pollingTaskId = [
-    source.pollingTaskId,
-    source.recoveryTaskId,
-    source.asyncTaskId,
-    source.providerTaskId,
-    source.providerTaskID,
-    source.jobId,
-    source.job_id,
-    result.pollingTaskId,
-    result.recoveryTaskId,
-    result.taskId,
-    result.asyncTaskId,
-    result.providerTaskId,
-    result.jobId,
-    result.job_id,
-    taskMeta.pollingTaskId,
-    taskMeta.recoveryTaskId,
-    taskMeta.taskId,
-    taskMeta.asyncTaskId,
-    taskMeta.providerTaskId,
-    taskMeta.jobId,
-    taskMeta.job_id,
-    recoverySpec.taskId,
-    recoverySpec.pollingTaskId,
-    recoverySpec.recoveryTaskId,
-    recoverySpec.asyncTaskId,
-    recoverySpec.providerTaskId,
-    recoverySpec.jobId,
-    recoverySpec.job_id,
-    nodeSnapshot.asyncTaskId,
-    nodeSnapshot.pollingTaskId,
-    nodeSnapshot.rhTaskId,
-    nodeSnapshot.dreaminaSubmitId,
-    nodeSnapshot.providerTaskId,
-    nodeSnapshot.jobId,
-    nodeSnapshot.taskId,
-    nodeSnapshot.generationTaskId,
-    source.taskId,
-    source.remoteTaskId,
-    result.remoteTaskId,
-    taskMeta.remoteTaskId,
-    recoverySpec.remoteTaskId,
-    nodeSnapshot.remoteTaskId,
-  ]
-    .map(trimString)
-    .find((value) => value && !value.startsWith('generation:') && !value.startsWith('media:')) || '';
-  if (!pollingTaskId) return null;
+  const provider = trimString(recoverySpec.provider || payload.provider || source.provider || source.unifiedTask?.provider || nodeSnapshot.asyncTaskProvider || nodeSnapshot.taskProvider || nodeSnapshot.provider);
+  const capabilitySource = {
+    ...source,
+    provider,
+    recoveryMode: recoverySpec.recoveryMode || source.recoveryMode,
+    recoveryCapability: recoverySpec.recoveryCapability || source.recoveryCapability,
+    recoverySpec,
+    pollingSpec: recoverySpec,
+    payload,
+    taskMeta,
+  };
+  const capability = resolveAsyncTaskRecoveryCapability(capabilitySource);
+  const queryableTaskId = capability.supportsRemotePoll ? trimString(
+    source.queryableTaskId
+      || source.pollingTaskId
+      || source.recoveryTaskId
+      || source.asyncTaskId
+      || source.providerTaskId
+      || source.providerTaskID
+      || source.jobId
+      || source.job_id
+      || taskMeta.queryableTaskId
+      || taskMeta.pollingTaskId
+      || taskMeta.recoveryTaskId
+      || taskMeta.taskId
+      || taskMeta.asyncTaskId
+      || taskMeta.providerTaskId
+      || taskMeta.jobId
+      || taskMeta.job_id
+      || recoverySpec.queryableTaskId
+      || recoverySpec.pollingTaskId
+      || recoverySpec.recoveryTaskId
+      || recoverySpec.asyncTaskId
+      || recoverySpec.providerTaskId
+      || recoverySpec.jobId
+      || recoverySpec.job_id
+      || recoverySpec.taskId
+      || nodeSnapshot.asyncTaskId
+      || nodeSnapshot.pollingTaskId
+      || nodeSnapshot.rhTaskId
+      || nodeSnapshot.dreaminaSubmitId
+      || nodeSnapshot.providerTaskId
+      || nodeSnapshot.jobId
+      || nodeSnapshot.taskId
+      || nodeSnapshot.generationTaskId
+  ) : '';
+  const runtimeTaskId = trimString(source.runtimeTaskId || recoverySpec.runtimeTaskId || payload.runtimeTaskId || nodeSnapshot.asyncRuntimeTaskId || nodeSnapshot.runtimeTaskId);
+  const clientTaskId = trimString(source.clientTaskId || recoverySpec.clientTaskId || payload.clientTaskId || nodeSnapshot.clientTaskId);
+  if (capability.supportsRemotePoll && !queryableTaskId) return null;
+  if (capability.supportsLocalProxyRecovery && !hasAsyncTaskLocalRecoveryCredential({ ...capabilitySource, runtimeTaskId, clientTaskId })) return null;
+  if (!capability.supportsRemotePoll && !capability.supportsLocalProxyRecovery) return null;
+  const taskId = capability.supportsRemotePoll ? queryableTaskId : trimString(runtimeTaskId || clientTaskId);
+  if (!taskId || taskId.startsWith('generation:') || taskId.startsWith('media:')) return null;
   const nodeId = trimString(
     recoverySpec.targetNodeId
       || recoverySpec.nodeId
@@ -481,12 +581,18 @@ function resolveTaskCenterTaskAsyncFields(task = {}, options = {}) {
   );
   if (!nodeId) return null;
   return {
-    pollingTaskId,
+    pollingTaskId: queryableTaskId,
+    queryableTaskId,
+    runtimeTaskId,
+    clientTaskId,
+    recoveryMode: capability.recoveryMode,
+    recoveryCapability: capability,
     remoteTaskId: trimString(source.remoteTaskId || result.remoteTaskId || taskMeta.remoteTaskId || recoverySpec.remoteTaskId),
+    remoteResultId: trimString(source.remoteResultId || source.resultId || result.remoteResultId || result.resultId || result.id || taskMeta.remoteResultId || recoverySpec.remoteResultId),
     nodeId,
     recoverySpec,
     payload,
-    provider: trimString(recoverySpec.provider || payload.provider || source.provider || source.unifiedTask?.provider || nodeSnapshot.asyncTaskProvider || nodeSnapshot.taskProvider || nodeSnapshot.provider),
+    provider,
     modelId: trimString(recoverySpec.modelId || recoverySpec.model || payload.model || payload.modelId || source.modelId || source.model || source.unifiedTask?.model || nodeSnapshot.taskModelId || nodeSnapshot.modelId || nodeSnapshot.model),
     sourceNodeId: trimString(recoverySpec.sourceNodeId || source.sourceNodeId || payload.sourceNodeId),
   };
@@ -494,26 +600,36 @@ function resolveTaskCenterTaskAsyncFields(task = {}, options = {}) {
 
 function mirrorTaskCenterTaskToAsyncTaskStore(task = {}, options = {}, nowValue = null) {
   const status = normalizeTaskCenterStatus(task.status);
-  if (!ACTIVE_STATUSES.has(status)) return null;
+  if (!ACTIVE_STATUSES.has(status) && !TERMINAL_STATUSES.has(status)) return null;
   const fields = resolveTaskCenterTaskAsyncFields(task, options);
   if (!fields) return null;
   const now = finiteNumber(nowValue ?? options.now, Date.now());
+  const isTerminal = TERMINAL_STATUSES.has(status);
   const record = upsertAsyncTaskRecord({
+    runtimeTaskId: fields.runtimeTaskId,
+    clientTaskId: fields.clientTaskId,
     pollingTaskId: fields.pollingTaskId,
+    queryableTaskId: fields.queryableTaskId,
     remoteTaskId: fields.remoteTaskId,
+    remoteResultId: fields.remoteResultId,
+    recoveryMode: fields.recoveryMode,
+    recoveryCapability: fields.recoveryCapability,
     kind: resolveAsyncTaskKindFromTaskCenterTask(task),
     provider: fields.provider,
     modelId: fields.modelId,
     nodeId: fields.nodeId,
     canvasId: trimString(task.canvasId || task.unifiedTask?.canvasId),
     sourceNodeId: fields.sourceNodeId,
-    status: 'polling',
-    canCancel: fields.recoverySpec.cancellable === true,
-    canResume: fields.recoverySpec.resumable !== false,
+    status: isTerminal ? status : 'polling',
+    error: sanitizeError(task.error || task.unifiedTask?.error),
+    resultSpec: isTerminal ? task.result : null,
+    canCancel: !isTerminal && fields.recoverySpec.cancellable === true,
+    canResume: !isTerminal && fields.recoverySpec.resumable !== false,
     pollingSpec: fields.recoverySpec,
     payload: fields.payload,
     createdAt: finiteNumber(fields.recoverySpec.startedAt || task.startedAt || task.createdAt, now),
     updatedAt: finiteNumber(task.updatedAt || now, now),
+    finishedAt: isTerminal ? finiteNumber(task.finishedAt || task.updatedAt || now, now) : 0,
   }, {
     storage: options.asyncTaskStorage || options.storage,
     storageKey: options.asyncTaskStorageKey,
@@ -636,14 +752,27 @@ export function loadTaskCenterSnapshot(options = {}) {
   const storage = getStorage(options);
   if (!storage || typeof storage.getItem !== 'function') return [];
   try {
-    const parsed = JSON.parse(storage.getItem(getStorageKey(options)) || '{}');
+    const storageKey = getStorageKey(options);
+    const rawValue = storage.getItem(storageKey) || '{}';
+    const parsed = JSON.parse(rawValue);
     const now = finiteNumber(options.now, Date.now());
     const retentionMs = Math.max(0, finiteNumber(options.doneRetentionMs, DEFAULT_DONE_RETENTION_MS));
-    return (Array.isArray(parsed.items) ? parsed.items : [])
+    const items = (Array.isArray(parsed.items) ? parsed.items : [])
       .map(sanitizeTaskCenterTask)
       .filter(Boolean)
       .map((task) => normalizeRestoredActiveTask(task, now))
       .filter((task) => shouldKeepTask(task, now, retentionMs));
+    const normalizedSnapshot = {
+      version: 1,
+      savedAt: now,
+      items,
+    };
+    const normalizedValue = JSON.stringify(normalizedSnapshot);
+    if (typeof storage.setItem === 'function' && normalizedValue !== String(rawValue || '')) {
+      storage.setItem(storageKey, normalizedValue);
+      mirrorTaskCenterSnapshotToAsyncTaskStore(normalizedSnapshot, options);
+    }
+    return items;
   } catch {
     return [];
   }
@@ -828,6 +957,7 @@ function scheduleRestoredMediaTaskRecovery(tasks, options = {}) {
 export function restoreTaskCenterPersistence(manager, options = {}) {
   if (!manager || typeof manager.upsertTask !== 'function') return [];
   const tasks = loadTaskCenterSnapshot(options);
+  const store = options.store || appStore;
   for (const task of tasks) {
     manager.upsertTask(task, { silent: true });
   }
@@ -835,14 +965,30 @@ export function restoreTaskCenterPersistence(manager, options = {}) {
   installAsyncTaskLoadingRecovery({
     ...options,
     asyncTaskLoadingSource: 'task-center-persistence',
-    store: options.store || appStore,
+    store,
   });
-  coordinateRestoredGenerationRecovery(tasks, manager, {
+  const v2Enabled = options.generationRecoveryV2 !== false;
+  const v2Options = {
     ...options,
-    store: options.store || appStore,
+    ...asObject(options.generationRecoveryV2Options),
+    store,
+  };
+  const v2Tickets = v2Enabled ? buildGenerationRecoveryV2Tickets(tasks, v2Options) : [];
+  const v2Keys = new Set(v2Tickets.map((ticket) => ticket.id));
+  const legacyTasks = v2Keys.size
+    ? tasks.filter((task) => !v2Keys.has(trimString(task.taskId || task.unifiedTask?.id)))
+    : tasks;
+  const generationRecoveryV2Session = v2Tickets.length
+    ? startGenerationRecoveryV2(tasks, manager, v2Options)
+    : null;
+  coordinateRestoredGenerationRecovery(legacyTasks, manager, {
+    ...options,
+    resumeActiveTasks: v2Tickets.length ? false : options.resumeActiveTasks,
+    store,
   });
   scheduleRestoredGenerationTerminalReconcile(tasks, options);
   scheduleRestoredMediaTaskRecovery(tasks, options);
+  tasks.generationRecoveryV2Session = generationRecoveryV2Session;
   return tasks;
 }
 

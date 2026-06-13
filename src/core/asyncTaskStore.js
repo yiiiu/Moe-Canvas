@@ -1,8 +1,16 @@
+import {
+  resolveAsyncTaskQueryableTaskId,
+  resolveAsyncTaskRecoveryCapability,
+  resolveAsyncTaskRemoteResultId,
+  resolveLocalProxyClientTaskId,
+} from './asyncTaskRecoveryCapabilities.js';
+
 const DEFAULT_STORAGE_KEY = 'ai-canvas:async-tasks:v1';
 const DEFAULT_MAX_RECORDS = 200;
 const DEFAULT_DONE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const ACTIVE_STATUSES = new Set(['queued', 'submitted', 'running', 'polling', 'processing', 'pending']);
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'cancelled', 'canceled', 'interrupted']);
+const INTERRUPTED_LOCAL_PROXY_CANCEL_STATUSES = new Set(['cancelled', 'interrupted']);
 const GENERATION_COMPATIBLE_KINDS = new Set(['provider_async', 'image', 'video', 'audio', 'text']);
 const PLACEHOLDER_REMOTE_ID_MERGE_WINDOW_MS = 10 * 60 * 1000;
 const SENSITIVE_KEY_PATTERN = /(api[_-]?key|authorization|token|secret|password|credential|cookie|headers?|body|request)/i;
@@ -68,12 +76,34 @@ function sanitizeSpec(value) {
   return output;
 }
 
-function sanitizeResultSpec(value) {
+function collectResultSpecSources(value = {}) {
   const source = asObject(value);
+  const response = asObject(source.response);
+  const body = asObject(source.body || response.body);
+  const candidates = [
+    source,
+    asObject(source.result),
+    asObject(source.output),
+    asObject(source.data),
+    response,
+    asObject(response.result),
+    asObject(response.output),
+    asObject(response.data),
+    body,
+    asObject(body.result),
+    asObject(body.output),
+    asObject(body.data),
+  ];
+  return candidates.filter((item, index) => item && Object.keys(item).length && candidates.indexOf(item) === index);
+}
+
+function sanitizeResultSpec(value) {
   const output = {};
-  for (const key of ['imageUrl', 'videoUrl', 'audioUrl', 'localPath', 'thumbUrl', 'displayLocalPath', 'posterLocalPath', 'sourceUrl']) {
-    const text = trimString(source[key]);
-    if (text) output[key] = text;
+  for (const source of collectResultSpecSources(value)) {
+    for (const key of ['imageUrl', 'videoUrl', 'audioUrl', 'localPath', 'thumbUrl', 'displayLocalPath', 'posterLocalPath', 'sourceUrl']) {
+      const text = trimString(source[key]);
+      if (text && !output[key]) output[key] = text;
+    }
   }
   return Object.keys(output).length ? output : null;
 }
@@ -85,8 +115,50 @@ function isCompatibleGenerationKind(left = '', right = '') {
   return GENERATION_COMPATIBLE_KINDS.has(leftKind) && GENERATION_COMPATIBLE_KINDS.has(rightKind);
 }
 
+function getRecordLocalIdentity(record = {}) {
+  return {
+    runtimeTaskId: trimString(record.runtimeTaskId || record.payload?.runtimeTaskId || record.pollingSpec?.runtimeTaskId),
+    clientTaskId: trimString(record.clientTaskId || record.payload?.clientTaskId || record.pollingSpec?.clientTaskId),
+  };
+}
+
+function hasSameLocalTaskIdentity(left = {}, right = {}) {
+  const leftIdentity = getRecordLocalIdentity(left);
+  const rightIdentity = getRecordLocalIdentity(right);
+  return Boolean(
+    (leftIdentity.runtimeTaskId && leftIdentity.runtimeTaskId === rightIdentity.runtimeTaskId)
+      || (leftIdentity.clientTaskId && leftIdentity.clientTaskId === rightIdentity.clientTaskId)
+  );
+}
+
+function isExplicitUserCancellation(source = {}) {
+  const value = asObject(source);
+  const reason = trimString(value.cancelReason || value.cancellationReason || value.reason || value.cancelSource || value.source).toLowerCase();
+  return value.userCancelled === true
+    || value.explicitCancel === true
+    || value.explicitlyCancelled === true
+    || value.cancelledByUser === true
+    || reason === 'user'
+    || reason === 'manual'
+    || reason === 'explicit'
+    || reason === 'user_cancel'
+    || reason === 'user-cancel';
+}
+
+function shouldKeepLocalProxyCancellationRecoverable(source = {}, status = '', recoveryCapability = {}) {
+  const value = asObject(source);
+  if (!recoveryCapability.supportsLocalProxyRecovery) return false;
+  if (!INTERRUPTED_LOCAL_PROXY_CANCEL_STATUSES.has(status)) return false;
+  if (isExplicitUserCancellation(value)) return false;
+  const { runtimeTaskId, clientTaskId } = getRecordLocalIdentity(value);
+  if (!runtimeTaskId || !clientTaskId) return false;
+  const pollingSpec = asObject(value.pollingSpec || value.recoverySpec);
+  if (pollingSpec.resumable === false) return false;
+  return true;
+}
+
 function getRecordRemoteIdentity(record = {}) {
-  return trimString(record.pollingTaskId || record.remoteTaskId || record.pollingSpec?.taskId);
+  return trimString(record.queryableTaskId || record.pollingTaskId || record.remoteResultId || record.remoteTaskId || record.pollingSpec?.taskId);
 }
 
 function isPlaceholderAsyncTaskRecord(record = {}) {
@@ -117,6 +189,7 @@ function isLikelySameGenerationAttempt(left = {}, right = {}) {
 
 function mergeAsyncTaskRecords(previous = {}, incoming = {}, options = {}) {
   const preserveIdentity = options.preserveIdentity === true;
+  const incomingStatus = normalizeStatus(incoming.status);
   return {
     ...previous,
     ...incoming,
@@ -129,12 +202,36 @@ function mergeAsyncTaskRecords(previous = {}, incoming = {}, options = {}) {
     } : {}),
     pollingSpec: { ...asObject(previous?.pollingSpec), ...asObject(incoming.pollingSpec) },
     payload: { ...asObject(previous?.payload), ...asObject(incoming.payload) },
-    resultSpec: incoming.resultSpec || previous?.resultSpec || null,
+    clientTaskId: incoming.clientTaskId || previous?.clientTaskId || '',
+    resultSpec: ACTIVE_STATUSES.has(incomingStatus) ? null : (incoming.resultSpec || previous?.resultSpec || null),
   };
 }
 
-function compactAsyncTaskRecords(records = []) {
+function compactLocalIdentityAsyncTaskRecords(records = []) {
   const items = Array.isArray(records) ? records.filter(Boolean) : [];
+  const removedIndexes = new Set();
+  for (let currentIndex = 0; currentIndex < items.length; currentIndex += 1) {
+    if (removedIndexes.has(currentIndex)) continue;
+    let current = items[currentIndex];
+    for (let duplicateIndex = currentIndex + 1; duplicateIndex < items.length; duplicateIndex += 1) {
+      if (removedIndexes.has(duplicateIndex)) continue;
+      const duplicate = items[duplicateIndex];
+      if (!hasSameLocalTaskIdentity(current, duplicate)) continue;
+      if (!isSameTaskScope(current, duplicate)) continue;
+      const currentUpdatedAt = finiteNumber(current.updatedAt, 0);
+      const duplicateUpdatedAt = finiteNumber(duplicate.updatedAt, 0);
+      const newer = duplicateUpdatedAt > currentUpdatedAt ? duplicate : current;
+      const older = newer === duplicate ? current : duplicate;
+      items[currentIndex] = mergeAsyncTaskRecords(older, newer, { preserveIdentity: true });
+      current = items[currentIndex];
+      removedIndexes.add(duplicateIndex);
+    }
+  }
+  return items.filter((_, index) => !removedIndexes.has(index));
+}
+
+function compactAsyncTaskRecords(records = []) {
+  const items = compactLocalIdentityAsyncTaskRecords(Array.isArray(records) ? records.filter(Boolean) : []);
   const removedIndexes = new Set();
   for (let incomingIndex = 0; incomingIndex < items.length; incomingIndex += 1) {
     if (removedIndexes.has(incomingIndex)) continue;
@@ -167,19 +264,28 @@ export function sanitizeAsyncTaskRecord(record = {}, options = {}) {
   const source = asObject(record);
   const kind = trimString(source.kind || source.taskType || source.type) || 'provider_async';
   const provider = trimString(source.provider || source.pollingSpec?.provider || source.payload?.provider);
-  const status = normalizeStatus(source.status);
+  const rawStatus = normalizeStatus(source.status);
   const legacyRemoteTaskId = trimString(source.remoteTaskId);
-  const terminalRemoteTaskId = trimString(source.resultRemoteTaskId || (TERMINAL_STATUSES.has(status) ? legacyRemoteTaskId : ''));
-  const directPollingTaskId = trimString(source.pollingTaskId || source.pollTaskId || source.recoveryTaskId || source.taskId || source.providerTaskId || source.asyncTaskId);
-  const pollingSpecTaskId = trimString(source.pollingSpec?.taskId);
-  const explicitPollingTaskId = trimString(directPollingTaskId || (
-    TERMINAL_STATUSES.has(status) && terminalRemoteTaskId && pollingSpecTaskId === terminalRemoteTaskId ? '' : pollingSpecTaskId
-  ));
-  const pollingTaskId = trimString(explicitPollingTaskId || (TERMINAL_STATUSES.has(status) ? '' : legacyRemoteTaskId));
-  const remoteTaskId = terminalRemoteTaskId;
-  const nodeId = trimString(source.nodeId || source.targetNodeId || source.pollingSpec?.targetNodeId);
+  const recoveryCapability = resolveAsyncTaskRecoveryCapability(source);
+  const shouldRecoverInterruptedLocalProxyTask = shouldKeepLocalProxyCancellationRecoverable(source, rawStatus, recoveryCapability);
+  const status = shouldRecoverInterruptedLocalProxyTask ? 'polling' : rawStatus;
+  const queryableTaskId = resolveAsyncTaskQueryableTaskId(source);
+  const directPollingTaskId = queryableTaskId;
+  const remoteResultId = resolveAsyncTaskRemoteResultId(source);
+  const terminalRemoteTaskId = trimString(source.resultRemoteTaskId || (TERMINAL_STATUSES.has(status) ? remoteResultId || legacyRemoteTaskId : ''));
+  const pollingTaskId = trimString(directPollingTaskId);
+  const remoteTaskId = TERMINAL_STATUSES.has(status) ? terminalRemoteTaskId : legacyRemoteTaskId;
+  const clientTaskIdExplicit = trimString(source.clientTaskId || source.payload?.clientTaskId || source.pollingSpec?.clientTaskId);
+  const nodeId = trimString(source.nodeId || source.targetNodeId || source.pollingSpec?.targetNodeId || source.payload?.nodeId || source.payload?.targetNodeId);
+  const explicitRuntimeTaskId = trimString(source.runtimeTaskId || source.id || source.payload?.runtimeTaskId || source.pollingSpec?.runtimeTaskId);
+  const clientTaskId = recoveryCapability.supportsLocalProxyRecovery
+    ? resolveLocalProxyClientTaskId(source, explicitRuntimeTaskId, clientTaskIdExplicit)
+    : clientTaskIdExplicit;
+  const hasLocalRecoveryCredential = Boolean(explicitRuntimeTaskId && clientTaskId);
+  if (recoveryCapability.supportsLocalProxyRecovery && !nodeId) return null;
+  if (recoveryCapability.supportsLocalProxyRecovery && ACTIVE_STATUSES.has(status) && source.canResume !== false && !hasLocalRecoveryCredential) return null;
   const now = finiteNumber(options.now, Date.now());
-  const runtimeTaskId = trimString(source.runtimeTaskId || source.id) || createAsyncRuntimeTaskId({
+  const runtimeTaskId = explicitRuntimeTaskId || createAsyncRuntimeTaskId({
     kind,
     provider,
     nodeId,
@@ -195,8 +301,14 @@ export function sanitizeAsyncTaskRecord(record = {}, options = {}) {
   return {
     version: 1,
     runtimeTaskId,
+    clientTaskId,
     remoteTaskId,
+    remoteResultId: remoteResultId || terminalRemoteTaskId,
+    queryableTaskId,
     pollingTaskId,
+    recoveryMode: recoveryCapability.recoveryMode,
+    recoveryCapability,
+    providerCapabilities: recoveryCapability,
     kind,
     provider,
     modelId: trimString(source.modelId || source.model || source.pollingSpec?.modelId || source.pollingSpec?.model),
@@ -206,13 +318,14 @@ export function sanitizeAsyncTaskRecord(record = {}, options = {}) {
     status,
     title: trimString(source.title),
     message: trimString(source.message),
-    error: trimString(source.error?.message || source.error).slice(0, 2000),
+    error: shouldRecoverInterruptedLocalProxyTask ? '' : trimString(source.error?.message || source.error).slice(0, 2000),
     progress: Number.isFinite(Number(source.progress)) ? Math.max(0, Math.min(1, Number(source.progress))) : null,
-    canCancel: source.canCancel === true,
-    canResume: source.canResume !== false,
+    canCancel: shouldRecoverInterruptedLocalProxyTask ? false : source.canCancel === true,
+    canResume: shouldRecoverInterruptedLocalProxyTask ? true : source.canResume !== false,
+    cancellationReason: isExplicitUserCancellation(source) ? 'user' : '',
     pollingSpec: sanitizeSpec(source.pollingSpec || source.recoverySpec || source.taskMeta),
     payload: sanitizeSpec(source.payload),
-    resultSpec: sanitizeResultSpec(source.resultSpec || source.result),
+    resultSpec: ACTIVE_STATUSES.has(status) ? null : sanitizeResultSpec(source.resultSpec || source.result),
     createdAt,
     updatedAt,
     finishedAt: TERMINAL_STATUSES.has(status) ? finiteNumber(source.finishedAt, updatedAt) : 0,
@@ -265,21 +378,33 @@ export function upsertAsyncTaskRecord(record = {}, options = {}) {
   const records = loadAsyncTaskRecords(options);
   let index = records.findIndex((item) => item.runtimeTaskId === normalized.runtimeTaskId);
   let shouldPreserveRecordIdentity = false;
+  const matchesRecordScope = (item) => trimString(item.nodeId) === normalized.nodeId
+    && trimString(item.provider) === normalized.provider
+    && isCompatibleGenerationKind(item.kind, normalized.kind);
+  const matchesActiveRecordScope = (item) => matchesRecordScope(item) && isAsyncTaskRecordActive(item);
+  if (index < 0 && normalized.clientTaskId) {
+    index = records.findIndex((item) => trimString(item.clientTaskId) === normalized.clientTaskId && matchesRecordScope(item));
+    if (index >= 0) shouldPreserveRecordIdentity = true;
+  }
+  if (index < 0 && (normalized.runtimeTaskId || normalized.clientTaskId)) {
+    index = records.findIndex((item) => hasSameLocalTaskIdentity(item, normalized) && matchesRecordScope(item));
+    if (index >= 0) shouldPreserveRecordIdentity = true;
+  }
   if (index < 0 && (normalized.pollingTaskId || (TERMINAL_STATUSES.has(normalized.status) && normalized.remoteTaskId))) {
-    const matchesRecordScope = (item) => trimString(item.nodeId) === normalized.nodeId
-      && trimString(item.provider) === normalized.provider
-      && isCompatibleGenerationKind(item.kind, normalized.kind)
-      && isAsyncTaskRecordActive(item);
     if (normalized.pollingTaskId) {
-      index = records.findIndex((item) => trimString(item.pollingTaskId) === normalized.pollingTaskId && matchesRecordScope(item));
+      index = records.findIndex((item) => trimString(item.pollingTaskId) === normalized.pollingTaskId && matchesActiveRecordScope(item));
       if (index >= 0) shouldPreserveRecordIdentity = true;
     }
     if (index < 0) {
-      index = records.findIndex((item) => !trimString(item.pollingTaskId || item.remoteTaskId) && matchesRecordScope(item));
+      index = records.findIndex((item) => !trimString(item.pollingTaskId || item.remoteTaskId) && matchesActiveRecordScope(item));
       if (index >= 0) shouldPreserveRecordIdentity = true;
     }
     if (index < 0 && TERMINAL_STATUSES.has(normalized.status) && normalized.remoteTaskId) {
-      index = records.findIndex((item) => trimString(item.pollingTaskId) === normalized.remoteTaskId && matchesRecordScope(item));
+      index = records.findIndex((item) => trimString(item.pollingTaskId) === normalized.remoteTaskId && matchesActiveRecordScope(item));
+      if (index >= 0) shouldPreserveRecordIdentity = true;
+    }
+    if (index < 0 && TERMINAL_STATUSES.has(normalized.status) && normalized.remoteTaskId) {
+      index = records.findIndex((item) => trimString(item.remoteTaskId || item.remoteResultId) === normalized.remoteTaskId && matchesActiveRecordScope(item));
       if (index >= 0) shouldPreserveRecordIdentity = true;
     }
   }
@@ -308,8 +433,9 @@ export function upsertAsyncTaskRecord(record = {}, options = {}) {
       if (item === next) return true;
       if (trimString(item.nodeId) !== next.nodeId
         || trimString(item.provider) !== next.provider
-        || trimString(item.kind) !== next.kind
+        || !isCompatibleGenerationKind(item.kind, next.kind)
         || !isAsyncTaskRecordActive(item)) return true;
+      if (hasSameLocalTaskIdentity(item, next) && isSameTaskScope(item, next)) return false;
       const itemPollingTaskId = trimString(item.pollingTaskId);
       const itemRemoteTaskId = trimString(item.remoteTaskId);
       if (!trimString(itemPollingTaskId || itemRemoteTaskId)) return false;

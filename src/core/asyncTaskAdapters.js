@@ -12,6 +12,7 @@ import { resumeRunningHubAudioTask } from '../../api/aiAudioApi.js';
 import { mergeGrsaiImageResponseMapping } from '../manifests/image/modelApi/grsaiImageResultMapping.js';
 import { buildImageGenerationResultPatch, normalizeImageGenerationResult } from '../components/aigenImage/imageGenerationResultRenderer.js';
 import { buildGenerationFailurePatch, buildGenerationSuccessPatch } from './generationTaskLifecycle.js';
+import { resolveAsyncTaskQueryableTaskId } from './asyncTaskRecoveryCapabilities.js';
 
 function asObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -122,9 +123,10 @@ export function buildAsyncTaskLoadingPatch(record = {}) {
   const kind = normalizeKind(record);
   const provider = resolveProvider(record);
   const startedAt = Number(record.createdAt || Date.now()) || Date.now();
-  const pollingTaskId = trimString(record.pollingTaskId || record.remoteTaskId || record.pollingSpec?.taskId);
+  const pollingTaskId = resolveAsyncTaskQueryableTaskId(record);
   const basePatch = {
     asyncRuntimeTaskId: record.runtimeTaskId,
+    ...(record.clientTaskId ? { asyncClientTaskId: record.clientTaskId } : {}),
     ...(record.remoteTaskId ? { remoteTaskId: record.remoteTaskId } : {}),
     ...(pollingTaskId ? { pollingTaskId, asyncTaskId: pollingTaskId } : {}),
     taskProvider: provider,
@@ -177,7 +179,7 @@ export function createAsyncTaskPoller(record = {}) {
   const kind = normalizeKind(record);
   const payload = buildPayload(record);
   const options = buildResumeOptions(record);
-  const taskId = trimString(record.pollingTaskId || record.remoteTaskId || record.pollingSpec?.taskId);
+  const taskId = resolveAsyncTaskQueryableTaskId(record);
   if (!taskId) return null;
 
   if (kind === 'image') {

@@ -5,8 +5,13 @@ import {
 } from './generationTaskRuntime.js';
 import appStore from './stores/appStore.js';
 import { buildGenerationCancelledPatch } from './generationTaskLifecycle.js';
+import { buildGenerationNodeStateProjection } from './generationTaskNodeStateProjection.js';
 import { upsertUnifiedTaskToTaskCenter } from './unifiedTaskCenterAdapter.js';
-import { upsertAsyncTaskRecord } from './asyncTaskStore.js';
+import {
+  createAsyncRuntimeTaskId,
+  upsertAsyncTaskRecord,
+} from './asyncTaskStore.js';
+import { resolveAsyncTaskRecoveryCapability } from './asyncTaskRecoveryCapabilities.js';
 import { cancelRunningHubImageTask } from '../../api/aiImageApi.js';
 import { cancelRunningHubVideoTask } from '../../api/aiVideoApi.js';
 import { cancelRunningHubAudioTask } from '../../api/aiAudioApi.js';
@@ -26,6 +31,19 @@ function trimString(value) {
 
 function normalizeLower(value) {
   return trimString(value).toLowerCase();
+}
+
+function stripLocalProxyRemotePollingOptions(value = {}) {
+  const output = { ...asObject(value) };
+  delete output.taskPolling;
+  delete output.pollingSpec;
+  delete output.pollUrlTemplate;
+  delete output.pollUrl;
+  delete output.pollMethod;
+  delete output.pollingTaskId;
+  delete output.queryableTaskId;
+  delete output.recoveryTaskId;
+  return output;
 }
 
 function firstFiniteNumber(...values) {
@@ -128,8 +146,180 @@ function resolveNode(store, nodeId) {
   return asObject(state.nodes)?.[nodeId] || null;
 }
 
+function resolveCanvasId(store, spec = {}, payload = {}, node = {}) {
+  const state = getStoreState(store);
+  const project = asObject(state.project || state.currentProject || state.workspace);
+  const canvases = Array.isArray(state.canvases)
+    ? state.canvases
+    : Array.isArray(project.canvases)
+      ? project.canvases
+      : [];
+  return trimString(
+    spec.canvasId
+      || payload.canvasId
+      || node.canvasId
+      || state.activeCanvasId
+      || state.currentCanvasId
+      || state.canvasId
+      || project.activeCanvasId
+      || project.currentCanvasId
+      || project.canvasId
+      || canvases[0]?.id
+      || globalThis.window?.currentCanvasId
+      || globalThis.window?.activeCanvasId
+      || globalThis.currentCanvasId
+      || globalThis.activeCanvasId
+      || 'canvas_1'
+  );
+}
+
 function resolveNow(options = {}) {
   return typeof options.now === 'function' ? options.now() : Date.now();
+}
+
+function resolveLocalRecoveryKind(spec = {}) {
+  const taskSpec = asObject(spec);
+  const text = normalizeLower(taskSpec.kind || taskSpec.taskKind || taskSpec.taskType || taskSpec.type);
+  if (text.includes('image')) return 'image';
+  if (text.includes('video')) return 'video';
+  if (text.includes('audio')) return 'audio';
+  if (text.includes('text') || text.includes('chat')) return 'text';
+  return 'provider_async';
+}
+
+function resolveLocalRecoveryProvider(spec = {}) {
+  const taskSpec = asObject(spec);
+  const payload = asObject(taskSpec.payload);
+  return trimString(taskSpec.provider || payload.provider);
+}
+
+function buildLocalRecoveryTaskCredentials(spec = {}, options = {}) {
+  const taskSpec = asObject(spec);
+  const payload = asObject(taskSpec.payload);
+  const now = resolveNow(options);
+  const kind = resolveLocalRecoveryKind(taskSpec);
+  const provider = resolveLocalRecoveryProvider(taskSpec);
+  const nodeId = trimString(taskSpec.targetNodeId || taskSpec.sourceNodeId || payload.nodeId || payload.targetNodeId);
+  const runtimeTaskId = trimString(taskSpec.runtimeTaskId || payload.runtimeTaskId) || createAsyncRuntimeTaskId({
+    kind,
+    provider,
+    nodeId,
+    now,
+  });
+  const clientTaskId = trimString(taskSpec.clientTaskId || payload.clientTaskId) || `client:${runtimeTaskId}`;
+  return { runtimeTaskId, clientTaskId, kind, provider, nodeId, now };
+}
+
+function buildSafeLocalRecoveryPayload(spec = {}, credentials = {}, options = {}) {
+  const taskSpec = asObject(spec);
+  const payload = asObject(taskSpec.payload);
+  const nodeId = trimString(taskSpec.targetNodeId || credentials.nodeId || payload.nodeId || payload.targetNodeId);
+  const store = resolveStore(options);
+  const node = nodeId ? resolveNode(store, nodeId) || {} : {};
+  const canvasId = resolveCanvasId(store, taskSpec, payload, node);
+  return {
+    provider: credentials.provider || trimString(payload.provider),
+    model: trimString(taskSpec.modelId || taskSpec.model || payload.model || payload.modelId),
+    modelId: trimString(taskSpec.modelId || taskSpec.model || payload.modelId || payload.model),
+    runtimeTaskId: credentials.runtimeTaskId,
+    clientTaskId: credentials.clientTaskId,
+    nodeId,
+    canvasId,
+    kind: credentials.kind,
+    taskType: trimString(taskSpec.taskType || payload.taskType),
+  };
+}
+
+function prepareTaskSpecWithLocalRecoveryCredentials(spec = {}, options = {}) {
+  const taskSpec = asObject(spec);
+  const payload = asObject(taskSpec.payload);
+  const credentials = buildLocalRecoveryTaskCredentials(taskSpec, options);
+  const nodeId = trimString(taskSpec.targetNodeId || credentials.nodeId || payload.nodeId || payload.targetNodeId);
+  const store = resolveStore(options);
+  const node = nodeId ? resolveNode(store, nodeId) || {} : {};
+  const canvasId = resolveCanvasId(store, taskSpec, payload, node);
+  return {
+    ...taskSpec,
+    canvasId,
+    runtimeTaskId: credentials.runtimeTaskId,
+    clientTaskId: credentials.clientTaskId,
+    payload: {
+      ...payload,
+      runtimeTaskId: credentials.runtimeTaskId,
+      clientTaskId: credentials.clientTaskId,
+      nodeId,
+      canvasId,
+      provider: credentials.provider || payload.provider,
+      kind: credentials.kind,
+    },
+  };
+}
+
+function precreateLocalAsyncTaskRecord(spec = {}, options = {}) {
+  const taskSpec = asObject(spec);
+  const payload = asObject(taskSpec.payload);
+  const credentials = buildLocalRecoveryTaskCredentials(taskSpec, options);
+  const targetNodeId = trimString(taskSpec.targetNodeId || payload.nodeId || credentials.nodeId);
+  if (!targetNodeId || !credentials.runtimeTaskId) return null;
+  const store = resolveStore(options);
+  const node = resolveNode(store, targetNodeId) || {};
+  const now = resolveNow(options);
+  const createdAt = firstFiniteNumber(taskSpec.startedAt, taskSpec.createdAt, now) || now;
+  const record = upsertAsyncTaskRecord({
+    runtimeTaskId: credentials.runtimeTaskId,
+    clientTaskId: credentials.clientTaskId,
+    kind: credentials.kind,
+    provider: credentials.provider,
+    modelId: trimString(taskSpec.modelId || taskSpec.model || payload.model || payload.modelId),
+    nodeId: targetNodeId,
+    canvasId: resolveCanvasId(store, taskSpec, payload, node),
+    sourceNodeId: trimString(taskSpec.sourceNodeId),
+    status: 'running',
+    canCancel: taskSpec.cancellable === true,
+    canResume: taskSpec.resumable !== false,
+    pollingSpec: {
+      kind: 'generation',
+      taskType: trimString(taskSpec.taskType || credentials.kind),
+      provider: credentials.provider,
+      adapterType: trimString(taskSpec.adapterType),
+      modelId: trimString(taskSpec.modelId || taskSpec.model || payload.model || payload.modelId),
+      executionId: trimString(taskSpec.executionId),
+      sourceNodeId: trimString(taskSpec.sourceNodeId),
+      targetNodeId,
+      runtimeTaskId: credentials.runtimeTaskId,
+      clientTaskId: credentials.clientTaskId,
+      startedAt: createdAt,
+      resumable: taskSpec.resumable !== false,
+      cancellable: taskSpec.cancellable === true,
+    },
+    payload: buildSafeLocalRecoveryPayload(taskSpec, credentials, options),
+    createdAt,
+    updatedAt: now,
+  }, {
+    ...options,
+    storage: options.asyncTaskStorage || options.storage,
+    now,
+  });
+  if (record && typeof store?.updateNodeData === 'function') {
+    store.updateNodeData(targetNodeId, {
+      ...buildGenerationNodeStateProjection({
+        phase: 'running',
+        task: {
+          ...record,
+          status: 'running',
+          recoveryMode: record.recoveryMode || 'local_proxy_poll',
+          recoverySpec: record.pollingSpec,
+        },
+      }),
+      clientTaskId: record.clientTaskId,
+      taskProvider: record.provider,
+      taskModelId: record.modelId,
+      taskType: trimString(taskSpec.taskType || credentials.kind),
+      taskAdapterType: trimString(taskSpec.adapterType) || 'modelApi',
+      taskResumable: record.canResume,
+    });
+  }
+  return record;
 }
 
 function resolveManager(options = {}) {
@@ -348,13 +538,54 @@ function buildGenerationRecoverySpec({ spec = {}, result = {}, nodeId = '' } = {
   const taskResult = asObject(result);
   const pollingTaskId = resolvePollingTaskId(taskSpec, taskResult);
   const targetNodeId = trimString(nodeId || resolveTargetNodeId(taskSpec, taskResult));
-  if (!pollingTaskId || !targetNodeId) return null;
   const payload = asObject(taskSpec.payload);
-  const taskMeta = asObject(taskResult.taskMeta || taskSpec.taskMeta);
+  const rawTaskMeta = asObject(taskResult.taskMeta || taskSpec.taskMeta);
+  const capability = resolveAsyncTaskRecoveryCapability({
+    ...taskSpec,
+    provider: taskSpec.provider || payload.provider || rawTaskMeta.provider,
+    recoverySpec: taskSpec.recoverySpec,
+    pollingSpec: taskSpec.recoverySpec || taskSpec.pollingSpec,
+    payload,
+    taskMeta: rawTaskMeta,
+  });
+  const recoveryMode = normalizeLower(taskSpec.recoveryMode || taskSpec.recoverySpec?.recoveryMode || rawTaskMeta.recoveryMode || capability.recoveryMode);
+  const isLocalProxyRecovery = recoveryMode === 'local_proxy_poll' || capability.supportsLocalProxyRecovery;
+  const taskMeta = isLocalProxyRecovery ? stripLocalProxyRemotePollingOptions(rawTaskMeta) : rawTaskMeta;
+  const runtimeTaskId = trimString(taskSpec.runtimeTaskId || payload.runtimeTaskId || taskSpec.recoverySpec?.runtimeTaskId);
+  const clientTaskId = trimString(taskSpec.clientTaskId || payload.clientTaskId || taskSpec.recoverySpec?.clientTaskId);
+  if (recoveryMode === 'local_proxy_poll' || capability.supportsLocalProxyRecovery) {
+    if (!targetNodeId || !(runtimeTaskId || clientTaskId)) return null;
+    return {
+      kind: 'generation',
+      taskType: trimString(taskSpec.taskType || taskSpec.taskKind || taskSpec.kind),
+      provider: trimString(taskSpec.provider || payload.provider || taskMeta.provider),
+      recoveryMode: 'local_proxy_poll',
+      recoveryCapability: capability,
+      adapterType: trimString(taskSpec.adapterType),
+      modelId: trimString(taskSpec.modelId || taskSpec.model || payload.model || payload.modelId),
+      executionId: trimString(taskSpec.executionId),
+      sourceNodeId: trimString(taskSpec.sourceNodeId),
+      targetNodeId,
+      taskId: '',
+      pollingTaskId: '',
+      queryableTaskId: '',
+      runtimeTaskId,
+      clientTaskId,
+      remoteTaskId: resolveRemoteTaskId(taskSpec, taskResult),
+      startedAt: firstFiniteNumber(taskSpec.startedAt, taskResult.startedAt) || 0,
+      resumable: taskSpec.resumable !== false,
+      cancellable: taskSpec.cancellable !== false,
+      taskMeta,
+      payload: { ...stripLocalProxyRemotePollingOptions(payload), runtimeTaskId, clientTaskId },
+    };
+  }
+  if (!pollingTaskId || !targetNodeId) return null;
   return {
     kind: 'generation',
     taskType: trimString(taskSpec.taskType || taskSpec.taskKind || taskSpec.kind),
     provider: trimString(taskSpec.provider || payload.provider || taskMeta.provider),
+    recoveryMode: 'remote_poll',
+    recoveryCapability: capability,
     adapterType: trimString(taskSpec.adapterType),
     modelId: trimString(taskSpec.modelId || taskSpec.model || payload.model || payload.modelId),
     executionId: trimString(taskSpec.executionId),
@@ -417,8 +648,13 @@ function persistAsyncTaskIdRecord({ spec = {}, options = {}, result = {}, status
     ? (fallbackRecordSpec.pollingTaskId || fallbackRecordSpec.taskId)
     : '';
   const record = upsertAsyncTaskRecord({
+    runtimeTaskId: trimString(fallbackRecordSpec.runtimeTaskId || taskSpec.runtimeTaskId || payload.runtimeTaskId),
+    clientTaskId: trimString(fallbackRecordSpec.clientTaskId || taskSpec.clientTaskId || payload.clientTaskId),
     pollingTaskId: recordPollingTaskId,
+    queryableTaskId: recordPollingTaskId,
     remoteTaskId: terminalRemoteTaskId || fallbackRecordSpec.remoteTaskId,
+    recoveryMode: trimString(fallbackRecordSpec.recoveryMode || taskSpec.recoveryMode),
+    recoveryCapability: fallbackRecordSpec.recoveryCapability,
     kind,
     provider: fallbackRecordSpec.provider || fallbackRecordSpec.payload?.provider,
     modelId: fallbackRecordSpec.modelId,
@@ -447,7 +683,7 @@ function persistAsyncTaskIdRecord({ spec = {}, options = {}, result = {}, status
       asyncRuntimeTaskId: record.runtimeTaskId,
       remoteTaskId: record.remoteTaskId,
       pollingTaskId: record.pollingTaskId,
-      asyncTaskId: record.pollingTaskId || record.remoteTaskId,
+      asyncTaskId: record.pollingTaskId,
       taskProvider: record.provider,
       taskModelId: record.modelId,
       taskType: trimString(fallbackRecordSpec.taskType),
@@ -618,7 +854,9 @@ export function syncGenerationTaskToTaskCenter({ spec = {}, options = {}, result
 export { shouldSyncImageTaskToTaskCenter, shouldSyncGenerationTaskToTaskCenter };
 
 export async function submitTask(spec, options = {}) {
-  const taskSpec = wrapSpecForTaskCenterRecovery(spec, options);
+  const preparedSpec = prepareTaskSpecWithLocalRecoveryCredentials(spec, options);
+  precreateLocalAsyncTaskRecord(preparedSpec, options);
+  const taskSpec = wrapSpecForTaskCenterRecovery(preparedSpec, options);
   syncGenerationTaskToTaskCenter({ spec: taskSpec, options, status: 'running' });
   const result = await submitGenerationTask(taskSpec, options);
   persistAsyncTaskIdRecord({
@@ -637,19 +875,49 @@ export async function submitTask(spec, options = {}) {
   return result;
 }
 
+function isLocalProxyInterruptedRecovery(spec = {}, result = {}) {
+  const taskSpec = asObject(spec);
+  if (normalizeLower(taskSpec.recoveryMode || taskSpec.recoverySpec?.recoveryMode) !== 'local_proxy_poll') return false;
+  const status = normalizeLower(result?.error?.localProxyStatus);
+  const reason = normalizeLower(result?.error?.localProxyReason || result?.error?.message || result?.error || result?.message);
+  if (status && status !== 'missing') return false;
+  return reason.includes('request_lost')
+    || reason.includes('missing')
+    || reason.includes('not_found')
+    || reason.includes('expired')
+    || reason.includes('不可恢复');
+}
+
+function markLocalProxyInterruptedNode(spec = {}, options = {}) {
+  const store = resolveStore(options);
+  const nodeId = trimString(spec.targetNodeId || spec.recoverySpec?.targetNodeId);
+  if (!nodeId || typeof store?.updateNodeData !== 'function') return;
+  store.updateNodeData(nodeId, {
+    isGenerating: false,
+    jobStatus: 'idle',
+    jobError: null,
+    asyncTaskStatus: 'interrupted',
+    asyncTaskRecovering: false,
+  });
+}
+
 export async function resumeTask(spec, options = {}) {
   const taskSpec = attachRestoredCancelSpec(spec, options);
   syncGenerationTaskToTaskCenter({ spec: taskSpec, options, status: 'polling' });
   const result = await resumeGenerationTask(taskSpec, options);
-  syncGenerationTaskTerminalState({ spec: taskSpec, options, result, status: result?.status });
+  const finalResult = isLocalProxyInterruptedRecovery(taskSpec, result)
+    ? { ...result, status: 'interrupted' }
+    : result;
+  if (finalResult !== result) markLocalProxyInterruptedNode(taskSpec, options);
+  syncGenerationTaskTerminalState({ spec: taskSpec, options, result: finalResult, status: finalResult?.status });
   syncGenerationTaskToTaskCenter({
     spec: taskSpec,
     options,
-    result,
-    status: result?.status,
-    error: result?.error,
+    result: finalResult,
+    status: finalResult?.status,
+    error: finalResult?.error,
   });
-  return result;
+  return finalResult;
 }
 
 function resolveTaskCenterRecoverySpec(targetNodeId, options = {}) {

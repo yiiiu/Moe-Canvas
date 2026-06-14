@@ -97,9 +97,29 @@ function collectResultSpecSources(value = {}) {
   return candidates.filter((item, index) => item && Object.keys(item).length && candidates.indexOf(item) === index);
 }
 
+function extractTextResultSpec(source = {}) {
+  const choice = Array.isArray(source.choices) ? asObject(source.choices[0]) : {};
+  const message = asObject(choice.message);
+  const text = trimString(
+    source.outputText
+      || source.text
+      || source.content
+      || source.message
+      || message.content
+  );
+  if (!text) return {};
+  return {
+    outputText: text,
+    ...(trimString(source.id) ? { responseId: trimString(source.id) } : {}),
+    ...(trimString(source.model) ? { model: trimString(source.model) } : {}),
+    ...(trimString(choice.finish_reason) ? { finishReason: trimString(choice.finish_reason) } : {}),
+  };
+}
+
 function sanitizeResultSpec(value) {
   const output = {};
   for (const source of collectResultSpecSources(value)) {
+    Object.assign(output, extractTextResultSpec(source));
     for (const key of ['imageUrl', 'videoUrl', 'audioUrl', 'localPath', 'thumbUrl', 'displayLocalPath', 'posterLocalPath', 'sourceUrl']) {
       const text = trimString(source[key]);
       if (text && !output[key]) output[key] = text;

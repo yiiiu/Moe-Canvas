@@ -1,4 +1,5 @@
 import { buildAsyncTaskLoadingPatch } from './asyncTaskAdapters.js';
+import { writeAsyncTaskNodeBackfill } from './asyncTaskNodeWriteback.js';
 import { isAsyncTaskRecordActive, loadAsyncTaskRecords } from './asyncTaskStore.js';
 import {
   hasAsyncTaskLocalRecoveryCredential,
@@ -237,16 +238,17 @@ function restoreNodeLoadingOverlay(record = {}) {
     }
     const wasLoading = isPreviewNodeLoading(nodeId);
     const restored = wasLoading
-      ? syncPreviewNodeLoading(nodeId, container, { variant: 'full' })
+      ? syncPreviewNodeLoading(nodeId, container)
       : startPreviewNodeLoading(nodeId, container, { variant: 'full' });
+    const hasOverlay = Boolean(container.querySelector?.('.img-loading-overlay'));
     noteLoadingRecoveryDiag('overlay-call', {
       nodeId,
       method: wasLoading ? 'sync' : 'start',
-      restored: Boolean(restored),
-      hasOverlay: Boolean(container.querySelector?.('.img-loading-overlay')),
+      restored: Boolean(restored && hasOverlay),
+      hasOverlay,
       className: container.className,
     });
-    return restored;
+    return Boolean(restored && hasOverlay);
   } catch (error) {
     noteLoadingRecoveryDiag('overlay-error', { nodeId, message: error?.message || String(error) });
     return false;
@@ -325,6 +327,36 @@ function hasRecoverablePollingTaskId(record = {}) {
   return Boolean(resolveAsyncTaskQueryableTaskId(record));
 }
 
+const ASYNC_RECORD_FAILURE_STATUSES = new Set(['failed', 'fail', 'failure', 'error', 'errored']);
+
+function isAsyncTaskRecordFailureStatus(record = {}) {
+  return ASYNC_RECORD_FAILURE_STATUSES.has(normalizeStatusText(record.status));
+}
+
+function hasMatchingTerminalIdentity(record = {}, nodeData = {}) {
+  const runtimeTaskId = trimString(record.runtimeTaskId);
+  const clientTaskId = trimString(record.clientTaskId);
+  const nodeRuntimeTaskId = trimString(nodeData.asyncRuntimeTaskId || nodeData.runtimeTaskId);
+  const nodeClientTaskId = trimString(nodeData.asyncClientTaskId || nodeData.clientTaskId);
+  if (runtimeTaskId && nodeRuntimeTaskId) return runtimeTaskId === nodeRuntimeTaskId;
+  if (clientTaskId && nodeClientTaskId) return clientTaskId === nodeClientTaskId;
+  return !nodeRuntimeTaskId && !nodeClientTaskId;
+}
+
+function canProjectAsyncTaskTerminalFailure(record = {}, node = {}) {
+  if (!record?.nodeId || !isAsyncTaskRecordFailureStatus(record)) return false;
+  if (!node || typeof node !== 'object') return false;
+  const nodeData = getNodeData(node);
+  if (!isSameCanvas(record, nodeData)) return false;
+  if (!hasMatchingTerminalIdentity(record, nodeData)) return false;
+  const nodeStartedAt = getNodeStartedAt(nodeData);
+  const recordStartedAt = Number(record.createdAt || record.startedAt || 0) || 0;
+  if (nodeStartedAt && recordStartedAt && nodeStartedAt > recordStartedAt && !trimString(nodeData.asyncRuntimeTaskId || nodeData.asyncClientTaskId)) {
+    return false;
+  }
+  return true;
+}
+
 function requiresPollingTaskIdForRecovery(record = {}) {
   const capability = resolveAsyncTaskRecoveryCapability(record);
   return capability.supportsRemotePoll === true;
@@ -399,10 +431,20 @@ export function canRestoreAsyncTaskLoading(record = {}, node = {}, options = {})
   return debugResult;
 }
 
+function preserveNodeTimerStartPatch(patch = {}, node = {}) {
+  const nodeStartedAt = getNodeStartedAt(getNodeData(node));
+  if (!nodeStartedAt) return patch;
+  return {
+    ...patch,
+    generationStartTime: nodeStartedAt,
+    asyncTaskStartedAt: nodeStartedAt,
+  };
+}
+
 function cloneNodeWithAsyncTaskPatch(record = {}, node = {}, canvasId = '') {
   const nodeForCheck = { ...asObject(node), canvasId: trimString(node.canvasId) || trimString(canvasId) };
   if (!canRestoreAsyncTaskLoading(record, nodeForCheck)) return null;
-  return { ...node, ...buildAsyncTaskLoadingPatch(record) };
+  return { ...node, ...preserveNodeTimerStartPatch(buildAsyncTaskLoadingPatch(record), node) };
 }
 
 export function applyAsyncTaskLoadingToCanvasData(canvasData = {}, options = {}) {
@@ -508,9 +550,24 @@ export function restoreAsyncTaskLoadingRecords(records = [], options = {}) {
       canRestore,
     });
     if (!canRestore) {
+      if (canProjectAsyncTaskTerminalFailure(record, node)) {
+        const outcome = writeAsyncTaskNodeBackfill({
+          store,
+          phase: 'failed',
+          task: {
+            ...record,
+            id: record.runtimeTaskId || record.clientTaskId,
+            status: 'failed',
+            recoverySpec: record.pollingSpec,
+          },
+        });
+        if (outcome.ok) {
+          restored.push({ runtimeTaskId: record.runtimeTaskId, remoteTaskId: record.remoteTaskId, nodeId, overlayRestored: false, terminalProjected: true, record });
+        }
+      }
       continue;
     }
-    const patch = buildAsyncTaskLoadingPatch(record);
+    const patch = preserveNodeTimerStartPatch(buildAsyncTaskLoadingPatch(record), node);
     if (!updateNodeData(store, nodeId, patch)) {
       if (overlayRestored) restored.push({ runtimeTaskId: record.runtimeTaskId, remoteTaskId: record.remoteTaskId, nodeId, overlayRestored, record });
       continue;
@@ -650,10 +707,27 @@ export function restoreAsyncTaskLoadingFromStore(options = {}) {
 export function installAsyncTaskLoadingRecovery(options = {}) {
   const source = options.asyncTaskLoadingSource || options.source || 'unknown';
   if (installedAsyncTaskLoadingRecovery) {
+    const store = options.store || appStore;
+    const storage = options.asyncTaskStorage || options.storage;
+    const rerun = (reason = 'reused-run') => {
+      const next = restoreAsyncTaskLoadingFromStore({ ...options, store, storage, asyncTaskLoadingSource: source, source });
+      restorePendingLoadingOverlays(next);
+      installedAsyncTaskLoadingRecovery.restored = next;
+      noteLoadingRecoveryDiag('install-reused-run', {
+        requestedSource: source,
+        reason,
+        restoredCount: next.length,
+      });
+      return next;
+    };
+    const restored = rerun('initial');
+    const stopFastLoadingRecovery = startFastLoadingRecovery(() => rerun('fast-recovery'), options);
+    if (stopFastLoadingRecovery) installedAsyncTaskLoadingRecovery.extraStops?.push(stopFastLoadingRecovery);
     noteLoadingRecoveryDiag('install-reused', {
       requestedSource: source,
       installedSource: installedAsyncTaskLoadingRecovery.source || '',
       installedAtDt: installedAsyncTaskLoadingRecovery.installedAtDt,
+      restoredCount: restored.length,
     });
     return installedAsyncTaskLoadingRecovery;
   }
@@ -702,12 +776,16 @@ export function installAsyncTaskLoadingRecovery(options = {}) {
   const unsubscribe = subscribeStoreNodes(store, () => run('store-subscribe'));
   const disconnectDomObserver = observeLoadingDomMounts(() => run('dom-observer'), options);
   const stopFastLoadingRecovery = startFastLoadingRecovery(runFastRecovery, options);
+  const extraStops = [];
   const stopWatch = () => {
     stopped = true;
     noteLoadingRecoveryDiag('install-stopped', { source });
     try { unsubscribe?.(); } catch {}
     try { disconnectDomObserver?.(); } catch {}
     try { stopFastLoadingRecovery?.(); } catch {}
+    for (const stopExtra of extraStops.splice(0)) {
+      try { stopExtra?.(); } catch {}
+    }
     if (installedAsyncTaskLoadingRecovery?.stop === stopWatch) installedAsyncTaskLoadingRecovery = null;
   };
   if ((unsubscribe || disconnectDomObserver || stopFastLoadingRecovery) && maxWatchMs > 0) {
@@ -719,6 +797,7 @@ export function installAsyncTaskLoadingRecovery(options = {}) {
     restored: latest,
     source,
     installedAtDt,
+    extraStops,
     stop: stopWatch,
     dump: () => globalThis[ASYNC_LOADING_DUMP_KEY]?.(),
   };

@@ -62,6 +62,39 @@ function buildInterruptedPatch() {
   };
 }
 
+function buildFailedImageResultClearPatch() {
+  return {
+    imageUrl: null,
+    sourceUrl: null,
+    thumbUrl: null,
+    localPath: null,
+    displayLocalPath: null,
+    mediaUrl: null,
+    images: [],
+  };
+}
+
+function resolveFailureStatusCode(error = '') {
+  const message = trimString(error);
+  const explicitCode = message.match(/(?:错误码|error\s*code|status\s*code)\s*[:：]\s*(\d{3,5})/i)?.[1];
+  const bracketedCode = message.match(/\b([45]\d{2})\b/)?.[1];
+  const code = Number(explicitCode || bracketedCode || 400);
+  return Number.isFinite(code) && code > 0 ? code : 400;
+}
+
+function buildFailedStatusCardPatch(error = '') {
+  const message = trimString(error) || '任务失败';
+  return {
+    rhStatusCode: resolveFailureStatusCode(message),
+    rhStatusMessage: message,
+    rhTaskStatus: 'failed',
+    rhTaskLabel: '生成失败',
+    dreaminaTaskStatus: 'failed',
+    dreaminaTaskPhase: 'failed',
+    dreaminaTaskLabel: '生成失败',
+  };
+}
+
 function buildRunningProjection(task = {}) {
   const recoverySpec = resolveRecoverySpec(task);
   const taskType = resolveTaskType(recoverySpec, task);
@@ -154,11 +187,21 @@ function buildTerminalProjection(task = {}, resultPatch = {}) {
         ? buildGenerationCancelledPatch({ startedAt: getTaskAttemptTime(task) })
         : buildGenerationSuccessPatch({ startedAt: getTaskAttemptTime(task) });
 
+  const terminalResultPatch = asObject(resultPatch);
+  const failedImageClearPatch = taskType === 'image-generation' && isGenerationTaskFailureStatus(status)
+    ? buildFailedImageResultClearPatch()
+    : {};
+  const failedStatusCardPatch = isGenerationTaskFailureStatus(status)
+    ? buildFailedStatusCardPatch(error)
+    : {};
+
   return {
     ...lifecyclePatch,
     ...basePatch,
     ...(taskType === 'image-generation' ? { generationStartTime: null } : {}),
-    ...asObject(resultPatch),
+    ...terminalResultPatch,
+    ...failedImageClearPatch,
+    ...failedStatusCardPatch,
   };
 }
 

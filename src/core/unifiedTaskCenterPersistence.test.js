@@ -481,3 +481,178 @@ test('unifiedTaskCenterPersistence: V2 owns restored local proxy recovery and by
   assert.ok(requestedUrls[0].startsWith('/api/v2/proxy/local-task?'));
   assert.equal(legacyResumeCount, 0);
 });
+
+test('unifiedTaskCenterPersistence: restored V2 task center cards are marked as runtime projections', async () => {
+  const storage = createMemoryStorage({
+    'ai-canvas:unified-task-center:snapshot:v1': JSON.stringify({
+      version: 1,
+      savedAt: 100,
+      items: [generationTask({
+        taskId: 'generation:node-1:runtime-grsai-1',
+        recoverySpec: {
+          provider: 'grsai',
+          recoveryMode: 'local_proxy_poll',
+          modelId: 'grsai-model',
+          targetNodeId: 'node-1',
+          taskId: 'runtime-grsai-1',
+          runtimeTaskId: 'runtime-grsai-1',
+          clientTaskId: 'client-grsai-1',
+          queryableTaskId: '',
+          pollingTaskId: '',
+          payload: {
+            provider: 'grsai',
+            model: 'grsai-model',
+            runtimeTaskId: 'runtime-grsai-1',
+            clientTaskId: 'client-grsai-1',
+          },
+        },
+      })],
+    }),
+  });
+  const state = { nodes: { 'node-1': { id: 'node-1', isGenerating: true, jobStatus: 'loading' } } };
+  const store = {
+    getState: () => state,
+    updateNodeData(nodeId, patch) {
+      state.nodes[nodeId] = { ...(state.nodes[nodeId] || { id: nodeId }), ...patch };
+    },
+  };
+  const manager = {
+    upserts: [],
+    upsertTask(task) {
+      this.upserts.push(task);
+      return task;
+    },
+  };
+
+  const restored = restoreTaskCenterPersistence(manager, {
+    storage,
+    store,
+    now: () => 1000,
+    generationRecoveryV2: true,
+    generationRecoveryV2Options: {
+      pollIntervalMs: 2000,
+      fetch: async () => ({ ok: true, json: async () => ({ status: 'running', pending: true }) }),
+      setTimeout: () => 1,
+      clearTimeout() {},
+    },
+    resumeRestoredTasks: async () => [],
+  });
+  await restored.generationRecoveryV2Session.flush();
+
+  assert.equal(manager.upserts.length >= 1, true);
+  assert.equal(manager.upserts[0].projectionSource, 'asyncTaskRuntime');
+  assert.equal(manager.upserts[0].ownsRecoveryFact, false);
+  assert.equal(manager.upserts.at(-1).projectionSource, 'asyncTaskRuntime');
+  assert.equal(manager.upserts.at(-1).ownsRecoveryFact, false);
+});
+
+test('unifiedTaskCenterPersistence: V2 refresh recovery updates one task card without duplicates', async () => {
+  const storage = createMemoryStorage({
+    'ai-canvas:unified-task-center:snapshot:v1': JSON.stringify({
+      version: 1,
+      savedAt: 100,
+      items: [generationTask({
+        taskId: 'generation:node-1:runtime-grsai-1',
+        recoverySpec: {
+          provider: 'grsai',
+          recoveryMode: 'local_proxy_poll',
+          modelId: 'grsai-model',
+          targetNodeId: 'node-1',
+          taskId: 'runtime-grsai-1',
+          runtimeTaskId: 'runtime-grsai-1',
+          clientTaskId: 'client-grsai-1',
+          queryableTaskId: '',
+          pollingTaskId: '',
+          payload: { provider: 'grsai', runtimeTaskId: 'runtime-grsai-1', clientTaskId: 'client-grsai-1' },
+        },
+      })],
+    }),
+  });
+  const state = { nodes: { 'node-1': { id: 'node-1', isGenerating: true, jobStatus: 'loading' } } };
+  const store = {
+    getState: () => state,
+    updateNodeData(nodeId, patch) {
+      state.nodes[nodeId] = { ...(state.nodes[nodeId] || { id: nodeId }), ...patch };
+    },
+  };
+  const taskMap = new Map();
+  const manager = {
+    tasks: taskMap,
+    upserts: [],
+    upsertTask(task) {
+      this.upserts.push(task);
+      this.tasks.set(task.taskId, { ...(this.tasks.get(task.taskId) || {}), ...task });
+      return task;
+    },
+  };
+
+  const restored = restoreTaskCenterPersistence(manager, {
+    storage,
+    store,
+    now: () => 1000,
+    generationRecoveryV2: true,
+    generationRecoveryV2Options: {
+      pollIntervalMs: 2000,
+      fetch: async () => ({
+        ok: true,
+        json: async () => ({
+          status: 'success',
+          result: { status: 'succeeded', results: [{ url: '/output/final.png' }] },
+        }),
+      }),
+      setTimeout: () => 1,
+      clearTimeout() {},
+    },
+    resumeRestoredTasks: async () => [],
+  });
+  await restored.generationRecoveryV2Session.flush();
+
+  assert.equal(manager.tasks.size, 1);
+  assert.equal([...manager.tasks.keys()][0], 'generation:node-1:runtime-grsai-1');
+  assert.equal(manager.tasks.get('generation:node-1:runtime-grsai-1').status, 'success');
+  assert.equal(manager.tasks.get('generation:node-1:runtime-grsai-1').projectionSource, 'asyncTaskRuntime');
+});
+
+test('unifiedTaskCenterPersistence: clearing terminal task center cards keeps active async recovery records', () => {
+  const storage = createMemoryStorage();
+  const asyncTaskStorage = createMemoryStorage();
+  persistTaskCenterSnapshot([
+    generationTask({
+      taskId: 'generation:node-1:runtime-grsai-1',
+      task: { status: 'complete', finishedAt: 1000 },
+      recoverySpec: {
+        provider: 'grsai',
+        recoveryMode: 'local_proxy_poll',
+        modelId: 'grsai-model',
+        targetNodeId: 'node-1',
+        taskId: 'runtime-grsai-1',
+        runtimeTaskId: 'runtime-grsai-1',
+        clientTaskId: 'client-grsai-1',
+        queryableTaskId: '',
+        pollingTaskId: '',
+        payload: { provider: 'grsai', runtimeTaskId: 'runtime-grsai-1', clientTaskId: 'client-grsai-1' },
+      },
+    }),
+    generationTask({
+      taskId: 'generation:node-2:runtime-grsai-2',
+      task: { nodeId: 'node-2', status: 'processing' },
+      recoverySpec: {
+        provider: 'grsai',
+        recoveryMode: 'local_proxy_poll',
+        modelId: 'grsai-model',
+        targetNodeId: 'node-2',
+        taskId: 'runtime-grsai-2',
+        runtimeTaskId: 'runtime-grsai-2',
+        clientTaskId: 'client-grsai-2',
+        queryableTaskId: '',
+        pollingTaskId: '',
+        payload: { provider: 'grsai', runtimeTaskId: 'runtime-grsai-2', clientTaskId: 'client-grsai-2' },
+      },
+    }),
+  ], { storage, asyncTaskStorage, now: 1200 });
+
+  persistTaskCenterSnapshot([], { storage, asyncTaskStorage, now: 1300 });
+
+  const records = loadAsyncTaskRecords({ storage: asyncTaskStorage });
+  assert.equal(records.some((record) => record.runtimeTaskId === 'runtime-grsai-2' && record.status === 'polling'), true);
+});

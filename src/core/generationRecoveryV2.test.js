@@ -64,7 +64,12 @@ function createMemoryStorage() {
   };
 }
 
-function createLocalProxyTask() {
+function createLocalProxyTask(overrides = {}) {
+  const recoverySpecOverrides = overrides.recoverySpec || {};
+  const unifiedTaskOverrides = overrides.unifiedTask || {};
+  const taskOverrides = { ...overrides };
+  delete taskOverrides.recoverySpec;
+  delete taskOverrides.unifiedTask;
   return {
     taskId: 'generation:node-1:runtime-grsai-1',
     nodeId: 'node-1',
@@ -74,6 +79,7 @@ function createLocalProxyTask() {
     createdAt: 100,
     startedAt: 100,
     updatedAt: 100,
+    ...taskOverrides,
     recoverySpec: {
       kind: 'generation',
       taskType: 'image-generation',
@@ -89,6 +95,7 @@ function createLocalProxyTask() {
         runtimeTaskId: 'runtime-grsai-1',
         clientTaskId: 'client-grsai-1',
       },
+      ...recoverySpecOverrides,
     },
     unifiedTask: {
       id: 'generation:node-1:runtime-grsai-1',
@@ -99,6 +106,7 @@ function createLocalProxyTask() {
       canResume: true,
       createdAt: 100,
       updatedAt: 100,
+      ...unifiedTaskOverrides,
     },
   };
 }
@@ -472,6 +480,57 @@ test('generationRecoveryV2 local proxy saves remote image into output before ter
   assert.equal(records[0].resultSpec.thumbUrl, '/output/v2-recovered-final.png');
   assert.equal(Object.hasOwn(records[0].resultSpec, 'displayLocalPath'), false);
   assert.equal(Object.hasOwn(records[0].resultSpec, 'sourceUrl'), false);
+});
+
+test('generationRecoveryV2 refuses terminal node writeback when canvas id mismatches', async () => {
+  const store = createStore({
+    'node-1': {
+      id: 'node-1',
+      canvasId: 'canvas-actual',
+      isGenerating: true,
+      jobStatus: 'loading',
+      generationStartTime: 100,
+    },
+  });
+  const manager = createManager();
+
+  const session = startGenerationRecoveryV2([
+    createLocalProxyTask({
+      canvasId: 'canvas-other',
+      recoverySpec: { canvasId: 'canvas-other' },
+      unifiedTask: { canvasId: 'canvas-other' },
+    }),
+  ], manager, {
+    store,
+    now: () => 1000,
+    pollIntervalMs: 2000,
+    graceMs: 60000,
+    setTimeout() {
+      throw new Error('terminal image result must not schedule retry');
+    },
+    clearTimeout() {},
+    fetch: async () => ({
+      ok: true,
+      json: async () => ({
+        runtimeTaskId: 'runtime-grsai-1',
+        clientTaskId: 'client-grsai-1',
+        nodeId: 'node-1',
+        provider: 'grsai',
+        kind: 'image',
+        status: 'success',
+        result: {
+          status: 'succeeded',
+          results: [{ url: '/output/canvas-mismatch.png' }],
+        },
+      }),
+    }),
+  });
+
+  await session.flush();
+
+  assert.equal(store.getState().nodes['node-1'].imageUrl, undefined);
+  assert.equal(store.getState().nodes['node-1'].isGenerating, true);
+  assert.equal(store.getState().nodes['node-1'].jobStatus, 'loading');
 });
 
 test('generationRecoveryV2 local proxy writes terminal resultSpec into async task cache', async () => {

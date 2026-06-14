@@ -1,1 +1,26 @@
-function a144_0xc235(_0x29f24e,_0x47dc86){var _0x39eea7=a144_0x39ee();return a144_0xc235=function(_0xc23511,_0x3b3692){_0xc23511=_0xc23511-0x119;var _0x126d40=_0x39eea7[_0xc23511];return _0x126d40;},a144_0xc235(_0x29f24e,_0x47dc86);}(function(_0x1ee8b6,_0x1ec1e6){var _0x264f1a=a144_0xc235,_0x3498cf=_0x1ee8b6();while(!![]){try{var _0x51561f=parseInt(_0x264f1a(0x11b))/0x1+parseInt(_0x264f1a(0x11e))/0x2+parseInt(_0x264f1a(0x11a))/0x3+-parseInt(_0x264f1a(0x119))/0x4*(parseInt(_0x264f1a(0x11c))/0x5)+-parseInt(_0x264f1a(0x11f))/0x6+-parseInt(_0x264f1a(0x122))/0x7*(-parseInt(_0x264f1a(0x11d))/0x8)+parseInt(_0x264f1a(0x120))/0x9*(-parseInt(_0x264f1a(0x121))/0xa);if(_0x51561f===_0x1ec1e6)break;else _0x3498cf['push'](_0x3498cf['shift']());}catch(_0x4f4a2d){_0x3498cf['push'](_0x3498cf['shift']());}}}(a144_0x39ee,0xe94b0));export{createAIGenerateNodeUiModule}from'./uiModule.impl.js';function a144_0x39ee(){var _0x3f35ee=['2426250UqzhwC','1080005JmzJKg','250615AnlScA','2416kVOIaX','2454566iTMIEK','4807146mARYJN','39681ZIxtFy','2620AtCdHt','38255xbnqVo','148APBGvc'];a144_0x39ee=function(){return _0x3f35ee;};return a144_0x39ee();}
+import { createAIGenerateNodeUiModule as createAIGenerateNodeUiModuleImpl } from './uiModule.impl.js';
+
+const STATUS_CARD_ERROR_COLOR = 'var(--red)';
+
+function isErrorStatusCode(statusCode) {
+  const numericStatusCode = Number(statusCode);
+  return Number.isFinite(numericStatusCode) && numericStatusCode !== 0;
+}
+
+function applyStatusCardErrorStyle(card, statusCode) {
+  if (!card || !isErrorStatusCode(statusCode)) return card;
+  card.innerHTML = String(card.innerHTML || '').replaceAll('var(--white-80)', STATUS_CARD_ERROR_COLOR);
+  return card;
+}
+
+export function createAIGenerateNodeUiModule(options) {
+  const uiModule = createAIGenerateNodeUiModuleImpl(options);
+  const createStatusCard = uiModule?._createStatusCard;
+  if (typeof createStatusCard !== 'function') return uiModule;
+
+  uiModule._createStatusCard = function createStatusCardWithErrorStyle(message, statusCode, ...rest) {
+    return applyStatusCardErrorStyle(createStatusCard.call(this, message, statusCode, ...rest), statusCode);
+  };
+
+  return uiModule;
+}

@@ -122,7 +122,7 @@ function buildAudioPatch(result = {}) {
 export function buildAsyncTaskLoadingPatch(record = {}) {
   const kind = normalizeKind(record);
   const provider = resolveProvider(record);
-  const startedAt = Number(record.createdAt || Date.now()) || Date.now();
+  const startedAt = Number(record.startedAt || record.createdAt || Date.now()) || Date.now();
   const pollingTaskId = resolveAsyncTaskQueryableTaskId(record);
   const basePatch = {
     asyncRuntimeTaskId: record.runtimeTaskId,
@@ -207,6 +207,92 @@ export function createAsyncTaskPoller(record = {}) {
   }
 
   return null;
+}
+
+const REMOTE_SUCCESS_STATUSES = new Set(['success', 'succeeded', 'complete', 'completed', 'done', 'finished']);
+const REMOTE_FAILED_STATUSES = new Set(['failed', 'fail', 'failure', 'error', 'errored']);
+const REMOTE_CANCELLED_STATUSES = new Set(['cancelled', 'canceled']);
+const REMOTE_RUNNING_STATUSES = new Set(['', 'submitted', 'pending', 'running', 'polling', 'processing', 'queued', 'waiting']);
+
+function normalizeAdapterStatus(status) {
+  const value = normalizeLower(status);
+  if (REMOTE_SUCCESS_STATUSES.has(value)) return 'success';
+  if (REMOTE_FAILED_STATUSES.has(value)) return 'failed';
+  if (REMOTE_CANCELLED_STATUSES.has(value)) return 'cancelled';
+  if (REMOTE_RUNNING_STATUSES.has(value)) return value || 'running';
+  return value || 'running';
+}
+
+function firstTextValue(...values) {
+  for (const value of values) {
+    const text = trimString(value);
+    if (text) return text;
+  }
+  return '';
+}
+
+function createLocalProxyPollRequest(ticket = {}) {
+  const params = new URLSearchParams();
+  const local = asObject(ticket.local || ticket);
+  if (local.runtimeTaskId) params.set('runtimeTaskId', local.runtimeTaskId);
+  if (local.clientTaskId) params.set('clientTaskId', local.clientTaskId);
+  return {
+    mode: 'local_proxy_poll',
+    url: `/api/v2/proxy/local-task?${params.toString()}`,
+  };
+}
+
+function createRemotePollRequest(ticket = {}) {
+  const remote = asObject(ticket.remote || ticket);
+  const pollUrl = firstTextValue(remote.pollUrl, remote.apiUrl, ticket.pollUrl, ticket.apiUrl);
+  const params = new URLSearchParams();
+  params.set('apiUrl', pollUrl);
+  return {
+    mode: 'remote_poll',
+    url: `/api/v2/proxy/task?${params.toString()}`,
+  };
+}
+
+function normalizeAdapterPollResponse(raw = {}) {
+  const value = asObject(raw);
+  const body = asObject(value.result || value.response || value.data || value.output);
+  const status = normalizeAdapterStatus(value.status || body.status);
+  return {
+    status,
+    pending: value.pending === true || REMOTE_RUNNING_STATUSES.has(status),
+    result: value.result || value.data || value.output || value,
+    error: value.error || body.error || value.message || '',
+    raw: value,
+  };
+}
+
+function normalizeAdapterResult(raw = {}) {
+  const value = asObject(raw);
+  return asObject(value.result || value.data || value.output || value);
+}
+
+function resolveAdapterRecoveryMode(record = {}) {
+  return normalizeLower(record.recoveryMode || record.recoveryCapability?.recoveryMode || record.pollingSpec?.recoveryMode) || 'remote_poll';
+}
+
+export function resolveAsyncTaskAdapter(record = {}) {
+  const kind = normalizeKind(record);
+  const provider = resolveProvider(record) || 'custom';
+  const recoveryMode = resolveAdapterRecoveryMode(record);
+  const isLocalMedia = kind === 'media' && (provider === 'local' || recoveryMode === 'local_media');
+  const canCancelRemote = false;
+  const canCancelLocal = isLocalMedia && record.canCancel === true;
+  return {
+    id: `${kind}:${provider}:${recoveryMode}`,
+    kind,
+    provider,
+    recoveryMode,
+    canCancelRemote,
+    canCancelLocal,
+    createPollRequest: recoveryMode === 'local_proxy_poll' ? createLocalProxyPollRequest : createRemotePollRequest,
+    normalizePollResponse: normalizeAdapterPollResponse,
+    normalizeResult: normalizeAdapterResult,
+  };
 }
 
 export const __test__ = {

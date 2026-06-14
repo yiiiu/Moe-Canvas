@@ -1,7 +1,7 @@
 import { saveOutputFromUrlToServer } from '../../api/projectsV2Api.js';
 import { buildImageGenerationResultPatch, normalizeImageGenerationResult } from '../components/aigenImage/imageGenerationResultRenderer.js';
 import { upsertAsyncTaskRecord } from './asyncTaskStore.js';
-import { buildGenerationNodeStateProjection } from './generationTaskNodeStateProjection.js';
+import { writeAsyncTaskNodeBackfill } from './asyncTaskNodeWriteback.js';
 
 const ACTIVE_STATUSES = new Set(['waiting', 'submitted', 'processing', 'running', 'queued', 'pending', 'polling']);
 const PENDING_STATUSES = new Set(['', 'submitted', 'pending', 'running', 'polling', 'processing', 'queued', 'waiting']);
@@ -375,20 +375,22 @@ function hasTargetNode(store, nodeId = '') {
   return Boolean(trimString(nodeId) && getStoreNodes(store)[nodeId]);
 }
 
-function applyNodePatch(store, nodeId, patch) {
-  if (!store || !nodeId || typeof store.updateNodeData !== 'function') return false;
-  if (!hasTargetNode(store, nodeId)) return false;
-  try {
-    store.updateNodeData(nodeId, patch);
-    return true;
-  } catch {
-    return false;
-  }
+function applyNodeBackfill(store, phase, task = {}, resultPatch = {}) {
+  return writeAsyncTaskNodeBackfill({
+    store,
+    phase,
+    task,
+    resultPatch,
+  }).ok;
 }
 
 function upsertManagerTask(manager, task) {
   if (!manager || typeof manager.upsertTask !== 'function') return;
-  manager.upsertTask(task);
+  manager.upsertTask({
+    ...task,
+    projectionSource: 'asyncTaskRuntime',
+    ownsRecoveryFact: false,
+  });
 }
 
 function buildAsyncTaskResultSpec(payload = {}, resultPatch = {}) {
@@ -464,10 +466,7 @@ function buildRunningTask(ticket = {}) {
 }
 
 function applyRunningPatch(store, ticket = {}) {
-  return applyNodePatch(store, ticket.targetNodeId, buildGenerationNodeStateProjection({
-    phase: 'running',
-    task: buildRunningTask(ticket),
-  }));
+  return applyNodeBackfill(store, 'running', buildRunningTask(ticket));
 }
 
 function subscribeStoreNodes(store, callback) {
@@ -531,11 +530,7 @@ function createSession(tickets = [], manager, options = {}) {
         error: normalizedStatus === 'success' ? null : payload.error || payload.message || '任务失败',
       } : ticket.task.unifiedTask,
     };
-    applyNodePatch(store, ticket.targetNodeId, buildGenerationNodeStateProjection({
-      phase: 'terminal',
-      task,
-      resultPatch,
-    }));
+    applyNodeBackfill(store, normalizedStatus, task, resultPatch);
     syncAsyncTaskCache(ticket, task, resultPatch, payload, options);
     upsertManagerTask(manager, task);
   };

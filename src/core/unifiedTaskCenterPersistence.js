@@ -958,10 +958,6 @@ export function restoreTaskCenterPersistence(manager, options = {}) {
   if (!manager || typeof manager.upsertTask !== 'function') return [];
   const tasks = loadTaskCenterSnapshot(options);
   const store = options.store || appStore;
-  for (const task of tasks) {
-    manager.upsertTask(task, { silent: true });
-  }
-  if (typeof manager.render === 'function') manager.render();
   installAsyncTaskLoadingRecovery({
     ...options,
     asyncTaskLoadingSource: 'task-center-persistence',
@@ -975,11 +971,20 @@ export function restoreTaskCenterPersistence(manager, options = {}) {
   };
   const v2Tickets = v2Enabled ? buildGenerationRecoveryV2Tickets(tasks, v2Options) : [];
   const v2Keys = new Set(v2Tickets.map((ticket) => ticket.id));
+  const projectedTasks = v2Keys.size
+    ? tasks.map((task) => (v2Keys.has(trimString(task.taskId || task.unifiedTask?.id))
+      ? { ...task, projectionSource: 'asyncTaskRuntime', ownsRecoveryFact: false }
+      : task))
+    : tasks;
   const legacyTasks = v2Keys.size
     ? tasks.filter((task) => !v2Keys.has(trimString(task.taskId || task.unifiedTask?.id)))
     : tasks;
+  for (const task of projectedTasks) {
+    manager.upsertTask(task, { silent: true });
+  }
+  if (typeof manager.render === 'function') manager.render();
   const generationRecoveryV2Session = v2Tickets.length
-    ? startGenerationRecoveryV2(tasks, manager, v2Options)
+    ? startGenerationRecoveryV2(projectedTasks, manager, v2Options)
     : null;
   coordinateRestoredGenerationRecovery(legacyTasks, manager, {
     ...options,

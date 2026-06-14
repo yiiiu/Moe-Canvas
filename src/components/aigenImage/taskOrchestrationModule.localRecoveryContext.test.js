@@ -407,3 +407,66 @@ test('aigenImage task orchestration: stale recovered GRSAI instance can retry wh
     else globalThis.Node = originalNode;
   }
 });
+
+test('aigenImage task orchestration: failed GRSAI proxy response writes failure state instead of success', async () => {
+  const originalWindow = globalThis.window;
+  const originalDocument = globalThis.document;
+  const originalNode = globalThis.Node;
+
+  try {
+    __resetGenerationTaskRuntimeForTest();
+    globalThis.window = {
+      showToast: () => {},
+      ensureSubscriptionInstallId: async () => '',
+    };
+    globalThis.document = {
+      getElementById: () => null,
+    };
+    globalThis.Node = {
+      TEXT_NODE: 3,
+      ELEMENT_NODE: 1,
+    };
+
+    const nodeId = 'node-ai-image-grsai-failed-response';
+    const state = {
+      nodes: {
+        [nodeId]: {
+          id: nodeId,
+          model: 'gpt-image-2',
+          provider: 'grsai',
+          aspectRatio: '1:1',
+          imageSize: '2K',
+          batchSize: 1,
+        },
+      },
+    };
+
+    const api = {
+      generateImage: async () => ({
+        id: 'task-credit-empty',
+        status: 'failed',
+        error: 'apikey credits not enough',
+      }),
+    };
+
+    const { module } = createNodeContext({ nodeId, state, api });
+
+    const result = await module._onGenerate();
+    const node = state.nodes[nodeId];
+
+    assert.notEqual(result.status, 'success');
+    assert.equal(node.isGenerating, false);
+    assert.equal(node.jobStatus, 'error');
+    assert.equal(node.jobError, 'apikey credits not enough');
+    assert.deepEqual(node.images, []);
+    assert.equal(node.imageUrl, '');
+  } finally {
+    __resetGenerationTaskRuntimeForTest();
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+    if (originalNode === undefined) delete globalThis.Node;
+    else globalThis.Node = originalNode;
+  }
+});

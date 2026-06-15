@@ -1571,6 +1571,86 @@ test('phase3 grsai local proxy success accepts cached response body json string'
   assert.equal(patch.localPath, 'output/grsai-json-body-result.png');
 });
 
+test('recovery coordinator collects active text local proxy record for V2 resume', () => {
+  const runtimeTaskId = 'async:text:custom:text-node-1:1000';
+  const clientTaskId = `client:${runtimeTaskId}`;
+  const storage = createMemoryStorage({
+    'ai-canvas:async-tasks:v1': asyncTaskSnapshot([{
+      runtimeTaskId,
+      clientTaskId,
+      kind: 'text',
+      provider: 'custom',
+      modelId: 'gpt-5.4',
+      nodeId: 'text-node-1',
+      canvasId: 'canvas_1',
+      status: 'polling',
+      canResume: true,
+      recoveryMode: 'local_proxy_poll',
+      recoveryCapability: {
+        provider: 'custom',
+        recoveryMode: 'local_proxy_poll',
+        supportsRemotePoll: false,
+        returnsImmediateResult: true,
+        supportsLocalProxyRecovery: true,
+        requiresQueryableTaskId: false,
+      },
+      pollingSpec: {
+        kind: 'generation',
+        taskType: 'text-generation',
+        provider: 'custom',
+        recoveryMode: 'local_proxy_poll',
+        targetNodeId: 'text-node-1',
+        runtimeTaskId,
+        clientTaskId,
+        payload: {
+          provider: 'custom',
+          model: 'gpt-5.4',
+          runtimeTaskId,
+          clientTaskId,
+          nodeId: 'text-node-1',
+          canvasId: 'canvas_1',
+          kind: 'text',
+        },
+      },
+      payload: {
+        provider: 'custom',
+        model: 'gpt-5.4',
+        runtimeTaskId,
+        clientTaskId,
+        nodeId: 'text-node-1',
+        canvasId: 'canvas_1',
+        kind: 'text',
+      },
+      createdAt: 1000,
+      updatedAt: 1000,
+    }]),
+  });
+  const store = createStore({
+    'text-node-1': {
+      id: 'text-node-1',
+      type: 'ai-text',
+      isGenerating: true,
+      jobStatus: 'running',
+      asyncTaskStatus: 'running',
+    },
+  });
+  const manager = {};
+  const result = coordinateRestoredGenerationRecovery([], manager, {
+    store,
+    storage,
+    resumeRestoredTasks: () => [],
+    reconcileRestoredGenerationActiveTasks: () => {},
+    generationRecoveryRetryDelays: [0],
+  });
+
+  assert.equal(result.activeTasks.length, 1);
+  assert.equal(result.readyResumeTasks.length, 1);
+  assert.equal(result.readyResumeTasks[0].kind, 'textGeneration');
+  assert.equal(result.readyResumeTasks[0].recoverySpec.recoveryMode, 'local_proxy_poll');
+  assert.equal(result.readyResumeTasks[0].recoverySpec.runtimeTaskId, runtimeTaskId);
+  assert.equal(result.readyResumeTasks[0].recoverySpec.clientTaskId, clientTaskId);
+});
+
 test('phase3 grsai local proxy success normalizes local image path and stops runtime timer', async () => {
   const storage = createMemoryStorage({
     'ai-canvas:async-tasks:v1': asyncTaskSnapshot([{

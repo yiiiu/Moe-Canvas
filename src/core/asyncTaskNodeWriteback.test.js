@@ -230,6 +230,152 @@ test('asyncTaskNodeWriteback failure clears stale status card success code with 
   assert.equal(node.dreaminaTaskLabel, '生成失败');
 });
 
+test('asyncTaskNodeWriteback text success bumps biz revision for mounted renderer update', () => {
+  const store = createStore({
+    'text-node-1': {
+      id: 'text-node-1',
+      type: 'ai-text',
+      canvasId: 'canvas-1',
+      isGenerating: true,
+      jobStatus: 'loading',
+      asyncRuntimeTaskId: 'runtime-text-1',
+      asyncClientTaskId: 'client-text-1',
+      generationStartTime: 100,
+      generationDuration: null,
+      _bizRev: 7,
+    },
+  });
+
+  const outcome = writeAsyncTaskNodeBackfill({
+    store,
+    phase: 'success',
+    task: {
+      id: 'task-text-1',
+      kind: 'text-generation',
+      provider: 'custom_openai_compatible',
+      nodeId: 'text-node-1',
+      canvasId: 'canvas-1',
+      startedAt: 100,
+      status: 'success',
+    },
+    resultPatch: {
+      outputText: '刷新恢复后的文本',
+    },
+  });
+
+  const node = store.getState().nodes['text-node-1'];
+  assert.equal(outcome.ok, true);
+  assert.equal(node.outputText, '刷新恢复后的文本');
+  assert.equal(node.isGenerating, false);
+  assert.equal(node.jobStatus, 'success');
+  assert.equal(node.asyncTaskStatus, 'success');
+  assert.equal(node.asyncRuntimeTaskId, null);
+  assert.equal(node.asyncClientTaskId, null);
+  assert.equal(node.generationStartTime, 100);
+  assert.equal(typeof node.generationDuration, 'number');
+  assert.equal(node._bizRev, 8);
+});
+
+test('asyncTaskNodeWriteback text success does not let response id replace node identity', () => {
+  const store = createStore({
+    'text-node-1': {
+      id: 'text-node-1',
+      type: 'ai-text',
+      canvasId: 'canvas-1',
+      isGenerating: true,
+      jobStatus: 'loading',
+      _bizRev: 2,
+    },
+  });
+
+  const outcome = writeAsyncTaskNodeBackfill({
+    store,
+    phase: 'success',
+    task: {
+      id: 'task-text-1',
+      kind: 'text-generation',
+      provider: 'custom_openai_compatible',
+      nodeId: 'text-node-1',
+      canvasId: 'canvas-1',
+      startedAt: 100,
+      status: 'success',
+    },
+    resultPatch: {
+      id: 'resp_ghost_text_1',
+      nodeId: 'resp_ghost_text_1',
+      targetNodeId: 'resp_ghost_text_1',
+      canvasId: 'canvas-from-response',
+      remoteResultId: 'resp_ghost_text_1',
+      outputText: '恢复成功文本',
+    },
+  });
+
+  const node = store.getState().nodes['text-node-1'];
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.nodeId, 'text-node-1');
+  assert.equal(store.updates[0].nodeId, 'text-node-1');
+  assert.equal(node.id, 'text-node-1');
+  assert.equal(node.nodeId, undefined);
+  assert.equal(node.targetNodeId, undefined);
+  assert.equal(node.canvasId, 'canvas-1');
+  assert.equal(node.remoteResultId, 'resp_ghost_text_1');
+  assert.equal(node.outputText, '恢复成功文本');
+  assert.equal(node._bizRev, 3);
+});
+
+test('asyncTaskNodeWriteback prefers recovery target node over stale outer node id', () => {
+  const store = createStore({
+    'stale-source-node': {
+      id: 'stale-source-node',
+      type: 'ai-text',
+      canvasId: 'canvas-1',
+      outputText: '底层节点原文本',
+      _bizRev: 3,
+    },
+    'text-node-1': {
+      id: 'text-node-1',
+      type: 'ai-text',
+      canvasId: 'canvas-1',
+      isGenerating: true,
+      jobStatus: 'loading',
+      asyncRuntimeTaskId: 'runtime-text-1',
+      asyncClientTaskId: 'client-text-1',
+      _bizRev: 7,
+    },
+  });
+
+  const outcome = writeAsyncTaskNodeBackfill({
+    store,
+    phase: 'success',
+    task: {
+      id: 'task-text-1',
+      kind: 'text-generation',
+      provider: 'custom_openai_compatible',
+      nodeId: 'stale-source-node',
+      canvasId: 'canvas-1',
+      startedAt: 100,
+      status: 'success',
+      recoverySpec: {
+        targetNodeId: 'text-node-1',
+        sourceNodeId: 'stale-source-node',
+        taskType: 'text-generation',
+        recoveryMode: 'local_proxy_poll',
+      },
+    },
+    resultPatch: {
+      outputText: '应写入目标文本节点',
+    },
+  });
+
+  const nodes = store.getState().nodes;
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.nodeId, 'text-node-1');
+  assert.equal(nodes['text-node-1'].outputText, '应写入目标文本节点');
+  assert.equal(nodes['text-node-1']._bizRev, 8);
+  assert.equal(nodes['stale-source-node'].outputText, '底层节点原文本');
+  assert.equal(nodes['stale-source-node']._bizRev, 3);
+});
+
 test('asyncTaskNodeWriteback writes video success result patch and exits loading', () => {
   const store = createStore({
     'video-1': {

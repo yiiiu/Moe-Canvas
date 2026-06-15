@@ -109,7 +109,21 @@ function buildRunningProjection(task = {}) {
     jobStatus: 'loading',
   };
 
-  if (taskType !== 'image-generation') return basePatch;
+  if (taskType !== 'image-generation') {
+    if (taskType === 'text-generation' || taskType === 'text') {
+      return {
+        ...basePatch,
+        asyncRuntimeTaskId: runtimeTaskId || taskId,
+        ...(clientTaskId ? { asyncClientTaskId: clientTaskId } : {}),
+        asyncTaskProvider: provider,
+        asyncTaskKind: 'text',
+        asyncTaskStatus: 'pending',
+        asyncTaskRecovering: true,
+        asyncTaskStartedAt: startedAt,
+      };
+    }
+    return basePatch;
+  }
 
   if (provider === 'runninghub' || provider === 'runninghubwf') {
     return {

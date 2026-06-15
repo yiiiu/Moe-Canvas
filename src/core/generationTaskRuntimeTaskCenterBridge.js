@@ -9,6 +9,8 @@ import { buildGenerationNodeStateProjection } from './generationTaskNodeStatePro
 import { upsertUnifiedTaskToTaskCenter } from './unifiedTaskCenterAdapter.js';
 import {
   createAsyncRuntimeTaskId,
+  isAsyncTaskRecordActive,
+  loadAsyncTaskRecords,
   upsertAsyncTaskRecord,
 } from './asyncTaskStore.js';
 import { resolveAsyncTaskRecoveryCapability } from './asyncTaskRecoveryCapabilities.js';
@@ -277,10 +279,14 @@ function precreateLocalAsyncTaskRecord(spec = {}, options = {}) {
     status: 'running',
     canCancel: taskSpec.cancellable === true,
     canResume: taskSpec.resumable !== false,
+    recoveryMode: trimString(taskSpec.recoveryMode || taskSpec.recoverySpec?.recoveryMode || payload.recoveryMode),
+    recoveryCapability: taskSpec.recoveryCapability || taskSpec.recoverySpec?.recoveryCapability,
     pollingSpec: {
       kind: 'generation',
       taskType: trimString(taskSpec.taskType || credentials.kind),
       provider: credentials.provider,
+      recoveryMode: trimString(taskSpec.recoveryMode || taskSpec.recoverySpec?.recoveryMode || payload.recoveryMode),
+      recoveryCapability: taskSpec.recoveryCapability || taskSpec.recoverySpec?.recoveryCapability,
       adapterType: trimString(taskSpec.adapterType),
       modelId: trimString(taskSpec.modelId || taskSpec.model || payload.model || payload.modelId),
       executionId: trimString(taskSpec.executionId),
@@ -607,8 +613,29 @@ function resolveAsyncTaskRecordKind(recoverySpec = {}) {
   if (text.includes('image')) return 'image';
   if (text.includes('video')) return 'video';
   if (text.includes('audio')) return 'audio';
+  if (text.includes('text') || text.includes('chat') || text.includes('llm')) return 'text';
   if (text.includes('media')) return 'media';
   return 'provider_async';
+}
+
+function resolveExistingActiveAsyncTaskIdentity({ spec = {}, options = {}, recoverySpec = {}, kind = '' } = {}) {
+  const taskSpec = asObject(spec);
+  const payload = asObject(taskSpec.payload);
+  const targetNodeId = trimString(recoverySpec.targetNodeId || taskSpec.targetNodeId || taskSpec.sourceNodeId || payload.nodeId || payload.targetNodeId);
+  const provider = trimString(recoverySpec.provider || taskSpec.provider || payload.provider);
+  const records = loadAsyncTaskRecords({ ...options, storage: options.asyncTaskStorage || options.storage });
+  const matches = records.filter((record) => {
+    if (!isAsyncTaskRecordActive(record)) return false;
+    if (trimString(record.nodeId) !== targetNodeId) return false;
+    if (trimString(record.provider) !== provider) return false;
+    const recordKind = trimString(record.kind);
+    return !kind || recordKind === kind || (recordKind === 'provider_async' && kind === 'image');
+  });
+  if (matches.length !== 1) return {};
+  return {
+    runtimeTaskId: trimString(matches[0].runtimeTaskId),
+    clientTaskId: trimString(matches[0].clientTaskId),
+  };
 }
 
 function persistAsyncTaskIdRecord({ spec = {}, options = {}, result = {}, status = 'polling' } = {}) {
@@ -642,14 +669,20 @@ function persistAsyncTaskIdRecord({ spec = {}, options = {}, result = {}, status
     payload,
   };
   const kind = resolveAsyncTaskRecordKind(fallbackRecordSpec);
+  const existingActiveIdentity = resolveExistingActiveAsyncTaskIdentity({
+    spec: taskSpec,
+    options,
+    recoverySpec: fallbackRecordSpec,
+    kind,
+  });
   const store = resolveStore(options);
   const node = resolveNode(store, fallbackRecordSpec.targetNodeId) || {};
   const recordPollingTaskId = recoverySpec && (!terminalRemoteTaskId || terminalRemoteTaskId !== (fallbackRecordSpec.pollingTaskId || fallbackRecordSpec.taskId))
     ? (fallbackRecordSpec.pollingTaskId || fallbackRecordSpec.taskId)
     : '';
   const record = upsertAsyncTaskRecord({
-    runtimeTaskId: trimString(fallbackRecordSpec.runtimeTaskId || taskSpec.runtimeTaskId || payload.runtimeTaskId),
-    clientTaskId: trimString(fallbackRecordSpec.clientTaskId || taskSpec.clientTaskId || payload.clientTaskId),
+    runtimeTaskId: trimString(fallbackRecordSpec.runtimeTaskId || taskSpec.runtimeTaskId || payload.runtimeTaskId || existingActiveIdentity.runtimeTaskId),
+    clientTaskId: trimString(fallbackRecordSpec.clientTaskId || taskSpec.clientTaskId || payload.clientTaskId || existingActiveIdentity.clientTaskId),
     pollingTaskId: recordPollingTaskId,
     queryableTaskId: recordPollingTaskId,
     remoteTaskId: terminalRemoteTaskId || fallbackRecordSpec.remoteTaskId,
@@ -859,20 +892,23 @@ export async function submitTask(spec, options = {}) {
   const taskSpec = wrapSpecForTaskCenterRecovery(preparedSpec, options);
   syncGenerationTaskToTaskCenter({ spec: taskSpec, options, status: 'running' });
   const result = await submitGenerationTask(taskSpec, options);
+  const finalResult = isLocalProxyFrontendTransportInterruption(taskSpec, result)
+    ? buildLocalProxyPausedResult(taskSpec, result)
+    : result;
   persistAsyncTaskIdRecord({
     spec: taskSpec,
     options,
-    result,
-    status: result?.status || 'polling',
+    result: finalResult,
+    status: finalResult?.status === 'paused' ? 'polling' : (finalResult?.status || 'polling'),
   });
   syncGenerationTaskToTaskCenter({
     spec: taskSpec,
     options,
-    result,
-    status: result?.status,
-    error: result?.error,
+    result: finalResult,
+    status: finalResult?.status === 'paused' ? 'polling' : finalResult?.status,
+    error: finalResult?.error,
   });
-  return result;
+  return finalResult;
 }
 
 function isLocalProxyInterruptedRecovery(spec = {}, result = {}) {
@@ -886,6 +922,39 @@ function isLocalProxyInterruptedRecovery(spec = {}, result = {}) {
     || reason.includes('not_found')
     || reason.includes('expired')
     || reason.includes('不可恢复');
+}
+
+function isLocalProxyFrontendTransportInterruption(spec = {}, result = {}) {
+  const taskSpec = asObject(spec);
+  const payload = asObject(taskSpec.payload);
+  const capability = resolveAsyncTaskRecoveryCapability({
+    ...taskSpec,
+    payload,
+    pollingSpec: taskSpec.recoverySpec || taskSpec.pollingSpec,
+  });
+  if (normalizeLower(taskSpec.recoveryMode || taskSpec.recoverySpec?.recoveryMode || capability.recoveryMode) !== 'local_proxy_poll') return false;
+  if (!capability.supportsLocalProxyRecovery) return false;
+  const status = normalizeLower(result?.status);
+  if (status !== 'failed') return false;
+  const message = normalizeLower(result?.error?.message || result?.error || result?.message);
+  return message.includes('网络连接失败')
+    || message.includes('network')
+    || message.includes('failed to fetch')
+    || message.includes('load failed')
+    || message.includes('aborted');
+}
+
+function buildLocalProxyPausedResult(spec = {}, result = {}) {
+  const taskSpec = asObject(spec);
+  const payload = asObject(taskSpec.payload);
+  return {
+    ...asObject(result),
+    status: 'paused',
+    pending: true,
+    targetNodeId: trimString(result?.targetNodeId || taskSpec.targetNodeId || payload.nodeId),
+    taskId: trimString(result?.taskId || taskSpec.runtimeTaskId || payload.runtimeTaskId || taskSpec.clientTaskId || payload.clientTaskId),
+    error: null,
+  };
 }
 
 function markLocalProxyInterruptedNode(spec = {}, options = {}) {

@@ -482,6 +482,96 @@ test('unifiedTaskCenterPersistence: V2 owns restored local proxy recovery and by
   assert.equal(legacyResumeCount, 0);
 });
 
+test('unifiedTaskCenterPersistence: async-store text local proxy record starts V2 recovery when task snapshot is empty', async () => {
+  const storage = createMemoryStorage({
+    'ai-canvas:unified-task-center:snapshot:v1': JSON.stringify({ version: 1, savedAt: 100, items: [] }),
+    'ai-canvas:async-tasks:v1': JSON.stringify({
+      version: 1,
+      savedAt: 100,
+      items: [{
+        runtimeTaskId: 'runtime-text-1',
+        clientTaskId: 'client-text-1',
+        kind: 'text',
+        provider: 'openai-compatible',
+        modelId: 'text-model',
+        nodeId: 'text-node-1',
+        status: 'polling',
+        canResume: true,
+        recoveryMode: 'local_proxy_poll',
+        pollingSpec: {
+          kind: 'generation',
+          taskType: 'text',
+          provider: 'openai-compatible',
+          recoveryMode: 'local_proxy_poll',
+          targetNodeId: 'text-node-1',
+          taskId: 'runtime-text-1',
+          runtimeTaskId: 'runtime-text-1',
+          clientTaskId: 'client-text-1',
+          payload: {
+            provider: 'openai-compatible',
+            model: 'text-model',
+            runtimeTaskId: 'runtime-text-1',
+            clientTaskId: 'client-text-1',
+          },
+        },
+        payload: {
+          provider: 'openai-compatible',
+          model: 'text-model',
+          runtimeTaskId: 'runtime-text-1',
+          clientTaskId: 'client-text-1',
+        },
+        createdAt: 100,
+        updatedAt: 200,
+      }],
+    }),
+  });
+  const state = { nodes: { 'text-node-1': { id: 'text-node-1', isGenerating: true, jobStatus: 'loading' } } };
+  const store = {
+    getState: () => state,
+    updateNodeData(nodeId, patch) {
+      state.nodes[nodeId] = { ...(state.nodes[nodeId] || { id: nodeId }), ...patch };
+    },
+  };
+  const manager = {
+    upserts: [],
+    upsertTask(task) {
+      this.upserts.push(task);
+      return task;
+    },
+  };
+  const requestedUrls = [];
+  let legacyResumeCount = 0;
+
+  const restored = restoreTaskCenterPersistence(manager, {
+    storage,
+    store,
+    now: () => 1000,
+    generationRecoveryV2: true,
+    generationRecoveryV2Options: {
+      pollIntervalMs: 2000,
+      fetch: async (url) => {
+        requestedUrls.push(String(url));
+        return { ok: true, json: async () => ({ status: 'running', pending: true }) };
+      },
+      setTimeout: () => 1,
+      clearTimeout() {},
+    },
+    resumeRestoredTasks: async () => {
+      legacyResumeCount += 1;
+      return [];
+    },
+  });
+
+  assert.ok(restored.generationRecoveryV2Session);
+  await restored.generationRecoveryV2Session.flush();
+
+  assert.equal(requestedUrls.length, 1);
+  assert.ok(requestedUrls[0].startsWith('/api/v2/proxy/local-task?'));
+  assert.match(requestedUrls[0], /runtimeTaskId=runtime-text-1/);
+  assert.match(requestedUrls[0], /clientTaskId=client-text-1/);
+  assert.equal(legacyResumeCount, 0);
+});
+
 test('unifiedTaskCenterPersistence: restored V2 task center cards are marked as runtime projections', async () => {
   const storage = createMemoryStorage({
     'ai-canvas:unified-task-center:snapshot:v1': JSON.stringify({

@@ -250,8 +250,39 @@ function compactLocalIdentityAsyncTaskRecords(records = []) {
   return items.filter((_, index) => !removedIndexes.has(index));
 }
 
+function hasSameTerminalRemoteResult(left = {}, right = {}) {
+  const leftRemoteId = trimString(left.remoteResultId || left.remoteTaskId);
+  const rightRemoteId = trimString(right.remoteResultId || right.remoteTaskId);
+  return Boolean(leftRemoteId && rightRemoteId && leftRemoteId === rightRemoteId);
+}
+
+function compactTerminalRemoteIdentityAsyncTaskRecords(records = []) {
+  const items = Array.isArray(records) ? records.filter(Boolean) : [];
+  const removedIndexes = new Set();
+  for (let currentIndex = 0; currentIndex < items.length; currentIndex += 1) {
+    if (removedIndexes.has(currentIndex)) continue;
+    let current = items[currentIndex];
+    if (!TERMINAL_STATUSES.has(normalizeStatus(current.status))) continue;
+    for (let duplicateIndex = currentIndex + 1; duplicateIndex < items.length; duplicateIndex += 1) {
+      if (removedIndexes.has(duplicateIndex)) continue;
+      const duplicate = items[duplicateIndex];
+      if (!TERMINAL_STATUSES.has(normalizeStatus(duplicate.status))) continue;
+      if (!isSameTaskScope(current, duplicate)) continue;
+      if (!hasSameTerminalRemoteResult(current, duplicate)) continue;
+      const currentHasClient = Boolean(trimString(current.clientTaskId));
+      const duplicateHasClient = Boolean(trimString(duplicate.clientTaskId));
+      const identitySource = duplicateHasClient && !currentHasClient ? duplicate : current;
+      const dataSource = identitySource === duplicate ? current : duplicate;
+      items[currentIndex] = mergeAsyncTaskRecords(identitySource, dataSource, { preserveIdentity: true });
+      current = items[currentIndex];
+      removedIndexes.add(duplicateIndex);
+    }
+  }
+  return items.filter((_, index) => !removedIndexes.has(index));
+}
+
 function compactAsyncTaskRecords(records = []) {
-  const items = compactLocalIdentityAsyncTaskRecords(Array.isArray(records) ? records.filter(Boolean) : []);
+  const items = compactTerminalRemoteIdentityAsyncTaskRecords(compactLocalIdentityAsyncTaskRecords(Array.isArray(records) ? records.filter(Boolean) : []));
   const removedIndexes = new Set();
   for (let incomingIndex = 0; incomingIndex < items.length; incomingIndex += 1) {
     if (removedIndexes.has(incomingIndex)) continue;

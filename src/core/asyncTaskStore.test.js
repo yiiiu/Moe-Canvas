@@ -123,6 +123,209 @@ test('asyncTaskStore: a new attempt on the same node is not collapsed after prev
   ]);
 });
 
+test('asyncTaskStore: active text local proxy record stays resumable for refresh recovery', () => {
+  const storage = createMemoryStorage();
+  const runtimeTaskId = 'async:text:custom:text-node-1:1000';
+  const clientTaskId = `client:${runtimeTaskId}`;
+
+  upsertAsyncTaskRecord({
+    runtimeTaskId,
+    clientTaskId,
+    kind: 'text',
+    provider: 'custom',
+    modelId: 'gpt-5.4',
+    nodeId: 'text-node-1',
+    canvasId: 'canvas_1',
+    status: 'polling',
+    canCancel: false,
+    canResume: true,
+    recoveryMode: 'local_proxy_poll',
+    recoveryCapability: {
+      provider: 'custom',
+      recoveryMode: 'local_proxy_poll',
+      supportsRemotePoll: false,
+      returnsImmediateResult: true,
+      supportsLocalProxyRecovery: true,
+      requiresQueryableTaskId: false,
+    },
+    pollingSpec: {
+      kind: 'generation',
+      taskType: 'text-generation',
+      provider: 'custom',
+      recoveryMode: 'local_proxy_poll',
+      targetNodeId: 'text-node-1',
+      runtimeTaskId,
+      clientTaskId,
+      startedAt: 1000,
+      payload: {
+        provider: 'custom',
+        model: 'gpt-5.4',
+        runtimeTaskId,
+        clientTaskId,
+        nodeId: 'text-node-1',
+        canvasId: 'canvas_1',
+        kind: 'text',
+      },
+    },
+    payload: {
+      provider: 'custom',
+      model: 'gpt-5.4',
+      runtimeTaskId,
+      clientTaskId,
+      nodeId: 'text-node-1',
+      canvasId: 'canvas_1',
+      kind: 'text',
+    },
+    createdAt: 1000,
+    updatedAt: 1000,
+  }, { storage, now: 1000 });
+
+  const [record] = loadAsyncTaskRecords({ storage, now: 1200 });
+  assert.equal(record.runtimeTaskId, runtimeTaskId);
+  assert.equal(record.clientTaskId, clientTaskId);
+  assert.equal(record.kind, 'text');
+  assert.equal(record.status, 'polling');
+  assert.equal(record.recoveryMode, 'local_proxy_poll');
+  assert.equal(record.canResume, true);
+  assert.equal(record.pollingSpec.targetNodeId, 'text-node-1');
+  assert.equal(record.pollingSpec.runtimeTaskId, runtimeTaskId);
+  assert.equal(record.pollingSpec.clientTaskId, clientTaskId);
+});
+
+test('asyncTaskStore: text local proxy terminal write replaces existing polling record across kind aliases', () => {
+  const storage = createMemoryStorage();
+  const runtimeTaskId = 'async:text:custom_openai_compatible:text-node-1:1000';
+  const clientTaskId = `client:${runtimeTaskId}`;
+
+  upsertAsyncTaskRecord({
+    runtimeTaskId,
+    clientTaskId,
+    kind: 'text',
+    provider: 'custom_openai_compatible',
+    modelId: 'custom_openai_compatible/gpt-5.4',
+    nodeId: 'text-node-1',
+    canvasId: 'canvas_1',
+    status: 'polling',
+    recoveryMode: 'local_proxy_poll',
+    pollingSpec: {
+      kind: 'generation',
+      taskType: 'text-generation',
+      provider: 'custom_openai_compatible',
+      recoveryMode: 'local_proxy_poll',
+      targetNodeId: 'text-node-1',
+      runtimeTaskId,
+      clientTaskId,
+    },
+    payload: {
+      provider: 'custom_openai_compatible',
+      model: 'custom_openai_compatible/gpt-5.4',
+      nodeId: 'text-node-1',
+      runtimeTaskId,
+      clientTaskId,
+      kind: 'text',
+    },
+    createdAt: 1000,
+    updatedAt: 1000,
+  }, { storage, now: 1000 });
+
+  upsertAsyncTaskRecord({
+    runtimeTaskId,
+    clientTaskId,
+    kind: 'text-generation',
+    provider: 'custom_openai_compatible',
+    modelId: 'custom_openai_compatible/gpt-5.4',
+    nodeId: 'text-node-1',
+    canvasId: 'canvas_1',
+    status: 'success',
+    result: {
+      id: 'resp_text_1',
+      choices: [{ message: { content: '恢复完成文本' } }],
+    },
+    createdAt: 1000,
+    updatedAt: 2000,
+    finishedAt: 2000,
+  }, { storage, now: 2000 });
+
+  const records = loadAsyncTaskRecords({ storage, now: 2000 });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].runtimeTaskId, runtimeTaskId);
+  assert.equal(records[0].clientTaskId, clientTaskId);
+  assert.equal(records[0].status, 'success');
+  assert.equal(records[0].kind, 'text-generation');
+  assert.equal(records[0].resultSpec.outputText, '恢复完成文本');
+});
+
+test('asyncTaskStore: text local proxy record keeps resumable mode from pollingSpec when top-level mode is stale', () => {
+  const storage = createMemoryStorage();
+  const runtimeTaskId = 'async:text:custom_openai_compatible:text-node-1:1000';
+  const clientTaskId = `client:${runtimeTaskId}`;
+
+  storage.setItem('ai-canvas:async-tasks:v1', JSON.stringify({
+    version: 1,
+    savedAt: 1200,
+    items: [
+      {
+        version: 1,
+        runtimeTaskId,
+        clientTaskId,
+        kind: 'text',
+        provider: 'custom_openai_compatible',
+        modelId: 'custom_openai_compatible/gpt-5.4',
+        nodeId: 'text-node-1',
+        canvasId: 'canvas_1',
+        status: 'polling',
+        canCancel: false,
+        canResume: true,
+        recoveryMode: 'none',
+        recoveryCapability: {
+          provider: 'custom_openai_compatible',
+          recoveryMode: 'none',
+          supportsRemotePoll: false,
+          returnsImmediateResult: false,
+          supportsLocalProxyRecovery: false,
+          requiresQueryableTaskId: false,
+        },
+        pollingSpec: {
+          kind: 'generation',
+          taskType: 'text-generation',
+          provider: 'custom_openai_compatible',
+          recoveryMode: 'local_proxy_poll',
+          targetNodeId: 'text-node-1',
+          runtimeTaskId,
+          clientTaskId,
+          startedAt: 1000,
+          resumable: true,
+          payload: {
+            provider: 'custom_openai_compatible',
+            model: 'custom_openai_compatible/gpt-5.4',
+            nodeId: 'text-node-1',
+            runtimeTaskId,
+            clientTaskId,
+            kind: 'text',
+          },
+        },
+        payload: {
+          provider: 'custom_openai_compatible',
+          model: 'custom_openai_compatible/gpt-5.4',
+          nodeId: 'text-node-1',
+          runtimeTaskId,
+          clientTaskId,
+          kind: 'text',
+        },
+        createdAt: 1000,
+        updatedAt: 1200,
+      },
+    ],
+  }));
+
+  const [record] = loadAsyncTaskRecords({ storage, now: 1300 });
+  assert.equal(record.status, 'polling');
+  assert.equal(record.recoveryMode, 'local_proxy_poll');
+  assert.equal(record.recoveryCapability.supportsLocalProxyRecovery, true);
+  assert.equal(record.canResume, true);
+  assert.equal(record.clientTaskId, clientTaskId);
+});
+
 test('asyncTaskStore: active generation records do not keep stale resultSpec', () => {
   const storage = createMemoryStorage();
   const runtimeTaskId = 'async:image:grsai:node-1:1000';

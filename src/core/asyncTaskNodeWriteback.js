@@ -127,8 +127,47 @@ function buildBackfillPatch({ phase = '', task = {}, resultPatch = {} } = {}) {
   });
 }
 
+function sanitizeNodeIdentityPatch(patch = {}, node = {}, nodeId = '') {
+  const sanitized = { ...asObject(patch) };
+  const preserveId = trimString(node.id) || nodeId;
+  const preserveCanvasId = trimString(node.canvasId || node.data?.canvasId);
+  delete sanitized.nodeId;
+  delete sanitized.targetNodeId;
+  if (preserveId) sanitized.id = preserveId;
+  else delete sanitized.id;
+  if (preserveCanvasId) sanitized.canvasId = preserveCanvasId;
+  else delete sanitized.canvasId;
+  return sanitized;
+}
+
+function shouldBumpNodeBizRevision(node = {}, patch = {}) {
+  if (!Object.prototype.hasOwnProperty.call(patch, 'outputText')) return false;
+  return String(patch.outputText || '') !== String(node.outputText || '');
+}
+
+function withNodeBizRevisionPatch(node = {}, patch = {}) {
+  if (!shouldBumpNodeBizRevision(node, patch)) return patch;
+  const currentRevision = Number(node._bizRev) || 0;
+  return {
+    ...patch,
+    _bizRev: currentRevision + 1,
+  };
+}
+
+function resolveWritebackNodeId(task = {}) {
+  return trimString(
+    task.targetNodeId
+      || task.recoverySpec?.targetNodeId
+      || task.pollingSpec?.targetNodeId
+      || task.unifiedTask?.targetNodeId
+      || task.unifiedTask?.recoverySpec?.targetNodeId
+      || task.nodeId
+      || task.unifiedTask?.nodeId,
+  );
+}
+
 export function writeAsyncTaskNodeBackfill({ store, phase = '', task = {}, resultPatch = {} } = {}) {
-  const nodeId = trimString(task.nodeId || task.targetNodeId || task.recoverySpec?.targetNodeId || task.unifiedTask?.nodeId);
+  const nodeId = resolveWritebackNodeId(task);
   if (!nodeId) return { ok: false, reason: 'missing-node-id' };
   if (!store || typeof store.updateNodeData !== 'function') return { ok: false, reason: 'missing-store-writer', nodeId };
 
@@ -141,7 +180,10 @@ export function writeAsyncTaskNodeBackfill({ store, phase = '', task = {}, resul
     return { ok: false, reason: 'canvas-mismatch', nodeId, taskCanvasId, nodeCanvasId };
   }
 
-  const patch = buildBackfillPatch({ phase, task, resultPatch });
+  const patch = withNodeBizRevisionPatch(
+    node,
+    sanitizeNodeIdentityPatch(buildBackfillPatch({ phase, task, resultPatch }), node, nodeId),
+  );
   try {
     store.updateNodeData(nodeId, patch);
     return { ok: true, reason: 'updated', nodeId, patch };

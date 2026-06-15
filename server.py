@@ -1677,6 +1677,23 @@ def _build_image_proxy_upstream_payload(payload):
     return data, local_recovery_payload
 
 
+def _build_completions_proxy_upstream_payload(payload):
+    data = dict(payload) if isinstance(payload, dict) else {}
+    data.pop("apiUrl", None)
+    data.pop("apiKey", None)
+    local_recovery_payload = {
+        "runtimeTaskId": str(data.pop("runtimeTaskId", "") or "").strip(),
+        "clientTaskId": str(data.pop("clientTaskId", "") or "").strip(),
+        "nodeId": str(data.pop("nodeId", "") or "").strip(),
+        "canvasId": str(data.pop("canvasId", "") or "").strip(),
+        "provider": str(data.pop("provider", "") or "").strip(),
+        "kind": str(data.pop("kind", "") or "text").strip() or "text",
+    }
+    for key in SUBSCRIPTION_AUTHORIZATION_ID_KEYS:
+        data.pop(key, None)
+    return data, local_recovery_payload
+
+
 def _json_ok(handler, data):
     body = json.dumps(data, ensure_ascii=False, indent=2).encode()
     handler.send_response(200)
@@ -3745,9 +3762,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/v2/proxy/completions":
             body = _read_body(self)
             try:
-                data = json.loads(body)
-                api_url = data.pop("apiUrl", "").strip().rstrip("/")
-                api_key = data.pop("apiKey", "").strip()
+                request_data = json.loads(body)
+                api_url = str(request_data.get("apiUrl") or "").strip().rstrip("/")
+                api_key = str(request_data.get("apiKey") or "").strip()
+                data, local_recovery_payload = _build_completions_proxy_upstream_payload(request_data)
             except json.JSONDecodeError:
                 _json_err(self, 400, "Invalid JSON"); return
             
@@ -3758,6 +3776,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             if not api_url or not api_key:
                 _json_err(self, 400, "Missing apiUrl or apiKey"); return
+
+            if local_recovery_payload.get("runtimeTaskId") or local_recovery_payload.get("clientTaskId"):
+                _upsert_local_proxy_task(local_recovery_payload, status="running")
+            
+            def _cache_text_proxy_success(text, status_code=200, content_type="application/json; charset=utf-8"):
+                if not (local_recovery_payload.get("runtimeTaskId") or local_recovery_payload.get("clientTaskId")):
+                    return
+                try:
+                    result = json.loads(text) if isinstance(text, str) and text.strip() else {}
+                except Exception:
+                    result = {"body": text}
+                remote_result_id = ""
+                if isinstance(result, dict):
+                    remote_result_id = str(result.get("id") or result.get("resultId") or result.get("remoteResultId") or "").strip()
+                _upsert_local_proxy_task(
+                    local_recovery_payload,
+                    status="success",
+                    result=result,
+                    remoteResultId=remote_result_id,
+                    httpStatus=status_code,
+                    contentType=content_type,
+                )
+
+            def _cache_text_proxy_failure(message, status_code=500):
+                if not (local_recovery_payload.get("runtimeTaskId") or local_recovery_payload.get("clientTaskId")):
+                    return
+                _upsert_local_proxy_task(
+                    local_recovery_payload,
+                    status="failed",
+                    error=str(message or "Proxy error"),
+                    httpStatus=status_code,
+                    contentType="application/json; charset=utf-8",
+                )
             
             # 兼容 Gemini 和 OpenAI 风格接口
             if (
@@ -3784,12 +3835,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     resp = requests.post(endpoint, data=req_body, headers=headers, timeout=300, stream=True)
                     # 生成请求允许最长 300 秒，与 aiTextApi.js 保持一致
                 except requests.exceptions.ConnectionError as ce:
+                    _cache_text_proxy_failure(f"连接 AI 服务失败: {str(ce)}", 502)
                     _json_err(self, 502, f"连接 AI 服务失败: {str(ce)}")
                     return
                 except requests.exceptions.Timeout as te:
+                    _cache_text_proxy_failure(f"AI 服务请求超时: {str(te)}", 504)
                     _json_err(self, 504, f"AI 服务请求超时: {str(te)}")
                     return
                 except requests.exceptions.RequestException as req_err:
+                    _cache_text_proxy_failure(f"AI 服务请求失败: {str(req_err)}", 502)
                     _json_err(self, 502, f"AI 服务请求失败: {str(req_err)}")
                     return
                 
@@ -3830,6 +3884,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         # 解析失败时保留原始响应
                         pass
                 
+                _cache_text_proxy_success(resp_text, resp.status_code, "application/json; charset=utf-8")
                 self.send_response(resp.status_code)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 _send_cors_origin_header(self)
@@ -3862,18 +3917,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         except Exception:
                             pass
 
+                    _cache_text_proxy_success(resp_text, resp.status, "application/json; charset=utf-8")
                     self.send_response(resp.status)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     _send_cors_origin_header(self)
                     self.end_headers()
                     self.wfile.write(resp_text.encode('utf-8'))
                 except urllib.error.HTTPError as e:
+                    error_body = e.read()
+                    try:
+                        error_text = error_body.decode("utf-8", errors="replace")
+                    except Exception:
+                        error_text = ""
+                    _cache_text_proxy_failure(error_text or repr(e), e.code)
                     self.send_response(e.code)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     _send_cors_origin_header(self)
                     self.end_headers()
-                    self.wfile.write(e.read())
+                    self.wfile.write(error_body)
             except Exception as e:
+                _cache_text_proxy_failure(repr(e), 500)
                 _json_err(self, 500, repr(e))
             return
 

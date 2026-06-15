@@ -111,6 +111,53 @@ function createLocalProxyTask(overrides = {}) {
   };
 }
 
+function createTextLocalProxyTask(overrides = {}) {
+  const recoverySpecOverrides = overrides.recoverySpec || {};
+  const unifiedTaskOverrides = overrides.unifiedTask || {};
+  const taskOverrides = { ...overrides };
+  delete taskOverrides.recoverySpec;
+  delete taskOverrides.unifiedTask;
+  return {
+    taskId: 'generation:text-node-1:runtime-text-1',
+    nodeId: 'text-node-1',
+    kind: 'text-generation',
+    status: 'processing',
+    provider: 'custom_openai_compatible',
+    createdAt: 100,
+    startedAt: 100,
+    updatedAt: 100,
+    ...taskOverrides,
+    recoverySpec: {
+      kind: 'generation',
+      taskType: 'text-generation',
+      provider: 'custom_openai_compatible',
+      recoveryMode: 'local_proxy_poll',
+      targetNodeId: 'text-node-1',
+      taskId: 'runtime-text-1',
+      runtimeTaskId: 'runtime-text-1',
+      clientTaskId: 'client-text-1',
+      startedAt: 100,
+      payload: {
+        provider: 'custom_openai_compatible',
+        runtimeTaskId: 'runtime-text-1',
+        clientTaskId: 'client-text-1',
+      },
+      ...recoverySpecOverrides,
+    },
+    unifiedTask: {
+      id: 'generation:text-node-1:runtime-text-1',
+      kind: 'text',
+      status: 'running',
+      nodeId: 'text-node-1',
+      provider: 'custom_openai_compatible',
+      canResume: true,
+      createdAt: 100,
+      updatedAt: 100,
+      ...unifiedTaskOverrides,
+    },
+  };
+}
+
 function createRemotePollTask() {
   return {
     taskId: 'generation:node-2:poll-1',
@@ -577,6 +624,339 @@ test('generationRecoveryV2 local proxy writes terminal resultSpec into async tas
   assert.equal(records[0].clientTaskId, 'client-grsai-1');
   assert.equal(records[0].status, 'success');
   assert.equal(records[0].resultSpec.imageUrl, 'https://file5.aitohumanize.com/file/cache-final.png');
+});
+
+test('generationRecoveryV2 local proxy restores text completion result after refresh', async () => {
+  const store = createStore({
+    'text-node-1': { id: 'text-node-1', type: 'ai-text', isGenerating: true, jobStatus: 'running', generationStartTime: 100 },
+  });
+  const manager = createManager();
+  const storage = createMemoryStorage();
+  const requestedUrls = [];
+  storage.setItem('ai-canvas:async-tasks:v1', JSON.stringify({
+    version: 1,
+    savedAt: 900,
+    items: [{
+      version: 1,
+      runtimeTaskId: 'runtime-text-1',
+      clientTaskId: 'client-text-1',
+      kind: 'text',
+      provider: 'custom_openai_compatible',
+      modelId: 'custom_openai_compatible/gpt-5.4',
+      nodeId: 'text-node-1',
+      canvasId: 'canvas_1',
+      status: 'polling',
+      recoveryMode: 'local_proxy_poll',
+      canResume: true,
+      pollingSpec: {
+        kind: 'generation',
+        taskType: 'text-generation',
+        provider: 'custom_openai_compatible',
+        recoveryMode: 'local_proxy_poll',
+        targetNodeId: 'text-node-1',
+        runtimeTaskId: 'runtime-text-1',
+        clientTaskId: 'client-text-1',
+      },
+      createdAt: 100,
+      updatedAt: 900,
+    }],
+  }));
+
+  const session = startGenerationRecoveryV2([createTextLocalProxyTask()], manager, {
+    store,
+    asyncTaskStorage: storage,
+    now: () => 1000,
+    pollIntervalMs: 2000,
+    graceMs: 60000,
+    setTimeout() {
+      throw new Error('terminal text result must not schedule retry');
+    },
+    clearTimeout() {},
+    fetch: async (url) => {
+      requestedUrls.push(String(url));
+      return {
+        ok: true,
+        json: async () => ({
+          runtimeTaskId: 'runtime-text-1',
+          clientTaskId: 'client-text-1',
+          nodeId: 'text-node-1',
+          provider: 'custom_openai_compatible',
+          kind: 'text',
+          status: 'success',
+          result: {
+            id: 'resp_text_refresh_1',
+            object: 'chat.completion',
+            model: 'gpt-5.4',
+            choices: [{ message: { role: 'assistant', content: '刷新后恢复文本' } }],
+          },
+          httpStatus: 200,
+          contentType: 'application/json',
+        }),
+      };
+    },
+  });
+
+  await session.flush();
+
+  const node = store.getState().nodes['text-node-1'];
+  const records = loadAsyncTaskRecords({ storage });
+  assert.equal(requestedUrls[0], '/api/v2/proxy/local-task?runtimeTaskId=runtime-text-1&clientTaskId=client-text-1');
+  assert.equal(node.id, 'text-node-1');
+  assert.equal(node.nodeId, undefined);
+  assert.equal(node.outputText, '刷新后恢复文本');
+  assert.equal(node.isGenerating, false);
+  assert.equal(node.asyncTaskStatus, 'success');
+  assert.equal(manager.updates.at(-1).status, 'success');
+  assert.equal(records.length, 1);
+  assert.equal(records[0].runtimeTaskId, 'runtime-text-1');
+  assert.equal(records[0].clientTaskId, 'client-text-1');
+  assert.equal(records[0].kind, 'text-generation');
+  assert.equal(records[0].status, 'success');
+  assert.equal(records[0].remoteResultId, 'resp_text_refresh_1');
+  assert.equal(records[0].resultSpec.outputText, '刷新后恢复文本');
+});
+
+test('generationRecoveryV2 text local proxy prefers recovery target over stale outer node id', async () => {
+  const store = createStore({
+    'stale-source-node': {
+      id: 'stale-source-node',
+      type: 'ai-text',
+      outputText: '底层节点原文本',
+      isGenerating: false,
+      jobStatus: 'idle',
+    },
+    'text-node-1': {
+      id: 'text-node-1',
+      type: 'ai-text',
+      isGenerating: true,
+      jobStatus: 'running',
+      generationStartTime: 100,
+    },
+  });
+  const manager = createManager();
+  const storage = createMemoryStorage();
+
+  const session = startGenerationRecoveryV2([
+    createTextLocalProxyTask({
+      nodeId: 'stale-source-node',
+      unifiedTask: { nodeId: 'stale-source-node' },
+      recoverySpec: {
+        targetNodeId: 'text-node-1',
+        sourceNodeId: 'stale-source-node',
+      },
+    }),
+  ], manager, {
+    store,
+    asyncTaskStorage: storage,
+    now: () => 1000,
+    pollIntervalMs: 2000,
+    graceMs: 60000,
+    setTimeout() {
+      throw new Error('terminal text result must not schedule retry');
+    },
+    clearTimeout() {},
+    fetch: async () => ({
+      ok: true,
+      json: async () => ({
+        runtimeTaskId: 'runtime-text-1',
+        clientTaskId: 'client-text-1',
+        nodeId: 'stale-source-node',
+        provider: 'custom_openai_compatible',
+        kind: 'text',
+        status: 'success',
+        result: {
+          id: 'resp_text_target_identity_1',
+          object: 'chat.completion',
+          choices: [{ message: { role: 'assistant', content: '目标节点恢复文本' } }],
+        },
+      }),
+    }),
+  });
+
+  await session.flush();
+
+  const nodes = store.getState().nodes;
+  const records = loadAsyncTaskRecords({ storage });
+  assert.equal(nodes['text-node-1'].outputText, '目标节点恢复文本');
+  assert.equal(nodes['text-node-1'].asyncTaskStatus, 'success');
+  assert.equal(nodes['stale-source-node'].outputText, '底层节点原文本');
+  assert.equal(nodes['stale-source-node'].jobStatus, 'idle');
+  assert.equal(records.length, 1);
+  assert.equal(records[0].nodeId, 'text-node-1');
+  assert.equal(records[0].sourceNodeId, 'stale-source-node');
+  assert.equal(records[0].resultSpec.outputText, '目标节点恢复文本');
+});
+
+test('generationRecoveryV2 text local proxy continues polling pending until success', async () => {
+  const store = createStore({
+    'text-node-1': { id: 'text-node-1', type: 'ai-text', isGenerating: true, jobStatus: 'running', generationStartTime: 100 },
+  });
+  const manager = createManager();
+  const storage = createMemoryStorage();
+  const scheduled = [];
+  const requestedUrls = [];
+  const responses = [
+    { status: 'running', pending: true, message: 'still running' },
+    {
+      status: 'success',
+      result: {
+        id: 'resp_text_retry_1',
+        object: 'chat.completion',
+        model: 'gpt-5.4',
+        choices: [{ message: { role: 'assistant', content: '第二轮恢复文本' } }],
+      },
+    },
+  ];
+
+  const session = startGenerationRecoveryV2([createTextLocalProxyTask()], manager, {
+    store,
+    asyncTaskStorage: storage,
+    now: () => 1000,
+    pollIntervalMs: 2000,
+    graceMs: 60000,
+    setTimeout(fn, ms) {
+      scheduled.push({ fn, ms });
+      return scheduled.length;
+    },
+    clearTimeout() {},
+    fetch: async (url) => {
+      requestedUrls.push(String(url));
+      const payload = responses.shift();
+      return { ok: true, json: async () => payload };
+    },
+  });
+
+  await session.flush();
+
+  assert.equal(requestedUrls.length, 1);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].ms, 2000);
+  assert.equal(requestedUrls[0], '/api/v2/proxy/local-task?runtimeTaskId=runtime-text-1&clientTaskId=client-text-1');
+
+  await scheduled.shift().fn();
+  await session.flush();
+
+  const node = store.getState().nodes['text-node-1'];
+  const records = loadAsyncTaskRecords({ storage });
+  assert.equal(requestedUrls.length, 2);
+  assert.equal(scheduled.length, 0);
+  assert.equal(node.outputText, '第二轮恢复文本');
+  assert.equal(node.isGenerating, false);
+  assert.equal(node.asyncTaskStatus, 'success');
+  assert.equal(manager.updates.at(-1).status, 'success');
+  assert.equal(records.length, 1);
+  assert.equal(records[0].status, 'success');
+  assert.equal(records[0].resultSpec.outputText, '第二轮恢复文本');
+});
+
+test('generationRecoveryV2 text local proxy keeps polling explicit running beyond grace window', async () => {
+  const store = createStore({
+    'text-node-1': { id: 'text-node-1', type: 'ai-text', isGenerating: true, jobStatus: 'running', generationStartTime: 100 },
+  });
+  const manager = createManager();
+  const storage = createMemoryStorage();
+  const scheduled = [];
+  const requestedUrls = [];
+  let currentNow = 1000;
+  const responses = [
+    { status: 'running', message: 'still running after restore grace' },
+    {
+      status: 'success',
+      result: {
+        id: 'resp_text_long_running_1',
+        object: 'chat.completion',
+        model: 'gpt-5.4',
+        choices: [{ message: { role: 'assistant', content: '超时后继续恢复文本' } }],
+      },
+    },
+  ];
+
+  const session = startGenerationRecoveryV2([createTextLocalProxyTask()], manager, {
+    store,
+    asyncTaskStorage: storage,
+    now: () => currentNow,
+    pollIntervalMs: 2000,
+    graceMs: 60000,
+    setTimeout(fn, ms) {
+      scheduled.push({ fn, ms });
+      return scheduled.length;
+    },
+    clearTimeout() {},
+    fetch: async (url) => {
+      requestedUrls.push(String(url));
+      const payload = responses.shift();
+      return { ok: true, json: async () => payload };
+    },
+  });
+
+  currentNow = 70000;
+  await session.flush();
+
+  assert.equal(requestedUrls.length, 1);
+  assert.equal(scheduled.length, 1);
+  assert.equal(store.getState().nodes['text-node-1'].asyncTaskStatus, 'pending');
+
+  currentNow = 72000;
+  await scheduled.shift().fn();
+  await session.flush();
+
+  const node = store.getState().nodes['text-node-1'];
+  const records = loadAsyncTaskRecords({ storage });
+  assert.equal(requestedUrls.length, 2);
+  assert.equal(node.outputText, '超时后继续恢复文本');
+  assert.equal(node.asyncTaskStatus, 'success');
+  assert.equal(records[0].status, 'success');
+  assert.equal(records[0].resultSpec.outputText, '超时后继续恢复文本');
+});
+
+test('generationRecoveryV2 text local proxy transient missing response retries within grace window', async () => {
+  const store = createStore({
+    'text-node-1': { id: 'text-node-1', type: 'ai-text', isGenerating: true, jobStatus: 'running', generationStartTime: 100 },
+  });
+  const manager = createManager();
+  const scheduled = [];
+  const requestedUrls = [];
+  const responses = [
+    { status: 'missing', reason: 'request_lost' },
+    {
+      status: 'success',
+      result: {
+        id: 'resp_text_missing_retry_1',
+        object: 'chat.completion',
+        choices: [{ message: { role: 'assistant', content: 'missing 后恢复文本' } }],
+      },
+    },
+  ];
+
+  const session = startGenerationRecoveryV2([createTextLocalProxyTask()], manager, {
+    store,
+    now: () => 1000,
+    pollIntervalMs: 2000,
+    graceMs: 60000,
+    setTimeout(fn, ms) {
+      scheduled.push({ fn, ms });
+      return scheduled.length;
+    },
+    clearTimeout() {},
+    fetch: async (url) => {
+      requestedUrls.push(String(url));
+      const payload = responses.shift();
+      return { ok: true, json: async () => payload };
+    },
+  });
+
+  await session.flush();
+
+  assert.equal(requestedUrls.length, 1);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].ms, 2000);
+
+  await scheduled.shift().fn();
+  await session.flush();
+
+  assert.equal(requestedUrls.length, 2);
+  assert.equal(store.getState().nodes['text-node-1'].outputText, 'missing 后恢复文本');
+  assert.equal(manager.updates.at(-1).status, 'success');
 });
 
 test('generationRecoveryV2 remote poll continues polling pending until success', async () => {

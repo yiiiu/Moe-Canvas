@@ -101,6 +101,35 @@ test('custom provider text route normalizes OpenAI-compatible base url variants'
   }
 });
 
+test('custom provider manifest text route preserves local recovery identity', async () => {
+  await withFetchMock(async (input, init = {}) => {
+    const url = String(input);
+    if (url === '/api/config') {
+      return makeJsonResponse(buildCustomConfig());
+    }
+    throw new Error(`unexpected fetch url: ${url}`);
+  }, async () => {
+    const request = await buildGenerateTextRequest({
+      provider: CUSTOM_PROVIDER_ID,
+      model: 'gpt-5.5',
+      prompt: '写一个短句',
+      runtimeTaskId: 'runtime-text-manifest-1',
+      clientTaskId: 'client-text-manifest-1',
+      nodeId: 'text-node-manifest-1',
+      canvasId: 'canvas-manifest-1',
+      kind: 'text',
+    });
+
+    assert.equal(request.url, '/api/v2/proxy/completions');
+    assert.equal(request.body.runtimeTaskId, 'runtime-text-manifest-1');
+    assert.equal(request.body.clientTaskId, 'client-text-manifest-1');
+    assert.equal(request.body.nodeId, 'text-node-manifest-1');
+    assert.equal(request.body.canvasId, 'canvas-manifest-1');
+    assert.equal(request.body.provider, CUSTOM_PROVIDER_ID);
+    assert.equal(request.body.kind, 'text');
+  });
+});
+
 test('custom provider image route builds OpenAI-compatible manifest request', async () => {
   await withFetchMock(async (input, init = {}) => {
     const url = String(input);

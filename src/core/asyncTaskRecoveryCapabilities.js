@@ -127,10 +127,17 @@ export function getProviderRecoveryCapability(provider = '', hints = {}) {
 export function resolveAsyncTaskRecoveryCapability(record = {}) {
   const source = asObject(record);
   const embedded = asObject(source.recoveryCapability || source.providerCapabilities);
+  const pollingSpec = asObject(source.pollingSpec || source.recoverySpec);
   const provider = pickProvider(source);
+  const explicitSourceMode = normalizeMode(source.recoveryMode);
+  const nestedMode = normalizeMode(pollingSpec.recoveryMode);
+  const embeddedMode = normalizeMode(embedded.recoveryMode);
+  const recoveryMode = explicitSourceMode && explicitSourceMode !== ASYNC_TASK_RECOVERY_MODES.NONE
+    ? explicitSourceMode
+    : nestedMode || embeddedMode || explicitSourceMode;
   const base = getProviderRecoveryCapability(provider, {
     ...embedded,
-    recoveryMode: source.recoveryMode || embedded.recoveryMode,
+    recoveryMode,
     taskPolling: source.pollingSpec?.taskPolling || source.recoverySpec?.taskPolling || source.payload?.taskPolling,
     pollingSpec: source.pollingSpec || source.recoverySpec,
   });

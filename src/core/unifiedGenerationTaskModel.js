@@ -1,4 +1,4 @@
-const TASK_KIND_VALUES = new Set(['image', 'video', 'audio', 'media', 'provider_async']);
+const TASK_KIND_VALUES = new Set(['image', 'video', 'audio', 'text', 'media', 'provider_async']);
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'cancelled', 'interrupted']);
 
 const STATUS_ALIASES = Object.freeze({
@@ -15,6 +15,7 @@ const KIND_ALIASES = Object.freeze({
   image: new Set(['image', 'ai-image', 'source-image', 'image-hd', 'image-edit', 'image-generation']),
   video: new Set(['video', 'ai-video', 'source-video', 'video-generation']),
   audio: new Set(['audio', 'ai-audio', 'source-audio', 'voice-clone', 'music']),
+  text: new Set(['text', 'ai-text', 'source-text', 'text-generation', 'chat', 'llm']),
   media: new Set(['media', 'local', 'local-runtime', 'ffmpeg', 'transcode', 'extract-frame']),
   provider_async: new Set(['provider_async', 'provider-async', 'async', 'model-api-async']),
 });
@@ -62,6 +63,7 @@ export function inferUnifiedTaskKind({ node = {}, spec = {} } = {}) {
   if (nodeType.includes('video')) return 'video';
   if (nodeType.includes('audio')) return 'audio';
   if (nodeType.includes('image')) return 'image';
+  if (nodeType.includes('text')) return 'text';
 
   const adapterType = trimString(taskSpec.adapterType || nodeData.taskAdapterType).toLowerCase();
   if (adapterType.includes('local')) return 'media';

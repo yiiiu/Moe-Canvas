@@ -38,6 +38,7 @@ function resolveTaskCenterKind(task) {
   if (kind === 'video') return 'videoGeneration';
   if (kind === 'image') return 'imageGeneration';
   if (kind === 'audio') return 'audioGeneration';
+  if (kind === 'text') return 'textGeneration';
   if (kind === 'media') return 'mediaTask';
   return 'providerAsyncGeneration';
 }

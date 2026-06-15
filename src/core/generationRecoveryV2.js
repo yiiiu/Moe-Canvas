@@ -44,7 +44,16 @@ function resolveTaskKind(task = {}, recoverySpec = {}) {
 }
 
 function resolveTargetNodeId(task = {}, recoverySpec = {}) {
-  return trimString(task.nodeId || task.unifiedTask?.nodeId || recoverySpec.targetNodeId || recoverySpec.sourceNodeId);
+  return trimString(
+    recoverySpec.targetNodeId
+      || task.targetNodeId
+      || task.pollingSpec?.targetNodeId
+      || task.unifiedTask?.targetNodeId
+      || task.unifiedTask?.recoverySpec?.targetNodeId
+      || task.nodeId
+      || task.unifiedTask?.nodeId
+      || recoverySpec.sourceNodeId,
+  );
 }
 
 function getStoreNodes(store) {
@@ -284,8 +293,31 @@ function buildImageResultPatch(result = {}, options = {}) {
   }) || {};
 }
 
+function buildTextResultPatch(result = {}) {
+  const value = asObject(result);
+  const candidates = collectResultEnvelopeObjects(value);
+  const choice = candidates.map((item) => Array.isArray(item.choices) ? asObject(item.choices[0]) : {}).find((item) => Object.keys(item).length) || {};
+  const message = asObject(choice.message);
+  const outputText = firstTextValue(...candidates.flatMap((item) => [
+    item.outputText,
+    item.text,
+    item.content,
+    item.message,
+    item.output_text,
+  ]), message.content, choice.delta?.content);
+  if (!outputText) return value;
+  return {
+    ...value,
+    outputText,
+    ...(firstTextValue(...candidates.map((item) => item.id)) ? { responseId: firstTextValue(...candidates.map((item) => item.id)) } : {}),
+    ...(firstTextValue(...candidates.map((item) => item.model)) ? { model: firstTextValue(...candidates.map((item) => item.model)) } : {}),
+    ...(firstTextValue(choice.finish_reason) ? { finishReason: firstTextValue(choice.finish_reason) } : {}),
+  };
+}
+
 function buildResultPatch(ticket = {}, payload = {}) {
   if (ticket.kind === 'image-generation') return buildImageResultPatch(unwrapLocalProxyResult(payload), { startedAt: ticket.startedAt });
+  if (ticket.kind === 'text-generation' || ticket.kind === 'text') return buildTextResultPatch(unwrapLocalProxyResult(payload));
   return unwrapLocalProxyResult(payload);
 }
 
@@ -371,8 +403,12 @@ function resolvePollStatus(ticket = {}, payload = {}) {
   return innerStatus && TERMINAL_STATUSES.has(innerStatus) ? innerStatus : outerStatus;
 }
 
-function hasTargetNode(store, nodeId = '') {
-  return Boolean(trimString(nodeId) && getStoreNodes(store)[nodeId]);
+function isTransientLocalProxyMissing(ticket = {}, payload = {}) {
+  if (ticket.mode !== 'local_proxy_poll') return false;
+  const status = normalizeStatus(payload.status || unwrapLocalProxyResult(payload).status);
+  if (status !== 'missing' && status !== 'not_found') return false;
+  const reason = normalizeLower(payload.reason || payload.error || payload.message || unwrapLocalProxyResult(payload).reason);
+  return !reason || reason.includes('request_lost') || reason.includes('missing') || reason.includes('not_found');
 }
 
 function applyNodeBackfill(store, phase, task = {}, resultPatch = {}) {
@@ -538,14 +574,26 @@ function createSession(tickets = [], manager, options = {}) {
   async function poll(ticket) {
     if (stopped) return;
     return track((async () => {
-      if (nowFrom(options) > ticket.deadlineAt) {
+      const isPastDeadline = nowFrom(options) > ticket.deadlineAt;
+      const canPollPastDeadline = ticket.mode === 'local_proxy_poll' && ticket.confirmedBackendRunning === true;
+      if (isPastDeadline && !canPollPastDeadline) {
         await finish(ticket, 'interrupted', { message: '恢复超时' });
         return;
       }
       const response = await fetchFn(createPollUrl(ticket));
       const payload = await readJsonResponse(response);
       const status = resolvePollStatus(ticket, payload);
+      if (isTransientLocalProxyMissing(ticket, payload)) {
+        if (isPastDeadline) {
+          await finish(ticket, 'interrupted', { message: '恢复超时' });
+          return;
+        }
+        applyRunningPatch(store, ticket);
+        schedule(ticket);
+        return;
+      }
       if (payload.pending === true || PENDING_STATUSES.has(status)) {
+        if (ticket.mode === 'local_proxy_poll') ticket.confirmedBackendRunning = true;
         applyRunningPatch(store, ticket);
         schedule(ticket);
         return;

@@ -23623,6 +23623,16 @@ canvas.ref-thumb-media {
 .node.text-node.selected .text-prompt-panel {
   border-color: var(--warning-border);
 }
+.node.text-node.selected:not(.no-result) .text-prompt-panel {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px) scale(var(--zoom-inv));
+  pointer-events: none;
+}
+.text-node.selected.no-result .text-prompt-panel {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(var(--zoom-inv));
+  pointer-events: auto;
+}
 .video-node .text-prompt-panel {
   background: var(--surface-node);
   border: 1px solid var(--stroke-default);

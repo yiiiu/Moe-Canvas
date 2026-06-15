@@ -1,9 +1,16 @@
 import appStore from './stores/appStore.js';
 
 const STATUS_FILTERS = new Set(['all', 'active', 'failed', 'done']);
-const TYPE_FILTERS = new Set(['all', 'image', 'video', 'audio', 'media']);
+const TYPE_FILTERS = new Set(['all', 'image', 'text', 'video', 'audio', 'media']);
 const ACTIVE_STATUSES = new Set(['waiting', 'processing', 'running', 'queued', 'pending', 'polling']);
 const DONE_STATUSES = new Set(['complete', 'cancelled', 'interrupted']);
+const TASK_TYPE_BADGES = {
+  image: '图片',
+  text: '文字',
+  video: '视频',
+  audio: '音频',
+  media: '媒体',
+};
 
 function asObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -28,7 +35,10 @@ function cssEscape(value) {
 export function resolveTaskUiType(task = {}) {
   const kind = trimString(task.kind).toLowerCase();
   const unifiedKind = trimString(task.unifiedTask?.kind).toLowerCase();
-  const text = `${kind} ${unifiedKind}`;
+  const taskId = trimString(task.taskId || task.id).toLowerCase();
+  const nodeType = trimString(task.nodeType || task.type).toLowerCase();
+  const text = `${kind} ${unifiedKind} ${taskId} ${nodeType}`;
+  if (text.includes('text') || text.includes('completion')) return 'text';
   if (text.includes('image')) return 'image';
   if (text.includes('video')) return 'video';
   if (text.includes('audio')) return 'audio';
@@ -83,6 +93,7 @@ function ensureFilterControls(manager) {
   typeRow.append(
     createButton('全部类型', 'all', 'type', filters.type),
     createButton('图片', 'image', 'type', filters.type),
+    createButton('文字', 'text', 'type', filters.type),
     createButton('视频', 'video', 'type', filters.type),
     createButton('音频', 'audio', 'type', filters.type),
     createButton('媒体', 'media', 'type', filters.type),
@@ -102,6 +113,15 @@ function syncFilterButtons(manager) {
   manager.panel?.querySelectorAll('[data-task-filter-group]').forEach((button) => {
     const group = button.dataset.taskFilterGroup;
     button.setAttribute('aria-pressed', button.dataset.taskFilterValue === filters[group] ? 'true' : 'false');
+  });
+}
+
+function syncTaskCenterHeaderActions(manager) {
+  if (!manager?.panel) return;
+  manager.panel.querySelectorAll('.v2-task-center-action').forEach((button) => {
+    if (trimString(button.textContent) !== '清理完成') return;
+    button.textContent = '清理';
+    button.classList?.add?.('v2-task-center-action--clear', 'v2-task-center-action--danger');
   });
 }
 
@@ -138,6 +158,80 @@ function syncInterruptedStatusBadges(manager) {
     badge.textContent = '已中断';
     badge.classList.remove('v2-task-status--failed');
     badge.classList.add('v2-task-status--interrupted');
+  });
+}
+
+function resolveProgressValue(task = {}) {
+  const number = Number(task.progress);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  return Math.max(0, Math.min(1, number > 1 ? number / 100 : number));
+}
+
+function ensureProgressFill(progress) {
+  let fill = progress?.querySelector?.('.v2-task-progress-fill');
+  if (fill || !progress || !document?.createElement) return fill;
+  fill = document.createElement('div');
+  fill.className = 'v2-task-progress-fill';
+  fill.classList?.add?.('v2-task-progress-fill');
+  progress.appendChild?.(fill);
+  return fill;
+}
+
+function syncTaskProgressBars(manager) {
+  const tasks = manager?.tasks;
+  if (!manager?.listEl || !tasks || typeof tasks.get !== 'function') return;
+  manager.listEl.querySelectorAll('.v2-task-card[data-task-id]').forEach((card) => {
+    const task = tasks.get(card.dataset.taskId);
+    const progress = card.querySelector('.v2-task-progress');
+    const fill = ensureProgressFill(progress);
+    if (!task || !progress || !fill) return;
+    const isActive = ACTIVE_STATUSES.has(trimString(task.status));
+    const progressValue = resolveProgressValue(task);
+    progress.setAttribute?.('role', 'progressbar');
+    fill.textContent = '';
+    if (!isActive) {
+      progress.classList.remove('v2-task-progress--indeterminate');
+      progress.removeAttribute?.('aria-busy');
+      progress.removeAttribute?.('aria-valuenow');
+      return;
+    }
+    progress.setAttribute?.('aria-busy', 'true');
+    if (progressValue == null) {
+      progress.classList.add('v2-task-progress--indeterminate');
+      progress.removeAttribute?.('aria-valuenow');
+      fill.style.width = '';
+      return;
+    }
+    const percent = Math.round(progressValue * 100);
+    progress.classList.remove('v2-task-progress--indeterminate');
+    progress.setAttribute?.('aria-valuenow', String(percent));
+    fill.style.width = `${percent}%`;
+  });
+}
+
+function syncTaskTypeBadges(manager) {
+  const tasks = manager?.tasks;
+  if (!manager?.listEl || !tasks || typeof tasks.get !== 'function') return;
+  manager.listEl.querySelectorAll('.v2-task-card[data-task-id]').forEach((card) => {
+    const task = tasks.get(card.dataset.taskId);
+    if (!task) return;
+    const type = resolveTaskUiType(task);
+    const label = TASK_TYPE_BADGES[type] || TASK_TYPE_BADGES.media;
+    let badge = card.querySelector('.v2-task-type-badge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'v2-task-type-badge';
+      badge.classList?.add?.('v2-task-type-badge');
+      const title = card.querySelector('.v2-task-card-title');
+      if (title?.parentNode) {
+        title.parentNode.insertBefore(badge, title.nextSibling);
+      } else {
+        const main = card.querySelector('.v2-task-card-main');
+        (main || card).prepend?.(badge);
+      }
+    }
+    badge.textContent = label;
+    badge.dataset.taskType = type;
   });
 }
 
@@ -221,8 +315,11 @@ function handleEnhancementClick(manager, event) {
 function refreshEnhancements(manager) {
   ensureFilterControls(manager);
   syncFilterButtons(manager);
+  syncTaskCenterHeaderActions(manager);
   ensureLocateButtons(manager);
   syncInterruptedStatusBadges(manager);
+  syncTaskProgressBars(manager);
+  syncTaskTypeBadges(manager);
   applyTaskDomFilters(manager);
 }
 
@@ -282,4 +379,7 @@ export const __test__ = {
   handleEnhancementClick,
   refreshEnhancements,
   syncInterruptedStatusBadges,
+  syncTaskCenterHeaderActions,
+  syncTaskProgressBars,
+  syncTaskTypeBadges,
 };

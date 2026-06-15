@@ -1,4 +1,5 @@
 import appStore from './stores/appStore.js';
+import { cancelTask as cancelGenerationTaskCenterTask } from './generationTaskRuntimeTaskCenterBridge.js';
 
 const STATUS_FILTERS = new Set(['all', 'active', 'failed', 'done']);
 const TYPE_FILTERS = new Set(['all', 'image', 'text', 'video', 'audio', 'media']);
@@ -125,24 +126,48 @@ function syncTaskCenterHeaderActions(manager) {
   });
 }
 
+function ensureTaskActions(card) {
+  let actions = card.querySelector('.v2-task-card-actions');
+  if (!actions) {
+    actions = document.createElement('div');
+    actions.className = 'v2-task-card-actions';
+    card.appendChild(actions);
+  }
+  return actions;
+}
+
 function ensureLocateButtons(manager) {
   const tasks = manager?.tasks;
   if (!manager?.panel || !tasks || typeof tasks.get !== 'function') return;
   manager.panel.querySelectorAll('.v2-task-card[data-task-id]').forEach((card) => {
     const task = tasks.get(card.dataset.taskId);
     if (!task?.nodeId || card.querySelector('[data-task-action="locate-node"]')) return;
-    let actions = card.querySelector('.v2-task-card-actions');
-    if (!actions) {
-      actions = document.createElement('div');
-      actions.className = 'v2-task-card-actions';
-      card.appendChild(actions);
-    }
+    const actions = ensureTaskActions(card);
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'v2-task-card-action';
     button.dataset.taskAction = 'locate-node';
     button.dataset.nodeId = task.nodeId;
     button.textContent = '定位节点';
+    actions.prepend(button);
+  });
+}
+
+function ensureCancelButtons(manager) {
+  const tasks = manager?.tasks;
+  if (!manager?.panel || !tasks || typeof tasks.get !== 'function') return;
+  manager.panel.querySelectorAll('.v2-task-card[data-task-id]').forEach((card) => {
+    const task = tasks.get(card.dataset.taskId);
+    const isActive = ACTIVE_STATUSES.has(trimString(task?.status));
+    if (!task?.nodeId || !isActive || card.querySelector('[data-task-action="cancel-generation"]')) return;
+    const actions = ensureTaskActions(card);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'v2-task-card-action v2-task-card-action--danger';
+    button.dataset.taskAction = 'cancel-generation';
+    button.dataset.nodeId = task.nodeId;
+    button.dataset.taskId = task.taskId || card.dataset.taskId || '';
+    button.textContent = '取消生成';
     actions.prepend(button);
   });
 }
@@ -309,6 +334,19 @@ function handleEnhancementClick(manager, event) {
     return true;
   }
 
+  const cancelButton = event.target?.closest?.('[data-task-action="cancel-generation"]');
+  if (cancelButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    const nodeId = cancelButton.dataset.nodeId || '';
+    if (!nodeId) return true;
+    cancelGenerationTaskCenterTask(nodeId, { taskCenterManager: manager }).catch((error) => {
+      console.warn('[task-center] failed to cancel generation task:', error);
+      window.showToast?.('取消生成失败', 'error');
+    });
+    return true;
+  }
+
   return false;
 }
 
@@ -317,6 +355,7 @@ function refreshEnhancements(manager) {
   syncFilterButtons(manager);
   syncTaskCenterHeaderActions(manager);
   ensureLocateButtons(manager);
+  ensureCancelButtons(manager);
   syncInterruptedStatusBadges(manager);
   syncTaskProgressBars(manager);
   syncTaskTypeBadges(manager);
@@ -374,6 +413,7 @@ export const __test__ = {
   DONE_STATUSES,
   applyTaskDomFilters,
   bindTaskCenterScrollIsolation,
+  ensureCancelButtons,
   ensureFilterControls,
   ensureLocateButtons,
   handleEnhancementClick,

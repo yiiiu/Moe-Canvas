@@ -63,7 +63,10 @@ function createElement({ className = '', taskId = '' } = {}) {
         if (selector === '.v2-task-card-main') return node.classList?.contains('v2-task-card-main');
         if (selector === '.v2-task-card-title') return node.classList?.contains('v2-task-card-title');
         if (selector === '.v2-task-center-action') return node.classList?.contains('v2-task-center-action');
+        if (selector === '.v2-task-card-actions') return node.classList?.contains('v2-task-card-actions');
         if (selector === '.v2-task-type-badge') return node.classList?.contains('v2-task-type-badge');
+        if (selector === '[data-task-action="cancel-generation"]') return node.dataset?.taskAction === 'cancel-generation';
+        if (selector === '[data-task-action="locate-node"]') return node.dataset?.taskAction === 'locate-node';
         if (selector === '.v2-task-progress') return node.classList?.contains('v2-task-progress');
         if (selector === '.v2-task-progress-fill') return node.classList?.contains('v2-task-progress-fill');
         return false;
@@ -201,6 +204,37 @@ test('task center restores missing progress fill so active progress is visible',
     assert.ok(fill);
     assert.equal(progress.classList.contains('v2-task-progress--indeterminate'), true);
     assert.equal(fill.style.width, '');
+  } finally {
+    globalThis.document = originalDocument;
+  }
+});
+
+test('task center adds cancel action for active generation task with node', () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = {
+    createElement() {
+      return createElement();
+    },
+  };
+
+  try {
+    const panel = createElement();
+    const card = createElement({ className: 'v2-task-card', taskId: 'generation:node-1' });
+    panel.appendChild(card);
+    const manager = {
+      panel,
+      tasks: new Map([
+        ['generation:node-1', { taskId: 'generation:node-1', nodeId: 'node-1', status: 'processing' }],
+      ]),
+    };
+
+    __test__.ensureLocateButtons(manager);
+    __test__.ensureCancelButtons(manager);
+
+    const cancelButton = card.querySelector('[data-task-action="cancel-generation"]');
+    assert.ok(cancelButton);
+    assert.equal(cancelButton.dataset.nodeId, 'node-1');
+    assert.equal(cancelButton.textContent, '取消生成');
   } finally {
     globalThis.document = originalDocument;
   }

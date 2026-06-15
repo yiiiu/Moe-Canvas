@@ -697,8 +697,9 @@ function persistAsyncTaskIdRecord({ spec = {}, options = {}, result = {}, status
     status: normalizedStatus,
     error: taskResult.error || asObject(taskResult.result).error || taskResult.message || asObject(taskResult.result).message || '',
     resultSpec: taskResult.result || taskResult,
-    canCancel: fallbackRecordSpec.cancellable !== false,
-    canResume: recoverySpec ? fallbackRecordSpec.resumable !== false : false,
+    canCancel: GENERATION_TERMINAL_STATUSES.has(normalizedStatus) ? false : fallbackRecordSpec.cancellable !== false,
+    canResume: GENERATION_TERMINAL_STATUSES.has(normalizedStatus) ? false : (recoverySpec ? fallbackRecordSpec.resumable !== false : false),
+    ...(normalizedStatus === 'cancelled' ? { cancelReason: 'user', userCancelled: true } : {}),
     pollingSpec: recoverySpec || null,
     payload: fallbackRecordSpec.payload,
     createdAt: firstFiniteNumber(fallbackRecordSpec.startedAt, taskSpec.createdAt, taskResult.createdAt) || now,
@@ -999,7 +1000,13 @@ export async function cancelTask(targetNodeId, options = {}) {
   const nodeId = trimString(targetNodeId?.targetNodeId || targetNodeId?.nodeId || targetNodeId?.id || targetNodeId);
   const nodeBeforeCancel = nodeId ? snapshotGenerationNodeRunningState(resolveNode(resolveStore(options), nodeId) || {}) : null;
   const recoverySpec = resolveTaskCenterRecoverySpec(nodeId, options);
-  const recoveryCancelSpec = recoverySpec.taskId ? attachRestoredCancelSpec({
+  const hasRecoveryCancelSpec = Boolean(
+    recoverySpec.taskId
+      || recoverySpec.runtimeTaskId
+      || recoverySpec.clientTaskId
+      || recoverySpec.recoveryMode
+  );
+  const recoveryCancelSpec = hasRecoveryCancelSpec ? attachRestoredCancelSpec({
     ...recoverySpec,
     targetNodeId: recoverySpec.targetNodeId || nodeId,
     taskId: recoverySpec.taskId,

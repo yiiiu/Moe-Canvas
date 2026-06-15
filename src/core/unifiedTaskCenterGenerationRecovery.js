@@ -584,8 +584,52 @@ function canResumeRestoredTask(task = {}) {
   return !requiresPollingTaskIdForRecovery(task) || hasRecoverablePollingTaskId(task);
 }
 
-function buildGenerationLoadingPatch(task = {}) {
-  return buildGenerationNodeStateProjection({ phase: 'running', task });
+function getMatchingRestoredRecoveryIds(task = {}, node = {}) {
+  const recoverySpec = resolveRecoverySpec(task);
+  const restoredIds = [
+    recoverySpec.taskId,
+    recoverySpec.pollingTaskId,
+    recoverySpec.recoveryTaskId,
+    recoverySpec.queryableTaskId,
+    task.queryableTaskId,
+    task.pollingTaskId,
+    task.asyncTaskId,
+    recoverySpec.runtimeTaskId,
+    task.runtimeTaskId,
+    recoverySpec.clientTaskId,
+    task.clientTaskId,
+  ].map(trimString).filter(Boolean);
+  if (!restoredIds.length) return [];
+  const nodeIds = collectNodeRecoveryTaskIds(node);
+  if (!nodeIds.length) return [];
+  return restoredIds.filter((id) => nodeIds.includes(id));
+}
+
+function pickEarlierFiniteTime(...values) {
+  const times = values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return times.length ? Math.min(...times) : 0;
+}
+
+function preserveSameTaskTimerAnchor(patch = {}, task = {}, node = {}) {
+  if (!getMatchingRestoredRecoveryIds(task, node).length) return patch;
+  const generationStartTime = pickEarlierFiniteTime(node.generationStartTime, patch.generationStartTime);
+  const asyncTaskStartedAt = pickEarlierFiniteTime(node.asyncTaskStartedAt, patch.asyncTaskStartedAt, generationStartTime);
+  const rhTaskStartedAt = pickEarlierFiniteTime(node.rhTaskStartedAt, patch.rhTaskStartedAt, generationStartTime);
+  const dreaminaTaskStartedAt = pickEarlierFiniteTime(node.dreaminaTaskStartedAt, patch.dreaminaTaskStartedAt, generationStartTime);
+  return {
+    ...patch,
+    ...(generationStartTime ? { generationStartTime } : {}),
+    ...(patch.asyncTaskStartedAt !== undefined && asyncTaskStartedAt ? { asyncTaskStartedAt } : {}),
+    ...(patch.rhTaskStartedAt !== undefined && rhTaskStartedAt ? { rhTaskStartedAt } : {}),
+    ...(patch.dreaminaTaskStartedAt !== undefined && dreaminaTaskStartedAt ? { dreaminaTaskStartedAt } : {}),
+  };
+}
+
+function buildGenerationLoadingPatch(task = {}, node = {}) {
+  const patch = buildGenerationNodeStateProjection({ phase: 'running', task });
+  return preserveSameTaskTimerAnchor(patch, task, node);
 }
 
 function isRestoredGenerationActiveStatus(status) {
@@ -755,7 +799,7 @@ export function reconcileRestoredGenerationActiveTasks(tasks = [], options = {})
     const node = asObject(nodes[nodeId]);
     if (!nodeId || !node.id && !nodes[nodeId]) continue;
     if (!canRestoreActiveGenerationTaskToNode(task, { id: nodeId, ...node })) continue;
-    applyNodePatch(store, [nodeId], buildGenerationLoadingPatch(task));
+    applyNodePatch(store, [nodeId], buildGenerationLoadingPatch(task, { id: nodeId, ...node }));
     reconciled.push({ taskId: task.taskId, nodeId });
   }
   return reconciled;

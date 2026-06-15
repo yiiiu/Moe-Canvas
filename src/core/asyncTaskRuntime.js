@@ -311,8 +311,30 @@ function hasNodeGenerationResult(node = {}) {
     || (Array.isArray(node.audios) && node.audios.some(hasUsableResultItem)));
 }
 
+const ACTIVE_NODE_STATUSES = new Set([
+  'loading',
+  'running',
+  'pending',
+  'polling',
+  'processing',
+  'queued',
+  'waiting',
+  'submitted',
+]);
+
+function nodeHasActiveLocalTaskIdentity(node = {}) {
+  const statuses = [
+    node.jobStatus,
+    node.textTaskStatus,
+    node.taskStatus,
+    node.status,
+  ].map(normalizeStatusText).filter(Boolean);
+  return Boolean(node.isGenerating === true || statuses.some((status) => ACTIVE_NODE_STATUSES.has(status)));
+}
+
 function isNodeGenerationSettled(node = {}) {
   if (hasNodeGenerationResult(node)) return true;
+  if (nodeHasActiveLocalTaskIdentity(node)) return false;
   const statuses = [
     node.jobStatus,
     node.asyncTaskStatus,
@@ -371,6 +393,10 @@ function isRecoverableAsyncTaskRecord(record = {}) {
 
 function collectPrimaryNodeTaskIds(node = {}) {
   return [
+    node.asyncRuntimeTaskId,
+    node.runtimeTaskId,
+    node.asyncClientTaskId,
+    node.clientTaskId,
     node.asyncTaskId,
     node.pollingTaskId,
     node.rhTaskId,
@@ -396,15 +422,34 @@ export function canRestoreAsyncTaskLoading(record = {}, node = {}, options = {})
     debugDecision = 'canvas-mismatch';
   } else if (debugNodeSettled) {
     debugDecision = 'node-settled';
+  } else if (capability.supportsLocalProxyRecovery) {
+    const runtimeTaskId = trimString(record.runtimeTaskId);
+    const clientTaskId = trimString(record.clientTaskId);
+    const nodeRuntimeTaskId = trimString(nodeData.asyncRuntimeTaskId || nodeData.runtimeTaskId);
+    const nodeClientTaskId = trimString(nodeData.asyncClientTaskId || nodeData.clientTaskId);
+    if (runtimeTaskId && nodeRuntimeTaskId && runtimeTaskId !== nodeRuntimeTaskId) {
+      debugDecision = 'runtime-mismatch';
+    } else if (clientTaskId && nodeClientTaskId && clientTaskId !== nodeClientTaskId) {
+      debugDecision = 'client-mismatch';
+    } else {
+      debugDecision = 'accepted-local';
+      debugResult = true;
+    }
   } else {
     const runtimeTaskId = trimString(record.runtimeTaskId);
+    const clientTaskId = trimString(record.clientTaskId);
     const nodeRuntimeTaskId = trimString(nodeData.asyncRuntimeTaskId || nodeData.runtimeTaskId);
+    const nodeClientTaskId = trimString(nodeData.asyncClientTaskId || nodeData.clientTaskId);
     if (runtimeTaskId && nodeRuntimeTaskId && runtimeTaskId !== nodeRuntimeTaskId) {
       debugDecision = 'runtime-mismatch';
     } else {
       const pollingTaskId = resolveAsyncTaskQueryableTaskId(record);
       const primaryTaskIds = collectPrimaryNodeTaskIds(nodeData);
-      if (!pollingTaskId && primaryTaskIds.length > 0 && !(runtimeTaskId && nodeRuntimeTaskId === runtimeTaskId)) {
+      const hasLocalTaskMatch = Boolean(
+        (runtimeTaskId && (nodeRuntimeTaskId === runtimeTaskId || primaryTaskIds.includes(runtimeTaskId)))
+          || (clientTaskId && (nodeClientTaskId === clientTaskId || primaryTaskIds.includes(clientTaskId)))
+      );
+      if (!pollingTaskId && primaryTaskIds.length > 0 && !hasLocalTaskMatch) {
         debugDecision = 'primary-task-without-match';
       } else if (pollingTaskId && primaryTaskIds.length > 0 && !primaryTaskIds.includes(pollingTaskId)) {
         debugDecision = 'polling-mismatch';
@@ -415,8 +460,8 @@ export function canRestoreAsyncTaskLoading(record = {}, node = {}, options = {})
           if (pollingTaskId && primaryTaskIds.includes(pollingTaskId)) {
             debugDecision = 'node-newer-but-polling-match';
             debugResult = true;
-          } else if (runtimeTaskId && nodeRuntimeTaskId === runtimeTaskId) {
-            debugDecision = 'node-newer-but-runtime-match';
+          } else if (hasLocalTaskMatch) {
+            debugDecision = 'node-newer-but-local-match';
             debugResult = true;
           } else {
             debugDecision = 'node-newer';
@@ -431,20 +476,42 @@ export function canRestoreAsyncTaskLoading(record = {}, node = {}, options = {})
   return debugResult;
 }
 
-function preserveNodeTimerStartPatch(patch = {}, node = {}) {
+function firstPositiveNumber(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return 0;
+}
+
+function getRecordStartedAt(record = {}) {
+  return firstPositiveNumber(record.startedAt, record.createdAt, record.pollingSpec?.startedAt, record.recoverySpec?.startedAt);
+}
+
+function preserveNodeTimerStartPatch(patch = {}, node = {}, record = {}) {
   const nodeStartedAt = getNodeStartedAt(getNodeData(node));
-  if (!nodeStartedAt) return patch;
+  const recordStartedAt = getRecordStartedAt(record);
+  const stableStartedAt = nodeStartedAt && recordStartedAt
+    ? Math.min(nodeStartedAt, recordStartedAt)
+    : (nodeStartedAt || recordStartedAt);
+  if (!stableStartedAt) return patch;
   return {
     ...patch,
-    generationStartTime: nodeStartedAt,
-    asyncTaskStartedAt: nodeStartedAt,
+    generationStartTime: stableStartedAt,
+    asyncTaskStartedAt: stableStartedAt,
   };
 }
 
 function cloneNodeWithAsyncTaskPatch(record = {}, node = {}, canvasId = '') {
   const nodeForCheck = { ...asObject(node), canvasId: trimString(node.canvasId) || trimString(canvasId) };
   if (!canRestoreAsyncTaskLoading(record, nodeForCheck)) return null;
-  return { ...node, ...preserveNodeTimerStartPatch(buildAsyncTaskLoadingPatch(record), node) };
+  const patch = preserveNodeTimerStartPatch(buildAsyncTaskLoadingPatch(record), node, record);
+  const nodeData = asObject(node?.data);
+  return {
+    ...node,
+    ...patch,
+    ...(nodeData && Object.keys(nodeData).length ? { data: { ...nodeData, ...patch } } : {}),
+  };
 }
 
 export function applyAsyncTaskLoadingToCanvasData(canvasData = {}, options = {}) {
@@ -567,7 +634,7 @@ export function restoreAsyncTaskLoadingRecords(records = [], options = {}) {
       }
       continue;
     }
-    const patch = preserveNodeTimerStartPatch(buildAsyncTaskLoadingPatch(record), node);
+    const patch = preserveNodeTimerStartPatch(buildAsyncTaskLoadingPatch(record), node, record);
     if (!updateNodeData(store, nodeId, patch)) {
       if (overlayRestored) restored.push({ runtimeTaskId: record.runtimeTaskId, remoteTaskId: record.remoteTaskId, nodeId, overlayRestored, record });
       continue;

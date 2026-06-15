@@ -722,7 +722,42 @@ test('phase3 grsai terminal failure result id is cached as remoteTaskId only', a
   assert.equal(records[0].finishedAt, 500);
 });
 
-test('phase3 grsai terminal success result id is not promoted to pollingTaskId', async () => {
+test('phase3 active reconcile keeps earlier node timer for same local proxy task', () => {
+  const store = createStore({
+    'node-1': {
+      id: 'node-1',
+      isGenerating: true,
+      jobStatus: 'loading',
+      generationStartTime: 5400,
+      asyncTaskStartedAt: 5400,
+      asyncRuntimeTaskId: 'runtime-grsai-1',
+      asyncClientTaskId: 'client-grsai-1',
+      asyncTaskStatus: 'running',
+    },
+  });
+
+  const reconciled = reconcileRestoredGenerationActiveTasks([
+    createLocalProxyRecoveryTask({
+      task: {
+        startedAt: 24300,
+        createdAt: 24300,
+        updatedAt: 24300,
+      },
+      recoverySpec: {
+        startedAt: 24300,
+      },
+    }),
+  ], { store });
+
+  const node = store.getState().nodes['node-1'];
+  assert.equal(reconciled.length, 1);
+  assert.equal(node.generationStartTime, 5400);
+  assert.equal(node.asyncTaskStartedAt, 5400);
+  assert.equal(node.asyncRuntimeTaskId, 'runtime-grsai-1');
+  assert.equal(node.asyncClientTaskId, 'client-grsai-1');
+});
+
+test('phase3 grsai terminal success result id is cached as remoteTaskId only', async () => {
   const storage = createMemoryStorage({
     'ai-canvas:async-tasks:v1': asyncTaskSnapshot([{
       runtimeTaskId: 'async:image:grsai:node-1:100',

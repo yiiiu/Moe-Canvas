@@ -183,6 +183,352 @@ test('asyncTaskRuntime: direct loading restore keeps existing generation timer s
   assert.equal(node.asyncTaskStatus, 'running');
 });
 
+test('asyncTaskRuntime: direct loading restore keeps earlier task start over newer transient node timer', () => {
+  const state = {
+    nodes: {
+      'node-1': {
+        ...baseNode,
+        isGenerating: true,
+        jobStatus: 'loading',
+        generationStartTime: 43000,
+        asyncTaskStartedAt: 43000,
+        asyncTaskStatus: 'running',
+        asyncRuntimeTaskId: 'runtime-1',
+        asyncClientTaskId: 'client-1',
+      },
+    },
+  };
+  const store = {
+    getState: () => state,
+    updateNodeData(nodeId, patch) {
+      state.nodes[nodeId] = { ...state.nodes[nodeId], ...patch };
+    },
+  };
+
+  const restored = restoreAsyncTaskLoadingRecords([
+    activeRecord({
+      provider: 'grsai',
+      runtimeTaskId: 'runtime-1',
+      clientTaskId: 'client-1',
+      recoveryMode: 'local_proxy_poll',
+      createdAt: 42000,
+      updatedAt: 42000,
+    }),
+  ], { store });
+
+  const node = state.nodes['node-1'];
+  assert.equal(restored.length, 1);
+  assert.equal(node.generationStartTime, 42000);
+  assert.equal(node.asyncTaskStartedAt, 42000);
+});
+
+test('asyncTaskRuntime: text local proxy restore ignores stale remote primary task id on node', () => {
+  const runtimeTaskId = 'async:text:custom_openai_compatible:text-node-1:1781517233139';
+  const clientTaskId = `client:${runtimeTaskId}`;
+
+  assert.equal(canRestoreAsyncTaskLoading(activeRecord({
+    runtimeTaskId,
+    clientTaskId,
+    kind: 'text',
+    provider: 'custom_openai_compatible',
+    nodeId: 'text-node-1',
+    canvasId: 'canvas-1',
+    recoveryMode: 'local_proxy_poll',
+    pollingSpec: {
+      kind: 'generation',
+      taskType: 'text-generation',
+      provider: 'custom_openai_compatible',
+      recoveryMode: 'local_proxy_poll',
+      targetNodeId: 'text-node-1',
+      runtimeTaskId,
+      clientTaskId,
+    },
+  }), {
+    id: 'text-node-1',
+    canvasId: 'canvas-1',
+    type: 'ai-text',
+    pollingTaskId: 'stale-remote-task-id',
+    isGenerating: false,
+    jobStatus: 'idle',
+  }), true);
+});
+
+test('asyncTaskRuntime: text local proxy running identity overrides stale cancelled async status', () => {
+  const runtimeTaskId = 'async:text:custom_openai_compatible:text-node-1:1781518716832';
+  const clientTaskId = `client:${runtimeTaskId}`;
+
+  assert.equal(canRestoreAsyncTaskLoading(activeRecord({
+    runtimeTaskId,
+    clientTaskId,
+    kind: 'text',
+    provider: 'custom_openai_compatible',
+    nodeId: 'text-node-1',
+    canvasId: 'canvas-1',
+    recoveryMode: 'local_proxy_poll',
+    pollingSpec: {
+      kind: 'generation',
+      taskType: 'text-generation',
+      provider: 'custom_openai_compatible',
+      recoveryMode: 'local_proxy_poll',
+      targetNodeId: 'text-node-1',
+      runtimeTaskId,
+      clientTaskId,
+    },
+  }), {
+    id: 'text-node-1',
+    canvasId: 'canvas-1',
+    type: 'ai-text',
+    isGenerating: true,
+    jobStatus: 'loading',
+    asyncTaskStatus: 'cancelled',
+    textTaskStatus: 'running',
+    asyncRuntimeTaskId: runtimeTaskId,
+    asyncClientTaskId: clientTaskId,
+  }), true);
+});
+
+
+test('asyncTaskRuntime: direct text restore accepts local runtime identity from legacy task field', () => {
+  const runtimeTaskId = 'async:text:custom_openai_compatible:text-node-1:1781516214111';
+  const clientTaskId = `client:${runtimeTaskId}`;
+  const state = {
+    nodes: {
+      'text-node-1': {
+        id: 'text-node-1',
+        canvasId: 'canvas-1',
+        type: 'ai-text',
+        taskId: runtimeTaskId,
+        isGenerating: false,
+        jobStatus: 'idle',
+      },
+    },
+  };
+  const updates = [];
+  const store = {
+    getState: () => state,
+    updateNodeData(nodeId, patch) {
+      updates.push({ nodeId, patch });
+      state.nodes[nodeId] = { ...state.nodes[nodeId], ...patch };
+    },
+  };
+
+  const restored = restoreAsyncTaskLoadingRecords([
+    activeRecord({
+      runtimeTaskId,
+      clientTaskId,
+      kind: 'text',
+      provider: 'custom_openai_compatible',
+      nodeId: 'text-node-1',
+      canvasId: 'canvas-1',
+      recoveryMode: 'local_proxy_poll',
+      pollingSpec: {
+        kind: 'generation',
+        taskType: 'text-generation',
+        provider: 'custom_openai_compatible',
+        recoveryMode: 'local_proxy_poll',
+        targetNodeId: 'text-node-1',
+        runtimeTaskId,
+        clientTaskId,
+      },
+    }),
+  ], { store });
+
+  assert.equal(restored.length, 1);
+  assert.equal(updates.length, 1);
+  assert.equal(state.nodes['text-node-1'].isGenerating, true);
+  assert.equal(state.nodes['text-node-1'].jobStatus, 'running');
+  assert.equal(state.nodes['text-node-1'].asyncTaskStatus, 'running');
+  assert.equal(state.nodes['text-node-1'].asyncRuntimeTaskId, runtimeTaskId);
+  assert.equal(state.nodes['text-node-1'].asyncClientTaskId, clientTaskId);
+});
+
+test('asyncTaskRuntime: direct text restore mounts loading overlay on text node without media preview', () => {
+  let now = 0;
+  const timeouts = [];
+  const originalDateNow = Date.now;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const originalDocument = globalThis.document;
+  const originalWindow = globalThis.window;
+  const runtimeTaskId = 'async:text:custom_openai_compatible:text-node-1:1781516214111';
+  const clientTaskId = `client:${runtimeTaskId}`;
+
+  function makeClassList(initial = '') {
+    const values = new Set(String(initial || '').split(/\s+/).filter(Boolean));
+    return {
+      add: (...items) => items.forEach((item) => values.add(String(item))),
+      remove: (...items) => items.forEach((item) => values.delete(String(item))),
+      contains: (item) => values.has(String(item)),
+      toString: () => [...values].join(' '),
+    };
+  }
+
+  function makeElement(className = '') {
+    const element = {
+      className,
+      classList: makeClassList(className),
+      children: [],
+      parentNode: null,
+      appendChild(child) {
+        child.parentNode = element;
+        element.children.push(child);
+        return child;
+      },
+      remove() {
+        if (!element.parentNode) return;
+        element.parentNode.children = element.parentNode.children.filter((child) => child !== element);
+        element.parentNode = null;
+      },
+      querySelector(selector) {
+        if (selector === '.img-loading-overlay') return element.children.find((child) => child.className === 'img-loading-overlay') || null;
+        return null;
+      },
+      querySelectorAll(selector) {
+        const found = element.querySelector(selector);
+        return found ? [found] : [];
+      },
+      closest(selector) {
+        return selector === '.v2-node' ? element : null;
+      },
+    };
+    return element;
+  }
+
+  const textNodeEl = makeElement('v2-node node text-node no-result');
+  const state = {
+    nodes: {
+      'text-node-1': {
+        id: 'text-node-1',
+        canvasId: 'canvas-1',
+        type: 'ai-text',
+        taskId: runtimeTaskId,
+        isGenerating: false,
+        jobStatus: 'idle',
+      },
+    },
+  };
+  const store = {
+    getState: () => state,
+    updateNodeData(nodeId, patch) {
+      state.nodes[nodeId] = { ...state.nodes[nodeId], ...patch };
+    },
+  };
+
+  Date.now = () => now;
+  globalThis.setTimeout = (fn, ms) => {
+    const timer = { fn, ms, active: true };
+    timeouts.push(timer);
+    return timer;
+  };
+  globalThis.clearTimeout = (timer) => { if (timer) timer.active = false; };
+  globalThis.window = { PREVIEW_MODE: false };
+  globalThis.document = {
+    body: makeElement('body'),
+    createElement: () => makeElement(''),
+    getElementById: (id) => (id === 'text-node-1' ? textNodeEl : null),
+    querySelector: () => null,
+  };
+
+  try {
+    const restored = restoreAsyncTaskLoadingRecords([
+      activeRecord({
+        runtimeTaskId,
+        clientTaskId,
+        kind: 'text',
+        provider: 'custom_openai_compatible',
+        nodeId: 'text-node-1',
+        canvasId: 'canvas-1',
+        recoveryMode: 'local_proxy_poll',
+        pollingSpec: {
+          kind: 'generation',
+          taskType: 'text-generation',
+          provider: 'custom_openai_compatible',
+          recoveryMode: 'local_proxy_poll',
+          targetNodeId: 'text-node-1',
+          runtimeTaskId,
+          clientTaskId,
+        },
+      }),
+    ], { store });
+
+    assert.equal(restored.length, 1);
+    assert.equal(restored[0].overlayRestored, false);
+    assert.equal(textNodeEl.querySelector('.img-loading-overlay'), null);
+
+    for (const timeout of timeouts) {
+      if (timeout.active && timeout.ms <= 50) {
+        timeout.active = false;
+        timeout.fn();
+      }
+    }
+
+    assert.ok(textNodeEl.querySelector('.img-loading-overlay'));
+    assert.equal(state.nodes['text-node-1'].isGenerating, true);
+    assert.equal(state.nodes['text-node-1'].jobStatus, 'running');
+  } finally {
+    Date.now = originalDateNow;
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+    globalThis.document = originalDocument;
+    globalThis.window = originalWindow;
+  }
+});
+
+test('asyncTaskRuntime: canvas hydration writes text loading state into nested node data', () => {
+  const canvasData = {
+    id: 'canvas-1',
+    nodes: [{
+      id: 'text-node-1',
+      type: 'ai-text',
+      data: {
+        id: 'text-node-1',
+        canvasId: 'canvas-1',
+        type: 'ai-text',
+        prompt: '写一段长文本',
+        isGenerating: false,
+        jobStatus: 'idle',
+      },
+    }],
+  };
+  const storage = {
+    getItem: (key) => key === 'ai-canvas:async-tasks:v1' ? JSON.stringify({
+      version: 1,
+      items: [activeRecord({
+        runtimeTaskId: 'runtime-text-1',
+        clientTaskId: 'client-text-1',
+        kind: 'text',
+        provider: 'custom_openai_compatible',
+        nodeId: 'text-node-1',
+        canvasId: 'canvas-1',
+        recoveryMode: 'local_proxy_poll',
+        createdAt: 42000,
+        updatedAt: 42000,
+        pollingSpec: {
+          kind: 'generation',
+          taskType: 'text-generation',
+          provider: 'custom_openai_compatible',
+          recoveryMode: 'local_proxy_poll',
+          targetNodeId: 'text-node-1',
+          runtimeTaskId: 'runtime-text-1',
+          clientTaskId: 'client-text-1',
+        },
+      })],
+    }) : null,
+  };
+
+  const patched = applyAsyncTaskLoadingToCanvasData(canvasData, { storage, now: 43000 });
+  const node = patched.nodes[0];
+
+  assert.notEqual(patched, canvasData);
+  assert.equal(node.data.isGenerating, true);
+  assert.equal(node.data.jobStatus, 'running');
+  assert.equal(node.data.asyncTaskStatus, 'running');
+  assert.equal(node.data.asyncTaskKind, 'text');
+  assert.equal(node.data.textTaskStatus, 'running');
+  assert.equal(node.data.asyncRuntimeTaskId, 'runtime-text-1');
+  assert.equal(node.data.asyncClientTaskId, 'client-text-1');
+});
+
 test('asyncTaskRuntime: loading recovery installer retries overlay within one second after late DOM mount', () => {
   let now = 0;
   const intervals = [];

@@ -154,6 +154,37 @@ function withNodeBizRevisionPatch(node = {}, patch = {}) {
   };
 }
 
+function resolveExistingGenerationDuration(node = {}) {
+  const direct = Number(node.generationDuration);
+  if (Number.isFinite(direct) && direct >= 0) return direct;
+  const nested = Number(asObject(node.data).generationDuration);
+  if (Number.isFinite(nested) && nested >= 0) return nested;
+  return null;
+}
+
+function withExistingDurationPatch(node = {}, patch = {}) {
+  if (!Object.prototype.hasOwnProperty.call(patch, 'generationDuration')) return patch;
+  const existingDuration = resolveExistingGenerationDuration(node);
+  if (existingDuration === null) return patch;
+  return {
+    ...patch,
+    generationDuration: existingDuration,
+  };
+}
+
+function withNestedDataPatch(node = {}, patch = {}) {
+  const data = asObject(node.data);
+  if (!Object.keys(data).length) return patch;
+  return {
+    ...patch,
+    data: {
+      ...data,
+      ...patch,
+      ...asObject(patch.data),
+    },
+  };
+}
+
 function resolveWritebackNodeId(task = {}) {
   return trimString(
     task.targetNodeId
@@ -182,7 +213,13 @@ export function writeAsyncTaskNodeBackfill({ store, phase = '', task = {}, resul
 
   const patch = withNodeBizRevisionPatch(
     node,
-    sanitizeNodeIdentityPatch(buildBackfillPatch({ phase, task, resultPatch }), node, nodeId),
+    withNestedDataPatch(
+      node,
+      withExistingDurationPatch(
+        node,
+        sanitizeNodeIdentityPatch(buildBackfillPatch({ phase, task, resultPatch }), node, nodeId),
+      ),
+    ),
   );
   try {
     store.updateNodeData(nodeId, patch);

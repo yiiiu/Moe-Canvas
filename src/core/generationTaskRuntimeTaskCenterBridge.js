@@ -867,8 +867,21 @@ export function syncGenerationTaskToTaskCenter({ spec = {}, options = {}, result
   if (!shouldSyncGenerationTaskToTaskCenter({ spec, node })) return null;
 
   const taskSpec = nodeId ? { ...asObject(spec), id: `generation:${nodeId}` } : spec;
+  const existingTask = nodeId ? asObject(manager.tasks?.get?.(`generation:${nodeId}`)) : {};
+  const existingRecoverySpec = asObject(existingTask.recoverySpec || existingTask.unifiedTask?.recoverySpec);
   const now = resolveNow(options);
-  const createdAt = firstFiniteNumber(taskSpec.startedAt, result.startedAt, taskSpec.createdAt, result.createdAt) || now;
+  const createdAt = firstFiniteNumber(
+    taskSpec.startedAt,
+    existingTask.startedAt,
+    existingTask.createdAt,
+    existingTask.unifiedTask?.createdAt,
+    existingRecoverySpec.startedAt,
+    node.generationStartTime,
+    node.asyncTaskStartedAt,
+    taskSpec.createdAt,
+    result.startedAt,
+    result.createdAt,
+  ) || now;
 
   return upsertUnifiedTaskToTaskCenter({
     spec: taskSpec,

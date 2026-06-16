@@ -202,6 +202,20 @@ function buildTerminalProjection(task = {}, resultPatch = {}) {
         : buildGenerationSuccessPatch({ startedAt: getTaskAttemptTime(task) });
 
   const terminalResultPatch = asObject(resultPatch);
+  const textTerminalPatch = (taskType === 'text-generation' || taskType === 'text')
+    ? {
+      generationStartTime: null,
+      asyncTaskStartedAt: null,
+      textTaskStatus: isGenerationTaskFailureStatus(status)
+        ? 'failed'
+        : isGenerationTaskCancelledStatus(status)
+          ? 'cancelled'
+          : isInterruptedStatus(status)
+            ? 'interrupted'
+            : 'success',
+      textTaskRecovering: false,
+    }
+    : {};
   const failedImageClearPatch = taskType === 'image-generation' && isGenerationTaskFailureStatus(status)
     ? buildFailedImageResultClearPatch()
     : {};
@@ -213,6 +227,7 @@ function buildTerminalProjection(task = {}, resultPatch = {}) {
     ...lifecyclePatch,
     ...basePatch,
     ...(taskType === 'image-generation' ? { generationStartTime: null } : {}),
+    ...textTerminalPatch,
     ...terminalResultPatch,
     ...failedImageClearPatch,
     ...failedStatusCardPatch,

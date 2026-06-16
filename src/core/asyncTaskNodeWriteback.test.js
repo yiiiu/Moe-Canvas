@@ -241,7 +241,19 @@ test('asyncTaskNodeWriteback text success bumps biz revision for mounted rendere
       asyncRuntimeTaskId: 'runtime-text-1',
       asyncClientTaskId: 'client-text-1',
       generationStartTime: 100,
-      generationDuration: null,
+      asyncTaskStartedAt: 100,
+      textTaskStatus: 'running',
+      textTaskRecovering: true,
+      data: {
+        id: 'text-node-1',
+        canvasId: 'canvas-1',
+        generationStartTime: 100,
+        asyncTaskStartedAt: 100,
+        textTaskStatus: 'running',
+        textTaskRecovering: true,
+        generationDuration: 7000,
+      },
+      generationDuration: 7000,
       _bizRev: 7,
     },
   });
@@ -271,8 +283,16 @@ test('asyncTaskNodeWriteback text success bumps biz revision for mounted rendere
   assert.equal(node.asyncTaskStatus, 'success');
   assert.equal(node.asyncRuntimeTaskId, null);
   assert.equal(node.asyncClientTaskId, null);
-  assert.equal(node.generationStartTime, 100);
-  assert.equal(typeof node.generationDuration, 'number');
+  assert.equal(node.generationStartTime, null);
+  assert.equal(node.asyncTaskStartedAt, null);
+  assert.equal(node.textTaskStatus, 'success');
+  assert.equal(node.textTaskRecovering, false);
+  assert.equal(node.data.generationStartTime, null);
+  assert.equal(node.data.asyncTaskStartedAt, null);
+  assert.equal(node.data.textTaskStatus, 'success');
+  assert.equal(node.data.textTaskRecovering, false);
+  assert.equal(node.generationDuration, 7000);
+  assert.equal(node.data.generationDuration, 7000);
   assert.equal(node._bizRev, 8);
 });
 

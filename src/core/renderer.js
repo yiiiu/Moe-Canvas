@@ -62,6 +62,7 @@ import { syncNodeMediaLodMode } from "./rendererNodeMediaLod.js";
 import { buildRendererNodeSignature } from "./rendererNodeSignature.js";
 import { syncNodeResultClass } from "./rendererNodeResultState.js";
 import { syncNodeMediaMetricsDataset } from "../modules/nodeMediaMetrics.js";
+import { getNodeTimerRenderState as getBaseNodeTimerRenderState } from "./rendererNodeTimer.js";
 const _componentMap = new Map(),
   _nodeDataSnapshotMap = new Map(),
   _wrapperMap = new Map();
@@ -221,12 +222,7 @@ function _isResolvedSourceMediaNode(_0x3a80af) {
   );
 }
 function _isRunningTimerNode(_0x4ec6ea) {
-  const _0x210e28 = a330_0x12fb12;
-  return !!(
-    _0x4ec6ea?.[_0x210e28(0x25b)] &&
-    _0x4ec6ea[_0x210e28(0x22a)] == null &&
-    !_isResolvedSourceMediaNode(_0x4ec6ea)
-  );
+  return _getNodeTimerRenderState(_0x4ec6ea).running;
 }
 function _syncRunningTimerForNode(
   _0x2ff5f8,
@@ -252,20 +248,15 @@ function _updateTimers() {
   const _0x2db9a9 = [];
   for (const _0x1aeed2 of _runningTimers) {
     const _0x51dc35 = _currentSnapshot[_0x453592(0x286)]?.[_0x1aeed2];
-    if (
-      !_0x51dc35 ||
-      !_0x51dc35["generationStartTime"] ||
-      _0x51dc35[_0x453592(0x22a)] != null ||
-      _isResolvedSourceMediaNode(_0x51dc35)
-    ) {
+    const _0x4f0f3d = _getNodeTimerRenderState(_0x51dc35);
+    if (!_0x4f0f3d.running) {
       _0x2db9a9[_0x453592(0x147)](_0x1aeed2);
       continue;
     }
     const _0x156fb8 = _wrapperMap[_0x453592(0x258)](_0x1aeed2),
       _0x326330 = _0x156fb8?.[_0x453592(0x280)];
     if (_0x326330) {
-      const _0x1a9dce = Date[_0x453592(0x155)]() - _0x51dc35[_0x453592(0x25b)];
-      _0x326330[_0x453592(0x1f1)] = _formatNodeTimerText(_0x51dc35, _0x1a9dce);
+      _0x326330[_0x453592(0x1f1)] = _0x4f0f3d.text;
       if (_0x326330[_0x453592(0x27d)][_0x453592(0x25d)] === _0x453592(0xdf))
         _0x326330["style"]["display"] = "";
     }
@@ -1046,6 +1037,13 @@ function _formatNodeTimerText(_0x20edf2, _0x56eeb6) {
     _0x11057a = _0xe05bd0 + "." + _0xebf1e0 + "s",
     _0x4bf2f7 = _getDreaminaTimerPhaseTitle(_0x20edf2);
   return _0x4bf2f7 ? _0x4bf2f7 + _0x45fb9a(0xfc) + _0x11057a : _0x11057a;
+}
+function _getNodeTimerRenderState(_0x3ffad6, _0x1fe473 = {}) {
+  return getBaseNodeTimerRenderState(_0x3ffad6, {
+    ..._0x1fe473,
+    isResolvedSourceMediaNode: _isResolvedSourceMediaNode,
+    formatTimerText: _formatNodeTimerText,
+  });
 }
 function a330_0x2ef2() {
   const _0x53598b = [
@@ -2684,26 +2682,9 @@ function _syncMountedNodePresentation({
   }
   const _0x266fdf = _0x583c5a[_0x44313e(0x280)];
   if (_0x266fdf) {
-    let _0xdbb150 = "",
-      _0x14f7ac = ![];
-    const _0x4d34d2 = _isResolvedSourceMediaNode(_0x308c1a);
-    if (
-      !_0x4d34d2 &&
-      _0x308c1a[_0x44313e(0x25b)] &&
-      _0x308c1a[_0x44313e(0x22a)] == null
-    ) {
-      const _0xbc4214 =
-        Date[_0x44313e(0x155)]() - _0x308c1a["generationStartTime"];
-      ((_0xdbb150 = _formatNodeTimerText(_0x308c1a, _0xbc4214)),
-        (_0x14f7ac = !![]));
-    } else
-      !_0x4d34d2 &&
-        typeof _0x308c1a["generationDuration"] === "number" &&
-        ((_0xdbb150 = _formatNodeTimerText(
-          _0x308c1a,
-          _0x308c1a[_0x44313e(0x22a)],
-        )),
-        (_0x14f7ac = !![]));
+    const _0x57d0a2 = _getNodeTimerRenderState(_0x308c1a),
+      _0xdbb150 = _0x57d0a2.text,
+      _0x14f7ac = _0x57d0a2.visible;
     _0x14f7ac
       ? (_0x266fdf[_0x44313e(0x1f1)] !== _0xdbb150 &&
           (_0x266fdf[_0x44313e(0x1f1)] = _0xdbb150),

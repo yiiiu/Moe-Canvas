@@ -628,7 +628,25 @@ test('generationRecoveryV2 local proxy writes terminal resultSpec into async tas
 
 test('generationRecoveryV2 local proxy restores text completion result after refresh', async () => {
   const store = createStore({
-    'text-node-1': { id: 'text-node-1', type: 'ai-text', isGenerating: true, jobStatus: 'running', generationStartTime: 100 },
+    'text-node-1': {
+      id: 'text-node-1',
+      type: 'ai-text',
+      isGenerating: true,
+      jobStatus: 'running',
+      generationStartTime: 100,
+      asyncTaskStartedAt: 100,
+      generationDuration: 7000,
+      textTaskStatus: 'running',
+      textTaskRecovering: true,
+      data: {
+        id: 'text-node-1',
+        generationStartTime: 100,
+        asyncTaskStartedAt: 100,
+        generationDuration: 7000,
+        textTaskStatus: 'running',
+        textTaskRecovering: true,
+      },
+    },
   });
   const manager = createManager();
   const storage = createMemoryStorage();
@@ -706,6 +724,16 @@ test('generationRecoveryV2 local proxy restores text completion result after ref
   assert.equal(node.outputText, '刷新后恢复文本');
   assert.equal(node.isGenerating, false);
   assert.equal(node.asyncTaskStatus, 'success');
+  assert.equal(node.generationStartTime, null);
+  assert.equal(node.asyncTaskStartedAt, null);
+  assert.equal(node.textTaskStatus, 'success');
+  assert.equal(node.textTaskRecovering, false);
+  assert.equal(node.data.generationStartTime, null);
+  assert.equal(node.data.asyncTaskStartedAt, null);
+  assert.equal(node.data.textTaskStatus, 'success');
+  assert.equal(node.data.textTaskRecovering, false);
+  assert.equal(node.generationDuration, 7000);
+  assert.equal(node.data.generationDuration, 7000);
   assert.equal(manager.updates.at(-1).status, 'success');
   assert.equal(records.length, 1);
   assert.equal(records[0].runtimeTaskId, 'runtime-text-1');

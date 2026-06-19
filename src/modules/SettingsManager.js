@@ -1,1 +1,96 @@
-(function(_0x527b5a,_0x512bff){const _0x3fc1fb=a544_0x1d85,_0x4f81c7=_0x527b5a();while(!![]){try{const _0x54077a=parseInt(_0x3fc1fb(0xc1))/0x1*(-parseInt(_0x3fc1fb(0xbd))/0x2)+parseInt(_0x3fc1fb(0xc6))/0x3*(parseInt(_0x3fc1fb(0xc7))/0x4)+-parseInt(_0x3fc1fb(0xc3))/0x5*(-parseInt(_0x3fc1fb(0xbf))/0x6)+parseInt(_0x3fc1fb(0xc4))/0x7+-parseInt(_0x3fc1fb(0xc5))/0x8+parseInt(_0x3fc1fb(0xbe))/0x9+-parseInt(_0x3fc1fb(0xc0))/0xa;if(_0x54077a===_0x512bff)break;else _0x4f81c7['push'](_0x4f81c7['shift']());}catch(_0x4dd9f1){_0x4f81c7['push'](_0x4f81c7['shift']());}}}(a544_0xe0f8,0x38292));import{applyGridDotsPref,applyGridDotsPrefFromStorage,initAppearanceSettings}from'./settings/appearanceSettings.js';import{initCanvasAlignmentSettings}from'./settings/canvasAlignmentSettings.js';import{initCanvasControlsPlacementSettings}from'./settings/canvasControlsPlacementSettings.js';import{applyImageVideoNodeResizePref,initNodeBehaviorSettings}from'./settings/nodeBehaviorSettings.js';import{initSettingsPanelEvents}from'./settings/panelSettings.js';import{initApiSettings}from'./settings/apiSettings.js';import{initFileSaveSettings}from'./settings/fileSaveSettings.js';import{initAutoSaveSettings}from'./settings/autoSaveSettings.js';function a544_0x1d85(_0x47cc2a,_0x1f9dde){const _0xe0f8b3=a544_0xe0f8();return a544_0x1d85=function(_0x1d852a,_0x5cd899){_0x1d852a=_0x1d852a-0xbd;let _0x5d480d=_0xe0f8b3[_0x1d852a];return _0x5d480d;},a544_0x1d85(_0x47cc2a,_0x1f9dde);}function a544_0xe0f8(){const _0x327199=['36SbmDSo','2778TmgpHm','328248gJsaiI','6Jflybd','4778770TCutPt','15xOJCSp','uiStore','1087025skvnwP','900795oCloMC','604952VbREPA','140601VVKKdE'];a544_0xe0f8=function(){return _0x327199;};return a544_0xe0f8();}import{initLocalAssetCleanupSettings}from'./settings/localAssetCleanupSettings.js';import{initInterfaceCacheSettings}from'./settings/interfaceCacheSettings.js';import{initDiagnosticsSettings}from'./settings/diagnosticsSettings.js';import{initImageInputUploadQualitySettings}from'./settings/imageInputUploadQualitySettings.js';import{initAboutSettings}from'./settings/aboutSettings.js';const SettingsManager={'init'(_0x5d7541={}){const _0x38139e=a544_0x1d85;initSettingsPanelEvents(),initAppearanceSettings({'uiStore':_0x5d7541[_0x38139e(0xc2)]}),initCanvasAlignmentSettings(),initCanvasControlsPlacementSettings(),initNodeBehaviorSettings(),initImageInputUploadQualitySettings(),initApiSettings(),initFileSaveSettings(),initAutoSaveSettings(),initLocalAssetCleanupSettings(),initInterfaceCacheSettings(),initDiagnosticsSettings(),initAboutSettings();},'applyGridDotsPref':applyGridDotsPref,'applyGridDotsPrefFromStorage':applyGridDotsPrefFromStorage,'applyImageVideoNodeResizePref':applyImageVideoNodeResizePref};export default SettingsManager;export{SettingsManager};
+(function (_0x527b5a, _0x512bff) {
+  const _0x3fc1fb = a544_0x1d85,
+    _0x4f81c7 = _0x527b5a();
+  while (!![]) {
+    try {
+      const _0x54077a =
+        (parseInt(_0x3fc1fb(0xc1)) / 0x1) * (-parseInt(_0x3fc1fb(0xbd)) / 0x2) +
+        (parseInt(_0x3fc1fb(0xc6)) / 0x3) * (parseInt(_0x3fc1fb(0xc7)) / 0x4) +
+        (-parseInt(_0x3fc1fb(0xc3)) / 0x5) *
+          (-parseInt(_0x3fc1fb(0xbf)) / 0x6) +
+        parseInt(_0x3fc1fb(0xc4)) / 0x7 +
+        -parseInt(_0x3fc1fb(0xc5)) / 0x8 +
+        parseInt(_0x3fc1fb(0xbe)) / 0x9 +
+        -parseInt(_0x3fc1fb(0xc0)) / 0xa;
+      if (_0x54077a === _0x512bff) break;
+      else _0x4f81c7["push"](_0x4f81c7["shift"]());
+    } catch (_0x4dd9f1) {
+      _0x4f81c7["push"](_0x4f81c7["shift"]());
+    }
+  }
+})(a544_0xe0f8, 0x38292);
+import {
+  applyGridDotsPref,
+  applyGridDotsPrefFromStorage,
+  initAppearanceSettings,
+} from "./settings/appearanceSettings.js";
+import { initCanvasAlignmentSettings } from "./settings/canvasAlignmentSettings.js";
+import { initCanvasControlsPlacementSettings } from "./settings/canvasControlsPlacementSettings.js";
+import {
+  applyImageVideoNodeResizePref,
+  initNodeBehaviorSettings,
+} from "./settings/nodeBehaviorSettings.js";
+import { initSettingsPanelEvents } from "./settings/panelSettings.js";
+import { initApiSettings } from "./settings/apiSettings.js";
+import { initFileSaveSettings } from "./settings/fileSaveSettings.js";
+import { initAutoSaveSettings } from "./settings/autoSaveSettings.js";
+function a544_0x1d85(_0x47cc2a, _0x1f9dde) {
+  const _0xe0f8b3 = a544_0xe0f8();
+  return (
+    (a544_0x1d85 = function (_0x1d852a, _0x5cd899) {
+      _0x1d852a = _0x1d852a - 0xbd;
+      let _0x5d480d = _0xe0f8b3[_0x1d852a];
+      return _0x5d480d;
+    }),
+    a544_0x1d85(_0x47cc2a, _0x1f9dde)
+  );
+}
+function a544_0xe0f8() {
+  const _0x327199 = [
+    "36SbmDSo",
+    "2778TmgpHm",
+    "328248gJsaiI",
+    "6Jflybd",
+    "4778770TCutPt",
+    "15xOJCSp",
+    "uiStore",
+    "1087025skvnwP",
+    "900795oCloMC",
+    "604952VbREPA",
+    "140601VVKKdE",
+  ];
+  a544_0xe0f8 = function () {
+    return _0x327199;
+  };
+  return a544_0xe0f8();
+}
+import { initLocalAssetCleanupSettings } from "./settings/localAssetCleanupSettings.js";
+import { initInterfaceCacheSettings } from "./settings/interfaceCacheSettings.js";
+import { initDiagnosticsSettings } from "./settings/diagnosticsSettings.js";
+import { initImageInputUploadQualitySettings } from "./settings/imageInputUploadQualitySettings.js";
+import { initCustomStorageSettings } from "./settings/customStorageSettings.js";
+import { initAboutSettings } from "./settings/aboutSettings.js";
+const SettingsManager = {
+  init(_0x5d7541 = {}) {
+    const _0x38139e = a544_0x1d85;
+    (initSettingsPanelEvents(),
+      initAppearanceSettings({ uiStore: _0x5d7541[_0x38139e(0xc2)] }),
+      initCanvasAlignmentSettings(),
+      initCanvasControlsPlacementSettings(),
+      initNodeBehaviorSettings(),
+      initImageInputUploadQualitySettings(),
+      initApiSettings(),
+      initFileSaveSettings(),
+      initCustomStorageSettings(),
+      initAutoSaveSettings(),
+      initLocalAssetCleanupSettings(),
+      initInterfaceCacheSettings(),
+      initDiagnosticsSettings(),
+      initAboutSettings());
+  },
+  applyGridDotsPref: applyGridDotsPref,
+  applyGridDotsPrefFromStorage: applyGridDotsPrefFromStorage,
+  applyImageVideoNodeResizePref: applyImageVideoNodeResizePref,
+};
+export default SettingsManager;
+export { SettingsManager };

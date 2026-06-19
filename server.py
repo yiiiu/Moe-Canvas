@@ -49,6 +49,7 @@ from backend.services.config_route_service import ConfigRouteService
 from backend.services.json_file_route_service import JsonFileRouteService
 from backend.services.library_file_route_service import LibraryFileRouteService
 from backend.services.media_file_route_service import MediaFileRouteService
+from backend.services.storage_bucket_service import StorageBucketService
 from backend.services.local_media_processing_route_service import LocalMediaProcessingRouteService
 from backend.services.remote_proxy_route_service import RemoteProxyRouteService
 from backend.services.subscription_gate_service import SubscriptionGateService
@@ -1956,6 +1957,11 @@ def _normalize_chat_completion_sse_response(response):
     return ""
 
 
+STORAGE_BUCKET_SERVICE = StorageBucketService(
+    settings_getter=lambda: _read_user_settings(),
+)
+
+
 MEDIA_FILE_ROUTE_SERVICE = MediaFileRouteService(
     directory=DIRECTORY,
     uploads_dir_getter=lambda: UPLOADS_DIR,
@@ -1973,6 +1979,7 @@ MEDIA_FILE_ROUTE_SERVICE = MediaFileRouteService(
     image_derivative_display_quality=IMAGE_DERIVATIVE_DISPLAY_QUALITY,
     image_derivative_thumb_quality=IMAGE_DERIVATIVE_THUMB_QUALITY,
     image_derivative_root_dirname=IMAGE_DERIVATIVE_ROOT_DIRNAME,
+    storage_bucket_service=STORAGE_BUCKET_SERVICE,
 )
 
 

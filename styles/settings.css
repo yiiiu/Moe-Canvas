@@ -1064,6 +1064,52 @@ body.dev-mode .settings-card.dev-mode-only {
 .settings-file-migration-card[hidden] {
   display: none;
 }
+.settings-custom-storage-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+}
+.settings-custom-storage-head,
+.settings-custom-storage-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+.settings-custom-storage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+}
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-12);
+}
+.settings-switch-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  color: var(--text-primary);
+  font-size: var(--font-13);
+  white-space: nowrap;
+}
+.settings-custom-storage-path-style {
+  align-self: center;
+  white-space: normal;
+}
+.settings-custom-storage-status {
+  min-height: 18px;
+}
+.settings-custom-storage-status[data-status="success"] {
+  color: var(--success);
+}
+.settings-custom-storage-status[data-status="error"] {
+  color: var(--danger);
+}
 .settings-file-migration-card {
   display: flex;
   flex-direction: column;

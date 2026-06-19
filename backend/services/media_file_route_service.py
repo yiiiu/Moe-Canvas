@@ -1,6 +1,7 @@
 import hashlib
 import ipaddress
 import json
+import mimetypes
 import os
 import re
 import socket
@@ -42,12 +43,14 @@ class MediaFileRouteService:
         image_derivative_display_quality=78,
         image_derivative_thumb_quality=70,
         image_derivative_root_dirname="_derived",
+        storage_bucket_service=None,
     ):
         self.directory = os.path.abspath(directory)
         self._get_uploads_dir = uploads_dir_getter
         self._get_user_dir = user_dir_getter or (lambda: self.directory)
         self._get_assets_dir = assets_dir_getter or (lambda: os.path.join(self.directory, "data", "assets"))
         self._get_output_dir = output_dir_getter
+        self.storage_bucket_service = storage_bucket_service
         self.max_upload_bytes = int(max_upload_bytes or 0)
         self._next_output_filename = next_output_filename
         self._load_json_file = load_json_file
@@ -178,6 +181,46 @@ class MediaFileRouteService:
 
     def _ffprobe(self):
         return str(self._get_ffprobe() or "ffprobe")
+
+    def _storage_bucket_enabled(self):
+        service = getattr(self, "storage_bucket_service", None)
+        try:
+            return bool(service and service.is_enabled())
+        except Exception:
+            return False
+
+    def _upload_to_storage_bucket(self, file_bytes, *, filename, content_type="", local_path=""):
+        service = getattr(self, "storage_bucket_service", None)
+        if not service:
+            return None
+        try:
+            return service.upload_media_bytes(
+                file_bytes,
+                filename=filename,
+                content_type=content_type,
+                local_path=local_path,
+            )
+        except Exception as exc:
+            if hasattr(service, "sanitize_error"):
+                message = service.sanitize_error(exc)
+            else:
+                message = str(exc)
+            raise RuntimeError(message) from exc
+
+    def _apply_storage_bucket_result(self, payload, storage_result):
+        if not isinstance(storage_result, dict):
+            return payload
+        next_payload = dict(payload or {})
+        next_payload["url"] = str(storage_result.get("url") or next_payload.get("url") or "")
+        next_payload["storage"] = "s3-compatible"
+        next_payload["storageKey"] = str(storage_result.get("key") or "")
+        next_payload["storageBucket"] = str(storage_result.get("bucket") or "")
+        if storage_result.get("size") is not None:
+            try:
+                next_payload["size"] = int(storage_result.get("size") or 0)
+            except Exception:
+                pass
+        return next_payload
 
     @staticmethod
     def _hash_dedupe_key(value):
@@ -519,14 +562,26 @@ class MediaFileRouteService:
             )
 
             local_path = f"data/uploads/{stored_fn}"
+            payload = {
+                "url": f"/{local_path}",
+                "localPath": local_path,
+                "filename": safe_fn,
+                "storedFilename": stored_fn,
+            }
+            if self._storage_bucket_enabled():
+                try:
+                    storage_result = self._upload_to_storage_bucket(
+                        file_bytes,
+                        filename=stored_fn,
+                        content_type=mimetypes.guess_type(stored_fn)[0] or content_type or "application/octet-stream",
+                        local_path=local_path,
+                    )
+                except Exception as exc:
+                    return self._json_err(502, f"Storage bucket upload failed: {str(exc)}")
+                payload = self._apply_storage_bucket_result(payload, storage_result)
             return self._json_ok(
                 self.augment_saved_media_response(
-                    {
-                        "url": f"/{local_path}",
-                        "localPath": local_path,
-                        "filename": safe_fn,
-                        "storedFilename": stored_fn,
-                    },
+                    payload,
                     fpath,
                     local_path,
                 )
@@ -610,6 +665,29 @@ class MediaFileRouteService:
             os.makedirs(os.path.dirname(fpath), exist_ok=True)
             with open(fpath, "wb") as file:
                 file.write(body)
+
+            if self._storage_bucket_enabled():
+                try:
+                    storage_result = self._upload_to_storage_bucket(
+                        body,
+                        filename=filename,
+                        content_type=mimetypes.guess_type(filename)[0] or "application/octet-stream",
+                        local_path=rel_path,
+                    )
+                except Exception as exc:
+                    return self._json_err(502, f"Storage bucket upload failed: {str(exc)}")
+                return self._json_ok(
+                    self._apply_storage_bucket_result(
+                        {
+                            "success": True,
+                            "filename": filename,
+                            "path": rel_path,
+                            "localPath": rel_path,
+                            "url": f"/{rel_path}",
+                        },
+                        storage_result,
+                    )
+                )
 
             if kind:
                 meta_file = os.path.join(self._output_dir(), ".output_meta.json")
@@ -829,15 +907,29 @@ class MediaFileRouteService:
 
             rel_path = f"output/{filename}"
             self._remember_saved_output_from_url(dedupe_hash, rel_path, url)
+            payload = {
+                "success": True,
+                "filename": filename,
+                "path": rel_path,
+                "localPath": rel_path,
+                "url": f"/{rel_path}",
+            }
+            if self._storage_bucket_enabled():
+                try:
+                    with open(fpath, "rb") as saved_file:
+                        file_bytes = saved_file.read()
+                    storage_result = self._upload_to_storage_bucket(
+                        file_bytes,
+                        filename=filename,
+                        content_type=mimetypes.guess_type(filename)[0] or "application/octet-stream",
+                        local_path=rel_path,
+                    )
+                except Exception as exc:
+                    return self._json_err(502, f"Storage bucket upload failed: {str(exc)}")
+                payload = self._apply_storage_bucket_result(payload, storage_result)
             return self._json_ok(
                 self.augment_saved_media_response(
-                    {
-                        "success": True,
-                        "filename": filename,
-                        "path": rel_path,
-                        "localPath": rel_path,
-                        "url": f"/{rel_path}",
-                    },
+                    payload,
                     fpath,
                     rel_path,
                 )
@@ -1378,6 +1470,20 @@ class MediaFileRouteService:
                 return {}
         return {}
 
+    def _handle_storage_test(self, handler):
+        service = getattr(self, "storage_bucket_service", None)
+        if not service:
+            return self._json_err(400, "自定义存储桶未配置")
+        try:
+            result = service.test_connection()
+            return self._json_ok(result if isinstance(result, dict) else {"success": True})
+        except Exception as exc:
+            if hasattr(service, "sanitize_error"):
+                message = service.sanitize_error(exc)
+            else:
+                message = str(exc)
+            return self._json_err(400, message)
+
     def handle_get(self, handler, path):
         if path == "/api/v2/output-files":
             return self._handle_output_files_list(handler)
@@ -1399,6 +1505,9 @@ class MediaFileRouteService:
 
         if path == "/api/v2/save_output_from_url":
             return self._handle_save_output_from_url(handler)
+
+        if path == "/api/v2/storage/test":
+            return self._handle_storage_test(handler)
 
         if path == "/api/v2/output-files/delete":
             return self._handle_output_files_delete(handler)

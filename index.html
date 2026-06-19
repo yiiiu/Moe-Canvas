@@ -1953,6 +1953,124 @@
                 </div>
               </div>
               <div
+                class="settings-section settings-card settings-custom-storage-card"
+                id="customStorageSettingsCard"
+              >
+                <div class="settings-custom-storage-head">
+                  <div>
+                    <div class="settings-label">自定义存储桶</div>
+                    <div class="settings-desc">
+                      S3-compatible 存储，适用于 R2 / MinIO / COS。启用后生成输出会优先写入配置的 bucket。
+                    </div>
+                  </div>
+                  <label class="settings-switch-inline">
+                    <input type="checkbox" id="customStorageEnabled" />
+                    <span>启用</span>
+                  </label>
+                </div>
+                <div class="settings-custom-storage-grid">
+                  <label class="settings-field">
+                    <span>名称</span>
+                    <input
+                      type="text"
+                      id="customStorageLabel"
+                      class="settings-input"
+                      placeholder="我的 R2"
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>Endpoint</span>
+                    <input
+                      type="text"
+                      id="customStorageEndpoint"
+                      class="settings-input"
+                      placeholder="https://xxxx.r2.cloudflarestorage.com"
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>Region</span>
+                    <input
+                      type="text"
+                      id="customStorageRegion"
+                      class="settings-input"
+                      placeholder="auto"
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>Bucket</span>
+                    <input
+                      type="text"
+                      id="customStorageBucket"
+                      class="settings-input"
+                      placeholder="ai-canvas-assets"
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>Access Key ID</span>
+                    <input
+                      type="password"
+                      id="customStorageAccessKeyId"
+                      class="settings-input"
+                      autocomplete="off"
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>Secret Access Key</span>
+                    <input
+                      type="password"
+                      id="customStorageSecretAccessKey"
+                      class="settings-input"
+                      autocomplete="off"
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>Public Base URL</span>
+                    <input
+                      type="text"
+                      id="customStoragePublicBaseUrl"
+                      class="settings-input"
+                      placeholder="https://cdn.example.com"
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>Prefix</span>
+                    <input
+                      type="text"
+                      id="customStoragePrefix"
+                      class="settings-input"
+                      placeholder="ai-canvas/"
+                    />
+                  </label>
+                </div>
+                <div class="settings-custom-storage-actions">
+                  <label class="settings-switch-inline settings-custom-storage-path-style">
+                    <input type="checkbox" id="customStorageForcePathStyle" />
+                    <span>使用 Path Style（MinIO 常用）</span>
+                  </label>
+                  <div class="settings-local-cleanup-actions">
+                    <button
+                      type="button"
+                      class="settings-save-btn settings-btn-ghost"
+                      id="btnCustomStorageTest"
+                    >
+                      测试连接
+                    </button>
+                    <button
+                      type="button"
+                      class="settings-save-btn"
+                      id="btnCustomStorageSave"
+                    >
+                      保存存储桶
+                    </button>
+                  </div>
+                </div>
+                <div
+                  class="settings-desc settings-custom-storage-status"
+                  id="customStorageStatus"
+                  aria-live="polite"
+                ></div>
+              </div>
+              <div
                 class="settings-section settings-card settings-file-migration-card"
                 id="fileSaveMigrationCard"
                 hidden

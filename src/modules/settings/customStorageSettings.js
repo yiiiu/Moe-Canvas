@@ -21,6 +21,10 @@ const FIELD_IDS = Object.freeze({
   saveButton: 'btnCustomStorageSave',
   testButton: 'btnCustomStorageTest',
   status: 'customStorageStatus',
+  secretToggles: [
+    ['customStorageAccessKeyId', 'customStorageAccessKeyIdToggle'],
+    ['customStorageSecretAccessKey', 'customStorageSecretAccessKeyToggle'],
+  ],
 });
 
 function text(value) {
@@ -93,6 +97,28 @@ export function sanitizeStorageErrorMessage(error, bucket = {}) {
 
 function getElement(id) {
   return document.getElementById(id);
+}
+
+export function bindSecretVisibilityToggles() {
+  FIELD_IDS.secretToggles.forEach(([inputId, toggleId]) => {
+    const input = getElement(inputId);
+    const toggle = getElement(toggleId);
+    if (!input || !toggle || toggle.__customStorageSecretToggleBound) {
+      return;
+    }
+    const syncToggle = () => {
+      const visible = input.type === 'text';
+      toggle.textContent = visible ? '隐藏' : '显示';
+      toggle.title = visible ? '隐藏密钥' : '显示密钥';
+      toggle.setAttribute?.('aria-pressed', visible ? 'true' : 'false');
+    };
+    toggle.__customStorageSecretToggleBound = true;
+    toggle.addEventListener('click', () => {
+      input.type = input.type === 'password' ? 'text' : 'password';
+      syncToggle();
+    });
+    syncToggle();
+  });
 }
 
 function setValue(id, value) {
@@ -211,6 +237,19 @@ async function saveCustomStorage() {
   }
 }
 
+export async function __testCustomStorageConnection(bucket) {
+  const response = await fetch('/api/v2/storage/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bucket || {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.success === false) {
+    throw new Error(payload?.error || payload?.message || '连接测试失败');
+  }
+  return payload;
+}
+
 async function testCustomStorage() {
   const testButton = getElement(FIELD_IDS.testButton);
   const customStorage = readCustomStorageFromForm();
@@ -222,13 +261,8 @@ async function testCustomStorage() {
   }
   setBusy(testButton, true, '测试中...', '测试连接');
   try {
-    const existingSettings = await fetchUserSettingsFromServer().catch(() => ({}));
-    await saveUserSettingsToServer(buildCustomStorageSettings(existingSettings, customStorage));
-    const response = await fetch('/api/v2/storage/test', { method: 'POST' });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.error || payload?.message || '连接测试失败');
-    }
+    const bucket = getPrimaryBucket(customStorage);
+    await __testCustomStorageConnection(bucket);
     setStatus('存储桶连接测试通过', 'success');
     showSuccess('存储桶连接测试通过');
   } catch (error) {
@@ -241,6 +275,8 @@ async function testCustomStorage() {
   }
 }
 
+export const __testCustomStorage = testCustomStorage;
+
 export function initCustomStorageSettings() {
   const saveButton = getElement(FIELD_IDS.saveButton);
   if (!saveButton || saveButton.__customStorageBound) {
@@ -251,6 +287,7 @@ export function initCustomStorageSettings() {
   if (testButton) {
     testButton.__customStorageBound = true;
   }
+  bindSecretVisibilityToggles();
   fetchUserSettingsFromServer()
     .then(settings => applyCustomStorageToForm(settings?.customStorage || {}))
     .catch(error => {

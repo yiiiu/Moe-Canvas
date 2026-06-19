@@ -5,6 +5,8 @@ import unittest
 
 from backend.services.media_file_route_service import MediaFileRouteService
 import backend.services.media_file_route_service as media_file_route_service
+from backend.services.storage_bucket_service import StorageBucketService
+import backend.services.storage_bucket_service as storage_bucket_service
 
 
 class FakeHandler:
@@ -114,6 +116,7 @@ class MediaFileRouteServiceDerivativeTest(unittest.TestCase):
 
             self.assertEqual(result["kind"], "json_err")
             self.assertEqual(result["code"], 502)
+            self.assertIn("自定义存储桶上传失败", result["message"])
             self.assertIn("***", result["message"])
             self.assertNotIn("minio-secret", result["message"])
 
@@ -174,6 +177,154 @@ class MediaFileRouteServiceDerivativeTest(unittest.TestCase):
             self.assertEqual(payload["url"], "https://cdn.example.com/ai-canvas/out.png")
             self.assertEqual(payload["storage"], "s3-compatible")
             self.assertEqual(bucket.uploads[0]["bytes"], b"remote-bytes")
+
+    def test_storage_connection_uses_request_bucket_and_runs_full_probe_checks(self):
+        class FakeResponse:
+            def __init__(self, status=200, body=b"ai-canvas-storage-probe"):
+                self.status = status
+                self._body = body
+                self.headers = {"Content-Type": "text/plain"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self, _size=-1):
+                return self._body
+
+        requests = []
+        service = StorageBucketService(settings_getter=lambda: {})
+        original_urlopen = storage_bucket_service.urllib.request.urlopen
+        try:
+            def fake_urlopen(request, timeout=0):
+                requests.append({
+                    "method": request.get_method(),
+                    "url": request.full_url,
+                    "data": request.data,
+                    "timeout": timeout,
+                    "authorization": request.headers.get("Authorization"),
+                })
+                if request.get_method() == "PUT":
+                    return FakeResponse(200)
+                if request.get_method() == "HEAD":
+                    return FakeResponse(200)
+                if request.get_method() == "DELETE":
+                    return FakeResponse(204, b"")
+                return FakeResponse(200)
+
+            storage_bucket_service.urllib.request.urlopen = fake_urlopen
+            result = service.test_connection({
+                "endpoint": "http://127.0.0.1:9000",
+                "region": "us-east-1",
+                "bucket": "canvas-assets",
+                "accessKeyId": "minio-user",
+                "secretAccessKey": "minio-secret",
+                "forcePathStyle": True,
+                "publicBaseUrl": "http://public.example.com/assets",
+                "prefix": "ai-canvas/",
+                "enabled": True,
+            })
+        finally:
+            storage_bucket_service.urllib.request.urlopen = original_urlopen
+
+        self.assertEqual(result["success"], True)
+        self.assertEqual(result["checks"], {
+            "config": True,
+            "write": True,
+            "read": True,
+            "publicAccess": True,
+            "delete": True,
+        })
+        self.assertEqual(result["message"], "连接测试成功")
+        self.assertRegex(result["key"], r"^ai-canvas/__probe__/connection-test-[a-f0-9-]+\.txt$")
+        self.assertEqual([item["method"] for item in requests], ["PUT", "HEAD", "GET", "DELETE"])
+        self.assertEqual(requests[0]["data"], b"ai-canvas-storage-probe")
+        self.assertIn("/canvas-assets/ai-canvas/__probe__/connection-test-", requests[0]["url"])
+        self.assertIn("http://public.example.com/assets/ai-canvas/__probe__/connection-test-", requests[2]["url"])
+        self.assertIsNotNone(requests[0]["authorization"])
+        self.assertEqual(requests[0]["timeout"], 30)
+
+    def test_storage_connection_probe_failure_masks_secret_values_and_still_deletes_probe(self):
+        class FakeResponse:
+            status = 204
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        requests = []
+        service = StorageBucketService(settings_getter=lambda: {})
+        original_urlopen = storage_bucket_service.urllib.request.urlopen
+        try:
+            def fake_urlopen(request, timeout=0):
+                requests.append(request.get_method())
+                if request.get_method() == "PUT":
+                    raise RuntimeError("bad credential minio-user minio-secret Authorization AWS4-HMAC-SHA256 Signature=abc")
+                return FakeResponse()
+
+            storage_bucket_service.urllib.request.urlopen = fake_urlopen
+            with self.assertRaises(RuntimeError) as context:
+                service.test_connection({
+                    "endpoint": "http://127.0.0.1:9000",
+                    "region": "us-east-1",
+                    "bucket": "canvas-assets",
+                    "accessKeyId": "minio-user",
+                    "secretAccessKey": "minio-secret",
+                    "forcePathStyle": True,
+                    "prefix": "ai-canvas/",
+                    "enabled": True,
+                })
+        finally:
+            storage_bucket_service.urllib.request.urlopen = original_urlopen
+
+        message = str(context.exception)
+        self.assertIn("认证失败", message)
+        self.assertIn("DELETE", requests)
+        self.assertNotIn("minio-user", message)
+        self.assertNotIn("minio-secret", message)
+        self.assertNotIn("Authorization", message)
+        self.assertNotIn("Signature", message)
+
+    def test_storage_test_route_uses_request_body_bucket_config(self):
+        class FakeStorageBucketService:
+            def __init__(self):
+                self.received = None
+
+            def test_connection(self, bucket_config=None):
+                self.received = bucket_config
+                return {
+                    "success": True,
+                    "checks": {"config": True, "write": True, "read": True, "publicAccess": True, "delete": True},
+                    "message": "连接测试成功",
+                }
+
+            def sanitize_error(self, error):
+                return str(error)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bucket = FakeStorageBucketService()
+            service = self.make_service(tmpdir, storage_bucket_service=bucket)
+            body = json.dumps({
+                "endpoint": "http://127.0.0.1:9000",
+                "bucket": "canvas-assets",
+                "region": "us-east-1",
+                "accessKeyId": "minio-user",
+                "secretAccessKey": "minio-secret",
+                "forcePathStyle": True,
+                "publicBaseUrl": "http://public.example.com/assets",
+                "prefix": "ai-canvas/",
+            }).encode("utf-8")
+
+            result = service._handle_storage_test(FakeHandler(body, path="/api/v2/storage/test"))
+
+            self.assertEqual(result["kind"], "json_ok")
+            self.assertEqual(bucket.received["endpoint"], "http://127.0.0.1:9000")
+            self.assertEqual(bucket.received["secretAccessKey"], "minio-secret")
+            self.assertEqual(result["data"]["checks"]["write"], True)
 
 
 if __name__ == "__main__":

@@ -1089,6 +1089,33 @@ body.dev-mode .settings-card.dev-mode-only {
   color: var(--text-secondary);
   font-size: var(--font-12);
 }
+.settings-secret-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.settings-secret-input-wrap .settings-input {
+  width: 100%;
+  padding-right: 58px;
+}
+.settings-secret-toggle {
+  position: absolute;
+  right: 8px;
+  height: 28px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--white-12);
+  border-radius: var(--radius-6);
+  background: var(--white-06);
+  color: var(--text-secondary);
+  font-size: var(--font-12);
+  line-height: 1;
+  cursor: pointer;
+}
+.settings-secret-toggle:hover {
+  background: var(--white-10);
+  color: var(--text-primary);
+}
 .settings-switch-inline {
   display: inline-flex;
   align-items: center;

@@ -5,6 +5,8 @@ import {
   buildCustomStorageSettings,
   normalizeCustomStorageSettings,
   sanitizeStorageErrorMessage,
+  bindSecretVisibilityToggles,
+  __testCustomStorage,
 } from './customStorageSettings.js';
 
 test('custom storage settings default to disabled s3-compatible bucket shape', () => {
@@ -94,6 +96,104 @@ test('custom storage settings merge into existing user settings without dropping
   assert.equal(merged.customStorage.enabled, true);
   assert.equal(merged.customStorage.buckets[0].providerType, 's3-compatible');
   assert.equal(merged.customStorage.buckets[0].prefix, 'media/');
+});
+
+test('custom storage secret visibility toggles password inputs', () => {
+  const elements = new Map();
+  const makeInput = () => ({ type: 'password' });
+  const makeButton = () => ({
+    textContent: '',
+    title: '',
+    dataset: {},
+    listeners: {},
+    addEventListener(event, handler) {
+      this.listeners[event] = handler;
+    },
+    click() {
+      this.listeners.click?.();
+    },
+  });
+  elements.set('customStorageAccessKeyId', makeInput());
+  elements.set('customStorageSecretAccessKey', makeInput());
+  elements.set('customStorageAccessKeyIdToggle', makeButton());
+  elements.set('customStorageSecretAccessKeyToggle', makeButton());
+  const previousDocument = globalThis.document;
+  globalThis.document = {
+    getElementById(id) {
+      return elements.get(id) || null;
+    },
+  };
+  try {
+    bindSecretVisibilityToggles();
+    const accessKeyInput = elements.get('customStorageAccessKeyId');
+    const accessKeyToggle = elements.get('customStorageAccessKeyIdToggle');
+    const secretInput = elements.get('customStorageSecretAccessKey');
+    const secretToggle = elements.get('customStorageSecretAccessKeyToggle');
+
+    accessKeyToggle.click();
+    assert.equal(accessKeyInput.type, 'text');
+    assert.equal(accessKeyToggle.textContent, '隐藏');
+
+    accessKeyToggle.click();
+    assert.equal(accessKeyInput.type, 'password');
+    assert.equal(accessKeyToggle.textContent, '显示');
+
+    secretToggle.click();
+    assert.equal(secretInput.type, 'text');
+    assert.equal(secretToggle.textContent, '隐藏');
+  } finally {
+    globalThis.document = previousDocument;
+  }
+});
+
+test('custom storage connection test posts current form bucket config', async () => {
+  const elements = new Map();
+  const makeInput = (value = '', checked = false) => ({ value, checked, disabled: false, textContent: '' });
+  elements.set('customStorageEnabled', makeInput('', true));
+  elements.set('customStorageLabel', makeInput('MinIO'));
+  elements.set('customStorageEndpoint', makeInput(' http://127.0.0.1:9000/ '));
+  elements.set('customStorageRegion', makeInput('us-east-1'));
+  elements.set('customStorageBucket', makeInput(' canvas-assets '));
+  elements.set('customStorageAccessKeyId', makeInput('minio-user'));
+  elements.set('customStorageSecretAccessKey', makeInput('minio-secret'));
+  elements.set('customStorageForcePathStyle', makeInput('', true));
+  elements.set('customStoragePublicBaseUrl', makeInput(' http://public.example.com/assets/ '));
+  elements.set('customStoragePrefix', makeInput(' /ai-canvas// '));
+  elements.set('btnCustomStorageTest', makeInput());
+  elements.set('customStorageStatus', { textContent: '', dataset: {} });
+  const previousDocument = globalThis.document;
+  const previousFetch = globalThis.fetch;
+  let storageTestRequest = null;
+  globalThis.document = {
+    getElementById(id) {
+      return elements.get(id) || null;
+    },
+  };
+  globalThis.fetch = async (url, options) => {
+    storageTestRequest = { url, options };
+    return {
+      ok: true,
+      json: async () => ({ success: true, checks: { config: true, write: true, read: true, publicAccess: true, delete: true } }),
+    };
+  };
+  try {
+    await __testCustomStorage();
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.fetch = previousFetch;
+  }
+
+  assert.equal(storageTestRequest.url, '/api/v2/storage/test');
+  assert.equal(storageTestRequest.options.method, 'POST');
+  assert.equal(storageTestRequest.options.headers['Content-Type'], 'application/json');
+  const body = JSON.parse(storageTestRequest.options.body);
+  assert.equal(body.endpoint, 'http://127.0.0.1:9000');
+  assert.equal(body.bucket, 'canvas-assets');
+  assert.equal(body.accessKeyId, 'minio-user');
+  assert.equal(body.secretAccessKey, 'minio-secret');
+  assert.equal(body.forcePathStyle, true);
+  assert.equal(body.publicBaseUrl, 'http://public.example.com/assets');
+  assert.equal(body.prefix, 'ai-canvas/');
 });
 
 test('custom storage error sanitizer masks secret values', () => {

@@ -189,6 +189,9 @@ class MediaFileRouteService:
         except Exception:
             return False
 
+    def _storage_bucket_upload_error(self, error):
+        return f"自定义存储桶上传失败：{str(error)}"
+
     def _upload_to_storage_bucket(self, file_bytes, *, filename, content_type="", local_path=""):
         service = getattr(self, "storage_bucket_service", None)
         if not service:
@@ -577,7 +580,7 @@ class MediaFileRouteService:
                         local_path=local_path,
                     )
                 except Exception as exc:
-                    return self._json_err(502, f"Storage bucket upload failed: {str(exc)}")
+                    return self._json_err(502, self._storage_bucket_upload_error(exc))
                 payload = self._apply_storage_bucket_result(payload, storage_result)
             return self._json_ok(
                 self.augment_saved_media_response(
@@ -675,7 +678,7 @@ class MediaFileRouteService:
                         local_path=rel_path,
                     )
                 except Exception as exc:
-                    return self._json_err(502, f"Storage bucket upload failed: {str(exc)}")
+                    return self._json_err(502, self._storage_bucket_upload_error(exc))
                 return self._json_ok(
                     self._apply_storage_bucket_result(
                         {
@@ -925,7 +928,7 @@ class MediaFileRouteService:
                         local_path=rel_path,
                     )
                 except Exception as exc:
-                    return self._json_err(502, f"Storage bucket upload failed: {str(exc)}")
+                    return self._json_err(502, self._storage_bucket_upload_error(exc))
                 payload = self._apply_storage_bucket_result(payload, storage_result)
             return self._json_ok(
                 self.augment_saved_media_response(
@@ -1475,7 +1478,11 @@ class MediaFileRouteService:
         if not service:
             return self._json_err(400, "自定义存储桶未配置")
         try:
-            result = service.test_connection()
+            body = self._read_body(handler)
+            bucket_config, error = self._parse_json_object(body)
+            if error is not None:
+                return error
+            result = service.test_connection(bucket_config)
             return self._json_ok(result if isinstance(result, dict) else {"success": True})
         except Exception as exc:
             if hasattr(service, "sanitize_error"):

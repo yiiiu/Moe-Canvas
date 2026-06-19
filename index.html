@@ -2007,21 +2007,43 @@
                   </label>
                   <label class="settings-field">
                     <span>Access Key ID</span>
-                    <input
-                      type="password"
-                      id="customStorageAccessKeyId"
-                      class="settings-input"
-                      autocomplete="off"
-                    />
+                    <div class="settings-secret-input-wrap">
+                      <input
+                        type="password"
+                        id="customStorageAccessKeyId"
+                        class="settings-input"
+                        autocomplete="off"
+                      />
+                      <button
+                        type="button"
+                        class="settings-secret-toggle"
+                        id="customStorageAccessKeyIdToggle"
+                        aria-controls="customStorageAccessKeyId"
+                        aria-pressed="false"
+                      >
+                        显示
+                      </button>
+                    </div>
                   </label>
                   <label class="settings-field">
                     <span>Secret Access Key</span>
-                    <input
-                      type="password"
-                      id="customStorageSecretAccessKey"
-                      class="settings-input"
-                      autocomplete="off"
-                    />
+                    <div class="settings-secret-input-wrap">
+                      <input
+                        type="password"
+                        id="customStorageSecretAccessKey"
+                        class="settings-input"
+                        autocomplete="off"
+                      />
+                      <button
+                        type="button"
+                        class="settings-secret-toggle"
+                        id="customStorageSecretAccessKeyToggle"
+                        aria-controls="customStorageSecretAccessKey"
+                        aria-pressed="false"
+                      >
+                        显示
+                      </button>
+                    </div>
                   </label>
                   <label class="settings-field">
                     <span>Public Base URL</span>

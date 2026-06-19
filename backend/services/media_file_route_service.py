@@ -556,7 +556,20 @@ class MediaFileRouteService:
             rel_original_path,
         )
         if not derivative_payload:
-            return self._json_err(400, "Derivative generation failed")
+            original_local = self._join_virtual_local_path(root_prefix, rel_original_path)
+            response_payload = {
+                "success": True,
+                "localPath": original_local,
+                "originalLocalPath": original_local,
+                "displayLocalPath": "",
+                "thumbLocalPath": "",
+                "derivativeStatus": "failed",
+            }
+            response_payload["url"] = "/" + str(response_payload["localPath"]).lstrip("/")
+            response_payload["originalUrl"] = "/" + str(response_payload["originalLocalPath"]).lstrip("/")
+            response_payload["displayUrl"] = ""
+            response_payload["thumbUrl"] = ""
+            return self._json_ok(response_payload)
 
         response_payload = {
             "success": True,

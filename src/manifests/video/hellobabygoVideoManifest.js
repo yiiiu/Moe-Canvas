@@ -34,7 +34,8 @@ function createHellobabyGoAspectRatioField() {
   });
 }
 
-function createHellobabyGoResolutionField() {
+function createHellobabyGoResolutionField({ options = ['720p', '1080p', '4K'] } = {}) {
+  const labels = { '480p': '480p', '720p': '720p', '1080p': '1080p', '4K': '4K' };
   return Object.freeze({
     id: 'resolution',
     displayRole: 'resolution',
@@ -43,12 +44,12 @@ function createHellobabyGoResolutionField() {
     variant: 'pillMenu',
     label: '视频分辨率',
     defaultValue: '720p',
-    options: Object.freeze([
-      Object.freeze({ value: '720p', label: '720p' }),
-      Object.freeze({ value: '1080p', label: '1080p' }),
-      Object.freeze({ value: '4K', label: '4K' }),
-    ]),
+    options: Object.freeze(options.map(value => Object.freeze({ value, label: labels[value] || value }))),
   });
+}
+
+function createHellobabyGoGrokResolutionField() {
+  return createHellobabyGoResolutionField({ options: ['480p', '720p'] });
 }
 
 function createHellobabyGoSecondsField({ defaultValue = '8', options = ['8', '10'] } = {}) {
@@ -140,6 +141,26 @@ function createHellobabyGoOmniReferenceImageSlots() {
   return createHellobabyGoReferenceImageSlots(7, { firstRequired: true });
 }
 
+function createHellobabyGoGrokMultiReferenceInputSlots() {
+  return Object.freeze({
+    allowedKinds: Object.freeze(['text', 'image']),
+    fixedSlots: createHellobabyGoReferenceImageSlots(7, { firstRequired: true }),
+    minByKind: Object.freeze({ image: 1 }),
+    maxByKind: Object.freeze({ image: 7 }),
+  });
+}
+
+function createHellobabyGoGrokPreviewInputSlots() {
+  return Object.freeze({
+    allowedKinds: Object.freeze(['text', 'image']),
+    fixedSlots: Object.freeze([
+      Object.freeze({ id: 'referenceImage1', kind: 'image', label: '参考图', required: true }),
+    ]),
+    minByKind: Object.freeze({ image: 1 }),
+    maxByKind: Object.freeze({ image: 1 }),
+  });
+}
+
 function createHellobabyGoVeoInputSlots() {
   return Object.freeze({
     allowedKinds: Object.freeze(['text', 'image']),
@@ -217,6 +238,18 @@ function createHellobabyGoVideoExecutionManifest() {
             Object.freeze({ field: 'model', notEquals: 'hellobabygo/omni_flash' }),
             Object.freeze({ field: 'generationParams.generation_type', notEquals: 'frame' }),
           ]),
+        }),
+        Object.freeze({
+          path: '__requestEncoding',
+          from: 'constant',
+          value: 'multipart',
+          when: Object.freeze({ field: 'model', in: Object.freeze(['hellobabygo/grok-imagine-video', 'hellobabygo/grok-imagine-video-1.5-preview']) }),
+        }),
+        Object.freeze({
+          path: '__arrayFieldName',
+          from: 'constant',
+          value: 'input_reference[]',
+          when: Object.freeze({ field: 'model', in: Object.freeze(['hellobabygo/grok-imagine-video', 'hellobabygo/grok-imagine-video-1.5-preview']) }),
         }),
         Object.freeze({
           path: 'reference_images',
@@ -310,10 +343,31 @@ const HELLOBABYGO_GROK_SECONDS_FIELD = createHellobabyGoSecondsField({
 
 export const hellobabyGoVideoModelManifests = Object.freeze([
   createHellobabyGoVideoModelManifest({
+    modelId: 'hellobabygo/grok-imagine-video',
+    displayName: '斑点蛙 Grok Imagine Video',
+    aliases: Object.freeze(['grok-imagine-video']),
+    secondsField: createHellobabyGoSecondsField({
+      defaultValue: '10',
+      options: ['10'],
+    }),
+    inputSlots: createHellobabyGoGrokMultiReferenceInputSlots(),
+    uiFields: [
+      createHellobabyGoAspectRatioField(),
+      createHellobabyGoGrokResolutionField(),
+      createHellobabyGoSecondsField({ defaultValue: '10', options: ['10'] }),
+    ],
+  }),
+  createHellobabyGoVideoModelManifest({
     modelId: 'hellobabygo/grok-imagine-video-1.5-preview',
     displayName: '斑点蛙 Grok Imagine Video 1.5 Preview',
     aliases: Object.freeze(['grok-imagine-video-1.5-preview']),
     secondsField: HELLOBABYGO_GROK_SECONDS_FIELD,
+    inputSlots: createHellobabyGoGrokPreviewInputSlots(),
+    uiFields: [
+      createHellobabyGoAspectRatioField(),
+      createHellobabyGoGrokResolutionField(),
+      HELLOBABYGO_GROK_SECONDS_FIELD,
+    ],
   }),
   createHellobabyGoVideoModelManifest({
     modelId: 'hellobabygo/omni_flash',

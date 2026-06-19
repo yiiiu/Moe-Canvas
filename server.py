@@ -1677,6 +1677,39 @@ def _build_image_proxy_upstream_payload(payload):
     return data, local_recovery_payload
 
 
+def _pop_proxy_multipart_options(data):
+    if not isinstance(data, dict):
+        return {"enabled": False, "arrayFieldName": ""}
+    encoding = str(data.pop("__requestEncoding", "") or "").strip().lower()
+    array_field_name = str(data.pop("__arrayFieldName", "") or "").strip()
+    return {
+        "enabled": encoding == "multipart",
+        "arrayFieldName": array_field_name,
+    }
+
+
+def _build_multipart_form_payload(data, array_field_name=""):
+    fields = []
+    normalized_array_field_name = str(array_field_name or "").strip()
+    for key, value in (data or {}).items():
+        field_name = str(key)
+        if isinstance(value, list):
+            item_field_name = normalized_array_field_name if normalized_array_field_name and field_name == normalized_array_field_name.rstrip("[]") else field_name
+            for item in value:
+                fields.append((item_field_name, "" if item is None else str(item)))
+            continue
+        fields.append((field_name, "" if value is None else str(value)))
+    boundary = "----AICanvasProFormBoundary%s" % int(time.time() * 1000)
+    chunks = []
+    for name, value in fields:
+        chunks.append(("--%s\r\n" % boundary).encode("utf-8"))
+        chunks.append(('Content-Disposition: form-data; name="%s"\r\n\r\n' % str(name).replace('"', '')).encode("utf-8"))
+        chunks.append(str(value).encode("utf-8"))
+        chunks.append(b"\r\n")
+    chunks.append(("--%s--\r\n" % boundary).encode("utf-8"))
+    return b"".join(chunks), "multipart/form-data; boundary=%s" % boundary
+
+
 def _build_completions_proxy_upstream_payload(payload):
     data = dict(payload) if isinstance(payload, dict) else {}
     data.pop("apiUrl", None)
@@ -3287,6 +3320,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 _json_err(self, 400, "Missing apiUrl or apiKey"); return
             local_authorization_payload = dict(data) if isinstance(data, dict) else {}
             data, local_recovery_payload = _build_image_proxy_upstream_payload(data)
+            multipart_options = _pop_proxy_multipart_options(data)
             if local_recovery_payload.get("runtimeTaskId") or local_recovery_payload.get("clientTaskId"):
                 _local_proxy_debug(
                     "image.register",
@@ -3551,6 +3585,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 # 减少代理复用连接被远端提前关闭导致的偶发断链
                 "Connection": "close",
             }
+            multipart_body = None
+            multipart_content_type = ""
+            if multipart_options.get("enabled"):
+                multipart_body, multipart_content_type = _build_multipart_form_payload(
+                    data,
+                    multipart_options.get("arrayFieldName", ""),
+                )
+                headers["Content-Type"] = multipart_content_type
             try:
                 import requests as _req
                 retry_delays = (0.0, 0.3, 0.9)
@@ -3624,13 +3666,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             self.end_headers()
                             self.wfile.write(content)
                             return
-                        resp = _req.post(
-                            api_url,
-                            json=data,
-                            headers=headers,
-                            timeout=request_timeout,
-                            stream=True,
-                        )
+                        if multipart_body is not None:
+                            resp = _req.post(
+                                api_url,
+                                data=multipart_body,
+                                headers=headers,
+                                timeout=request_timeout,
+                                stream=True,
+                            )
+                        else:
+                            resp = _req.post(
+                                api_url,
+                                json=data,
+                                headers=headers,
+                                timeout=request_timeout,
+                                stream=True,
+                            )
                         header_task_id = ""
                         for key in (
                             "x-task-id",
@@ -3716,7 +3767,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             continue
                         raise
             except ImportError:
-                req_body = json.dumps(data).encode("utf-8")
+                req_body = multipart_body if multipart_body is not None else json.dumps(data).encode("utf-8")
                 req = urllib.request.Request(api_url, data=req_body, headers=headers, method="POST")
                 retry_delays = (0.0, 0.3, 0.9)
                 proxy_error_markers = (

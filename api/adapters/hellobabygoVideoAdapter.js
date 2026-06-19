@@ -54,8 +54,21 @@ function hasImageInput(context = {}) {
 }
 
 export function resolveHellobabyGoVideoInputReference(value, { context } = {}) {
-  if (isOmniModelToken(getCurrentModelToken(context))) {
+  const modelToken = getCurrentModelToken(context);
+  if (isOmniModelToken(modelToken)) {
     return undefined;
+  }
+  if (isGrokMultiReferenceModelToken(modelToken)) {
+    return (Array.isArray(value) ? value : [value])
+      .map(item => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 7);
+  }
+  if (isGrokPreviewModelToken(modelToken)) {
+    return (Array.isArray(value) ? value : [value])
+      .map(item => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 1);
   }
   if (getGenerationType(context) !== 'reference') {
     return value;
@@ -88,6 +101,18 @@ function isVeoModelToken(token) {
 
 function isOmniModelToken(token) {
   return String(token || '').trim().toLowerCase() === 'omni_flash';
+}
+
+function isGrokMultiReferenceModelToken(token) {
+  return String(token || '').trim().toLowerCase() === 'grok-imagine-video';
+}
+
+function isGrokPreviewModelToken(token) {
+  return String(token || '').trim().toLowerCase() === 'grok-imagine-video-1.5-preview';
+}
+
+function isGrokModelToken(token) {
+  return isGrokMultiReferenceModelToken(token) || isGrokPreviewModelToken(token);
 }
 
 function getCurrentModelToken(context = {}) {
@@ -134,6 +159,13 @@ export function resolveHellobabyGoVideoSeconds(value, { context } = {}) {
   if (isVeoModelToken(modelToken)) {
     return undefined;
   }
+  if (isGrokMultiReferenceModelToken(modelToken)) {
+    return '10';
+  }
+  if (isGrokPreviewModelToken(modelToken)) {
+    const seconds = String(isPresentValue(value) ? value : '10').trim();
+    return seconds === '15' ? '15' : '10';
+  }
   return String(isPresentValue(value) ? value : '10').trim();
 }
 
@@ -152,6 +184,22 @@ export function resolveHellobabyGoVideoSize(value, { context } = {}) {
   }
 
   const normalizedRatio = rawSize.replace(/\s+/g, '');
+  const modelToken = getCurrentModelToken(context);
+  if (isGrokModelToken(modelToken)) {
+    if (normalizedRatio === '16:9') {
+      return '1280x720';
+    }
+    if (normalizedRatio === '9:16') {
+      return '720x1280';
+    }
+    if (normalizedRatio === '3:2' || normalizedRatio === '4:3') {
+      return '1792x1024';
+    }
+    if (normalizedRatio === '2:3' || normalizedRatio === '3:4') {
+      return '1024x1792';
+    }
+    return '1024x1024';
+  }
   const generationParams = getGenerationParams(context);
   const payload = context?.payload && typeof context.payload === 'object' ? context.payload : {};
   const resolution = normalizeResolution(generationParams.resolution ?? payload.resolution);

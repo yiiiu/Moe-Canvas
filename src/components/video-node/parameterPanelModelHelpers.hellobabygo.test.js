@@ -71,7 +71,7 @@ test('video node custom provider trigger uses runtime provider badge instead of 
 });
 
 test('video node renders HelloBabyGo quality ratio popup in the footer parameter area', () => {
-  const modelId = 'hellobabygo/grok-imagine-video-1.5-preview';
+  const modelId = 'hellobabygo/veo_3_1-fast-landscape';
 
   assert.equal(hasModelUiSchema(modelId, { placement: 'resolution' }), true);
 
@@ -263,4 +263,74 @@ test('video node HelloBabyGo Omni exposes reference-only UI without mode selecto
     kind: 'image',
     occupiedSlots: [...refs.map(ref => ref.refSlot), 'referenceImage7'],
   }).reason, 'overflow');
+});
+
+test('video node HelloBabyGo Grok image model exposes seven reference slots with 480p and 720p controls', () => {
+  const modelId = 'hellobabygo/grok-imagine-video';
+  const model = getModelsByKind('video').find(item => item.modelId === modelId);
+  const defaults = buildModelUiSchemaDefaultParams(modelId);
+  const modeHtml = renderModelUiSchemaControls(modelId, { generationParams: {} }, { placement: 'mode' });
+  const resolutionHtml = renderModelUiSchemaControls(modelId, { generationParams: {} }, { placement: 'resolution' });
+
+  assert.ok(model);
+  assert.equal(defaults.generation_type, undefined);
+  assert.equal(defaults.aspectRatio, 'auto');
+  assert.equal(defaults.resolution, '720p');
+  assert.equal(defaults.seconds, '10');
+  assert.equal(modeHtml, '');
+  assert.match(resolutionHtml, /data-ui-schema-value="480p"/);
+  assert.match(resolutionHtml, /data-ui-schema-value="720p"/);
+  assert.doesNotMatch(resolutionHtml, /data-ui-schema-value="1080p"/);
+  assert.doesNotMatch(resolutionHtml, /data-ui-schema-value="4K"/);
+  assert.doesNotMatch(resolutionHtml, />15秒<\/button>/);
+
+  assert.deepEqual(model.inputSlots.fixedSlots, [
+    { id: 'referenceImage1', kind: 'image', label: '参考图 1', required: true },
+    { id: 'referenceImage2', kind: 'image', label: '参考图 2' },
+    { id: 'referenceImage3', kind: 'image', label: '参考图 3' },
+    { id: 'referenceImage4', kind: 'image', label: '参考图 4' },
+    { id: 'referenceImage5', kind: 'image', label: '参考图 5' },
+    { id: 'referenceImage6', kind: 'image', label: '参考图 6' },
+    { id: 'referenceImage7', kind: 'image', label: '参考图 7' },
+  ]);
+  assert.equal(model.inputSlots.minByKind.image, 1);
+  assert.equal(model.inputSlots.maxByKind.image, 7);
+
+  const fixedInputConfig = getFixedInputSlotConfigFromManifest({}, { manifest: model });
+  assert.deepEqual(fixedInputConfig.visibleSlots, [
+    'referenceImage1',
+    'referenceImage2',
+    'referenceImage3',
+    'referenceImage4',
+    'referenceImage5',
+    'referenceImage6',
+    'referenceImage7',
+  ]);
+  assert.equal(resolveFixedInputSlotForRef({
+    fixedInputConfig,
+    kind: 'image',
+    occupiedSlots: ['referenceImage1', 'referenceImage2', 'referenceImage3', 'referenceImage4', 'referenceImage5', 'referenceImage6'],
+  }).slot, 'referenceImage7');
+});
+
+test('video node HelloBabyGo Grok preview model keeps one required reference slot and 10/15 second controls', () => {
+  const modelId = 'hellobabygo/grok-imagine-video-1.5-preview';
+  const model = getModelsByKind('video').find(item => item.modelId === modelId);
+  const defaults = buildModelUiSchemaDefaultParams(modelId);
+  const fixedInputConfig = getFixedInputSlotConfigFromManifest({}, { manifest: model });
+  const resolutionHtml = renderModelUiSchemaControls(modelId, { generationParams: {} }, { placement: 'resolution' });
+
+  assert.ok(model);
+  assert.equal(defaults.resolution, '720p');
+  assert.equal(defaults.seconds, '10');
+  assert.match(resolutionHtml, /data-ui-schema-value="480p"/);
+  assert.match(resolutionHtml, /data-ui-schema-value="720p"/);
+  assert.match(resolutionHtml, />10秒<\/button>/);
+  assert.match(resolutionHtml, />15秒<\/button>/);
+  assert.deepEqual(model.inputSlots.fixedSlots, [
+    { id: 'referenceImage1', kind: 'image', label: '参考图', required: true },
+  ]);
+  assert.equal(model.inputSlots.minByKind.image, 1);
+  assert.equal(model.inputSlots.maxByKind.image, 1);
+  assert.deepEqual(fixedInputConfig.visibleSlots, ['referenceImage1']);
 });

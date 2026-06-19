@@ -452,3 +452,81 @@ test('hellobabygo Omni Flash sends JSON reference images and no VEO mode fields'
     assert.equal(request.body.generation_type, undefined);
   });
 });
+
+test('hellobabygo Grok image model sends seven form-data reference images at 10 seconds', async () => {
+  await withConfigMock(async () => {
+    const request = await buildGenerateVideoRequest({
+      provider: 'hellobabygo',
+      model: 'hellobabygo/grok-imagine-video',
+      prompt: '按七张参考图生成一致角色视频',
+      inputUrls: [
+        'https://example.com/ref-1.jpg',
+        'https://example.com/ref-2.jpg',
+        'https://example.com/ref-3.jpg',
+        'https://example.com/ref-4.jpg',
+        'https://example.com/ref-5.jpg',
+        'https://example.com/ref-6.jpg',
+        'https://example.com/ref-7.jpg',
+      ],
+      videos: [],
+      audios: [],
+      generationParams: {
+        aspectRatio: '9:16',
+        resolution: '720p',
+        seconds: '15',
+      },
+      runtimeTaskId: 'runtime-hbg-grok-reference',
+      clientTaskId: 'client-hbg-grok-reference',
+      nodeId: 'node-hbg-grok-reference',
+      canvasId: 'canvas-hbg-grok-reference',
+    });
+
+    assert.equal(request.url, '/api/v2/proxy/video');
+    assert.equal(request.body.apiUrl, `${HELLOBABYGO_API_URL}/v1/videos`);
+    assert.equal(request.body.model, 'grok-imagine-video');
+    assert.equal(request.body.size, '720x1280');
+    assert.equal(request.body.seconds, '10');
+    assert.equal(request.body.duration, undefined);
+    assert.equal(request.body.reference_images, undefined);
+    assert.deepEqual(request.body.input_reference, [
+      'https://telegra.ph/ref-1.jpg',
+      'https://telegra.ph/ref-2.jpg',
+      'https://telegra.ph/ref-3.jpg',
+      'https://telegra.ph/ref-4.jpg',
+      'https://telegra.ph/ref-5.jpg',
+      'https://telegra.ph/ref-6.jpg',
+      'https://telegra.ph/ref-7.jpg',
+    ]);
+    assert.equal(request.body.__requestEncoding, 'multipart');
+    assert.equal(request.body.__arrayFieldName, 'input_reference[]');
+  });
+});
+
+test('hellobabygo Grok preview keeps only one reference image and allows 15 seconds', async () => {
+  await withConfigMock(async () => {
+    const request = await buildGenerateVideoRequest({
+      provider: 'hellobabygo',
+      model: 'hellobabygo/grok-imagine-video-1.5-preview',
+      prompt: '按一张参考图生成视频',
+      inputUrls: ['https://example.com/ref-1.jpg', 'https://example.com/ref-2.jpg'],
+      videos: [],
+      audios: [],
+      generationParams: {
+        aspectRatio: '16:9',
+        resolution: '480p',
+        seconds: '15',
+      },
+      runtimeTaskId: 'runtime-hbg-grok-preview-reference',
+      clientTaskId: 'client-hbg-grok-preview-reference',
+      nodeId: 'node-hbg-grok-preview-reference',
+      canvasId: 'canvas-hbg-grok-preview-reference',
+    });
+
+    assert.equal(request.body.model, 'grok-imagine-video-1.5-preview');
+    assert.equal(request.body.size, '1280x720');
+    assert.equal(request.body.seconds, '15');
+    assert.deepEqual(request.body.input_reference, ['https://telegra.ph/ref-1.jpg']);
+    assert.equal(request.body.__requestEncoding, 'multipart');
+    assert.equal(request.body.__arrayFieldName, 'input_reference[]');
+  });
+});

@@ -32,7 +32,7 @@ async function withConfigMock(run) {
         },
       });
     }
-    const exampleImageMatch = url.match(/^https:\/\/example\.com\/(first|last|ref-1|ref-2)\.jpg$/);
+    const exampleImageMatch = url.match(/^https:\/\/example\.com\/(first|last|ref-[1-7])\.jpg$/);
     if (exampleImageMatch) {
       uploadedImageNames.push(exampleImageMatch[1]);
       return new Response(new Blob(['fake image'], { type: 'image/jpeg' }), {
@@ -402,5 +402,53 @@ test('hellobabygo VEO reference mode keeps reference images out of first-last-fr
     assert.equal(request.body.seconds, undefined);
     assert.equal(request.body.input_reference, 'https://telegra.ph/ref-1.jpg');
     assert.equal(Array.isArray(request.body.input_reference), false);
+  });
+});
+
+test('hellobabygo Omni Flash sends JSON reference images and no VEO mode fields', async () => {
+  await withConfigMock(async () => {
+    const request = await buildGenerateVideoRequest({
+      provider: 'hellobabygo',
+      model: 'hellobabygo/omni_flash',
+      prompt: '参考多张图生成一致风格的视频',
+      inputUrls: [
+        'https://example.com/ref-1.jpg',
+        'https://example.com/ref-2.jpg',
+        'https://example.com/ref-3.jpg',
+        'https://example.com/ref-4.jpg',
+        'https://example.com/ref-5.jpg',
+        'https://example.com/ref-6.jpg',
+        'https://example.com/ref-7.jpg',
+      ],
+      videos: [],
+      audios: [],
+      generationParams: {
+        aspectRatio: '9:16',
+        resolution: '1080p',
+      },
+      runtimeTaskId: 'runtime-hbg-omni-reference',
+      clientTaskId: 'client-hbg-omni-reference',
+      nodeId: 'node-hbg-omni-reference',
+      canvasId: 'canvas-hbg-omni-reference',
+    });
+
+    assert.equal(request.url, '/api/v2/proxy/video');
+    assert.equal(request.body.apiUrl, `${HELLOBABYGO_API_URL}/v1/videos`);
+    assert.equal(request.body.model, 'omni_flash');
+    assert.equal(request.body.size, '1080x1920');
+    assert.equal(request.body.seconds, '10');
+    assert.equal(request.body.duration, undefined);
+    assert.equal(request.body.input_reference, undefined);
+    assert.deepEqual(request.body.reference_images, [
+      'https://telegra.ph/ref-1.jpg',
+      'https://telegra.ph/ref-2.jpg',
+      'https://telegra.ph/ref-3.jpg',
+      'https://telegra.ph/ref-4.jpg',
+      'https://telegra.ph/ref-5.jpg',
+      'https://telegra.ph/ref-6.jpg',
+      'https://telegra.ph/ref-7.jpg',
+    ]);
+    assert.equal(request.body.reference_mode, 'image');
+    assert.equal(request.body.generation_type, undefined);
   });
 });

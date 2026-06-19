@@ -116,16 +116,49 @@ function createHellobabyGoVideoInputSlots() {
   });
 }
 
+function createHellobabyGoReferenceImageSlots(count, { showWhenFactory = undefined, firstRequired = false } = {}) {
+  return Object.freeze(Array.from({ length: count }, (_, index) => {
+    const showWhen = typeof showWhenFactory === 'function' ? showWhenFactory() : undefined;
+    const slot = {
+      id: `referenceImage${index + 1}`,
+      kind: 'image',
+      label: `参考图 ${index + 1}`,
+      ...(firstRequired && index === 0 ? { required: true } : {}),
+      ...(showWhen ? { showWhen } : {}),
+    };
+    return Object.freeze(slot);
+  }));
+}
+
+function createHellobabyGoVeoReferenceImageSlots() {
+  return createHellobabyGoReferenceImageSlots(3, {
+    showWhenFactory: () => Object.freeze({ field: 'generation_type', value: 'reference' }),
+  });
+}
+
+function createHellobabyGoOmniReferenceImageSlots() {
+  return createHellobabyGoReferenceImageSlots(7, { firstRequired: true });
+}
+
 function createHellobabyGoVeoInputSlots() {
   return Object.freeze({
     allowedKinds: Object.freeze(['text', 'image']),
     fixedSlots: Object.freeze([
       Object.freeze({ id: 'firstFrame', kind: 'image', label: '首帧图', showWhen: Object.freeze({ field: 'generation_type', value: 'frame' }) }),
       Object.freeze({ id: 'lastFrame', kind: 'image', label: '尾帧图', showWhen: Object.freeze({ field: 'generation_type', value: 'frame' }) }),
-      Object.freeze({ id: 'referenceImages', kind: 'image', label: '参考图', showWhen: Object.freeze({ field: 'generation_type', value: 'reference' }) }),
+      ...createHellobabyGoVeoReferenceImageSlots(),
     ]),
     minByKind: Object.freeze({ image: 0 }),
     maxByKind: Object.freeze({ image: 3 }),
+  });
+}
+
+function createHellobabyGoOmniInputSlots() {
+  return Object.freeze({
+    allowedKinds: Object.freeze(['text', 'image']),
+    fixedSlots: createHellobabyGoOmniReferenceImageSlots(),
+    minByKind: Object.freeze({ image: 1 }),
+    maxByKind: Object.freeze({ image: 7 }),
   });
 }
 
@@ -180,7 +213,10 @@ function createHellobabyGoVideoExecutionManifest() {
           from: 'inputImages',
           transform: 'hellobabygoVideoInputReference',
           omitWhenEmpty: true,
-          when: Object.freeze({ field: 'generationParams.generation_type', notEquals: 'frame' }),
+          when: Object.freeze([
+            Object.freeze({ field: 'model', notEquals: 'hellobabygo/omni_flash' }),
+            Object.freeze({ field: 'generationParams.generation_type', notEquals: 'frame' }),
+          ]),
         }),
         Object.freeze({
           path: 'reference_images',
@@ -189,10 +225,22 @@ function createHellobabyGoVideoExecutionManifest() {
           when: Object.freeze({ field: 'generationParams.generation_type', equals: 'frame' }),
         }),
         Object.freeze({
+          path: 'reference_images',
+          from: 'inputImages',
+          omitWhenEmpty: true,
+          when: Object.freeze({ field: 'model', equals: 'hellobabygo/omni_flash' }),
+        }),
+        Object.freeze({
           path: 'reference_mode',
           from: 'constant',
           value: 'image',
           when: Object.freeze({ field: 'generationParams.generation_type', equals: 'frame' }),
+        }),
+        Object.freeze({
+          path: 'reference_mode',
+          from: 'constant',
+          value: 'image',
+          when: Object.freeze({ field: 'model', equals: 'hellobabygo/omni_flash' }),
         }),
       ]),
     }),
@@ -271,6 +319,11 @@ export const hellobabyGoVideoModelManifests = Object.freeze([
     modelId: 'hellobabygo/omni_flash',
     displayName: '斑点蛙 Omni Flash',
     aliases: Object.freeze(['omni_flash']),
+    secondsField: createHellobabyGoSecondsField({
+      defaultValue: '10',
+      options: ['10', '15'],
+    }),
+    inputSlots: createHellobabyGoOmniInputSlots(),
   }),
   createHellobabyGoVideoModelManifest({
     modelId: 'hellobabygo/veo_3_1-fast-landscape',

@@ -54,6 +54,9 @@ function hasImageInput(context = {}) {
 }
 
 export function resolveHellobabyGoVideoInputReference(value, { context } = {}) {
+  if (isOmniModelToken(getCurrentModelToken(context))) {
+    return undefined;
+  }
   if (getGenerationType(context) !== 'reference') {
     return value;
   }
@@ -81,6 +84,14 @@ function shouldUseVeoHdModel(context = {}) {
 
 function isVeoModelToken(token) {
   return /^veo_3_1-fast-(?:landscape|portrait)(?:-fl)?(?:-hd)?$/i.test(String(token || '').trim());
+}
+
+function isOmniModelToken(token) {
+  return String(token || '').trim().toLowerCase() === 'omni_flash';
+}
+
+function getCurrentModelToken(context = {}) {
+  return normalizeModelToken(context?.body?.model || context?.payload?.model || context?.modelToken || '');
 }
 
 function getGenerationType(context = {}) {
@@ -119,7 +130,7 @@ export function resolveHellobabyGoVideoModelToken(value, { context } = {}) {
 }
 
 export function resolveHellobabyGoVideoSeconds(value, { context } = {}) {
-  const modelToken = normalizeModelToken(context?.body?.model || context?.payload?.model || context?.modelToken || '');
+  const modelToken = getCurrentModelToken(context);
   if (isVeoModelToken(modelToken)) {
     return undefined;
   }
@@ -127,7 +138,7 @@ export function resolveHellobabyGoVideoSeconds(value, { context } = {}) {
 }
 
 export function resolveHellobabyGoVideoDuration(_value, { context } = {}) {
-  const modelToken = normalizeModelToken(context?.body?.model || context?.payload?.model || context?.modelToken || '');
+  const modelToken = getCurrentModelToken(context);
   if (!isVeoModelToken(modelToken)) {
     return undefined;
   }

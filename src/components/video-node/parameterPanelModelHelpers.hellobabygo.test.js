@@ -4,6 +4,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  buildFixedInputAssetSlotMapFromRefs,
+  getFixedInputSlotConfigFromManifest,
+  resolveFixedInputSlotForRef,
+} from '../../modules/fixedInputAssetRefs.js';
 import { buildRuntimeProviderBadgeHTML } from '../../modules/runtimeProviderMenus.js';
 import { buildModelUiSchemaDefaultParams, hasModelUiSchema, renderModelUiSchemaControls } from '../aigenImage/uiSchemaRenderer.js';
 import { getModelsByKind } from '../../manifests/index.js';
@@ -154,8 +159,108 @@ test('video node HelloBabyGo VEO exposes generation mode selector and mode-drive
   assert.deepEqual(model.inputSlots.fixedSlots, [
     { id: 'firstFrame', kind: 'image', label: '首帧图', showWhen: { field: 'generation_type', value: 'frame' } },
     { id: 'lastFrame', kind: 'image', label: '尾帧图', showWhen: { field: 'generation_type', value: 'frame' } },
-    { id: 'referenceImages', kind: 'image', label: '参考图', showWhen: { field: 'generation_type', value: 'reference' } },
+    { id: 'referenceImage1', kind: 'image', label: '参考图 1', showWhen: { field: 'generation_type', value: 'reference' } },
+    { id: 'referenceImage2', kind: 'image', label: '参考图 2', showWhen: { field: 'generation_type', value: 'reference' } },
+    { id: 'referenceImage3', kind: 'image', label: '参考图 3', showWhen: { field: 'generation_type', value: 'reference' } },
   ]);
   assert.equal(model.inputSlots.minByKind.image, 0);
   assert.equal(model.inputSlots.maxByKind.image, 3);
+
+  const textConfig = getFixedInputSlotConfigFromManifest({ generationParams: { generation_type: 'text' } }, { manifest: model });
+  const textHdConfig = getFixedInputSlotConfigFromManifest({ generationParams: { generation_type: 'text_hd' } }, { manifest: model });
+  const frameConfig = getFixedInputSlotConfigFromManifest({ generationParams: { generation_type: 'frame' } }, { manifest: model });
+  const referenceConfig = getFixedInputSlotConfigFromManifest({ generationParams: { generation_type: 'reference' } }, { manifest: model });
+
+  assert.equal(textConfig, null);
+  assert.equal(textHdConfig, null);
+  assert.deepEqual(frameConfig.visibleSlots, ['firstFrame', 'lastFrame']);
+  assert.deepEqual(referenceConfig.visibleSlots, ['referenceImage1', 'referenceImage2', 'referenceImage3']);
+});
+
+test('video node HelloBabyGo VEO reference mode keeps upload slots available until three images are attached', () => {
+  const modelId = 'hellobabygo/veo_3_1-fast-landscape';
+  const model = getModelsByKind('video').find(item => item.modelId === modelId);
+  const fixedInputConfig = getFixedInputSlotConfigFromManifest({ generationParams: { generation_type: 'reference' } }, { manifest: model });
+  const firstRef = { type: 'image', refSlot: 'referenceImage1', imageUrl: 'https://example.test/ref-1.jpg' };
+  const secondRef = { type: 'image', refSlot: 'referenceImage2', imageUrl: 'https://example.test/ref-2.jpg' };
+  const thirdRef = { type: 'image', refSlot: 'referenceImage3', imageUrl: 'https://example.test/ref-3.jpg' };
+
+  assert.deepEqual(buildFixedInputAssetSlotMapFromRefs([firstRef], fixedInputConfig), {
+    referenceImage1: { ...firstRef, refSlot: 'referenceImage1', virtual: true },
+    referenceImage2: null,
+    referenceImage3: null,
+  });
+
+  const legacyRef = { type: 'image', refSlot: 'referenceImages', imageUrl: 'https://example.test/legacy-ref.jpg' };
+  assert.deepEqual(buildFixedInputAssetSlotMapFromRefs([legacyRef], fixedInputConfig), {
+    referenceImage1: { ...legacyRef, refSlot: 'referenceImage1', virtual: true },
+    referenceImage2: null,
+    referenceImage3: null,
+  });
+
+  assert.equal(resolveFixedInputSlotForRef({ fixedInputConfig, kind: 'image', occupiedSlots: ['referenceImage1'] }).slot, 'referenceImage2');
+  assert.equal(resolveFixedInputSlotForRef({ fixedInputConfig, kind: 'image', occupiedSlots: ['referenceImage1', 'referenceImage2'] }).slot, 'referenceImage3');
+  assert.equal(resolveFixedInputSlotForRef({ fixedInputConfig, kind: 'image', occupiedSlots: ['referenceImage1', 'referenceImage2', 'referenceImage3'] }).reason, 'overflow');
+
+  assert.deepEqual(buildFixedInputAssetSlotMapFromRefs([firstRef, secondRef, thirdRef], fixedInputConfig), {
+    referenceImage1: { ...firstRef, refSlot: 'referenceImage1', virtual: true },
+    referenceImage2: { ...secondRef, refSlot: 'referenceImage2', virtual: true },
+    referenceImage3: { ...thirdRef, refSlot: 'referenceImage3', virtual: true },
+  });
+});
+
+test('video node HelloBabyGo Omni exposes reference-only UI without mode selector', () => {
+  const modelId = 'hellobabygo/omni_flash';
+  const model = getModelsByKind('video').find(item => item.modelId === modelId);
+  const defaults = buildModelUiSchemaDefaultParams(modelId);
+  const modeHtml = renderModelUiSchemaControls(modelId, { generationParams: {} }, { placement: 'mode' });
+  const resolutionHtml = renderModelUiSchemaControls(modelId, { generationParams: {} }, { placement: 'resolution' });
+
+  assert.ok(model);
+  assert.equal(defaults.generation_type, undefined);
+  assert.equal(defaults.mode, undefined);
+  assert.equal(defaults.aspectRatio, 'auto');
+  assert.equal(defaults.resolution, '720p');
+  assert.equal(defaults.seconds, '10');
+  assert.equal(modeHtml, '');
+  assert.doesNotMatch(resolutionHtml, /data-ui-schema-field="generation_type"/);
+  assert.doesNotMatch(resolutionHtml, /data-ui-schema-field="mode"/);
+  assert.match(resolutionHtml, /ui-schema-quality-ratio-pill/);
+  assert.match(resolutionHtml, /data-ui-schema-composite-field="qualityRatio"/);
+  assert.match(resolutionHtml, />\s*自适应 · 720p\s*</);
+
+  assert.deepEqual(model.inputSlots.fixedSlots, [
+    { id: 'referenceImage1', kind: 'image', label: '参考图 1', required: true },
+    { id: 'referenceImage2', kind: 'image', label: '参考图 2' },
+    { id: 'referenceImage3', kind: 'image', label: '参考图 3' },
+    { id: 'referenceImage4', kind: 'image', label: '参考图 4' },
+    { id: 'referenceImage5', kind: 'image', label: '参考图 5' },
+    { id: 'referenceImage6', kind: 'image', label: '参考图 6' },
+    { id: 'referenceImage7', kind: 'image', label: '参考图 7' },
+  ]);
+  assert.equal(model.inputSlots.minByKind.image, 1);
+  assert.equal(model.inputSlots.maxByKind.image, 7);
+
+  const fixedInputConfig = getFixedInputSlotConfigFromManifest({}, { manifest: model });
+  const refs = Array.from({ length: 6 }, (_, index) => ({
+    type: 'image',
+    refSlot: `referenceImage${index + 1}`,
+    imageUrl: `https://example.test/omni-ref-${index + 1}.jpg`,
+  }));
+
+  assert.deepEqual(fixedInputConfig.visibleSlots, [
+    'referenceImage1',
+    'referenceImage2',
+    'referenceImage3',
+    'referenceImage4',
+    'referenceImage5',
+    'referenceImage6',
+    'referenceImage7',
+  ]);
+  assert.equal(resolveFixedInputSlotForRef({ fixedInputConfig, kind: 'image', occupiedSlots: refs.map(ref => ref.refSlot) }).slot, 'referenceImage7');
+  assert.equal(resolveFixedInputSlotForRef({
+    fixedInputConfig,
+    kind: 'image',
+    occupiedSlots: [...refs.map(ref => ref.refSlot), 'referenceImage7'],
+  }).reason, 'overflow');
 });

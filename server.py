@@ -3270,7 +3270,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
 
         # ┢┢ PPIO 图像生成代理 ┢┢
-        if path == "/api/v2/proxy/image":
+        if path in ("/api/v2/proxy/image", "/api/v2/proxy/video"):
             body = _read_body(self)
             try:
                 data = json.loads(body)
@@ -3414,6 +3414,60 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 return True
                     return False
                 return _walk(payload)
+            def _normalize_video_proxy_sse_response(content, content_type=""):
+                if path != "/api/v2/proxy/video":
+                    return bytes(content or b""), str(content_type or "")
+                raw = bytes(content or b"")
+                text = raw.decode("utf-8", "ignore")
+                if not text.strip():
+                    return raw, str(content_type or "")
+                lower_content_type = str(content_type or "").lower()
+                looks_like_sse = "text/event-stream" in lower_content_type or text.lstrip().startswith("data:")
+                if not looks_like_sse:
+                    return raw, str(content_type or "")
+                candidate_texts = []
+                for line in text.splitlines():
+                    stripped = line.strip()
+                    if not stripped.startswith("data:"):
+                        continue
+                    payload_text = stripped[5:].strip()
+                    if not payload_text or payload_text == "[DONE]":
+                        continue
+                    try:
+                        payload = json.loads(payload_text)
+                    except Exception:
+                        candidate_texts.append(payload_text)
+                        continue
+                    if not isinstance(payload, dict):
+                        continue
+                    for choice in payload.get("choices") or []:
+                        if not isinstance(choice, dict):
+                            continue
+                        for container_key in ("delta", "message"):
+                            container = choice.get(container_key)
+                            if not isinstance(container, dict):
+                                continue
+                            content_value = container.get("content")
+                            if isinstance(content_value, str) and content_value.strip():
+                                candidate_texts.append(content_value)
+                    for key in ("content", "videoUrl", "video_url", "url", "outputUrl"):
+                        value = payload.get(key)
+                        if isinstance(value, str) and value.strip():
+                            candidate_texts.append(value)
+                joined = "\n".join(candidate_texts) if candidate_texts else text
+                match = re.search(r"https?://[^\s\"'<>]+?\.(?:mp4|mov|webm|m4v)(?:\?[^\s\"'<>]*)?", joined, flags=re.IGNORECASE)
+                if not match:
+                    return raw, str(content_type or "")
+                video_url = match.group(0).strip()
+                payload = {
+                    "status": "succeeded",
+                    "videoUrl": video_url,
+                    "outputUrl": video_url,
+                    "results": [{"videoUrl": video_url, "url": video_url}],
+                    "videos": [{"videoUrl": video_url, "url": video_url}],
+                    "source": "openai-compatible-sse",
+                }
+                return json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8"
             def _cache_local_proxy_result(status, *, result=None, error="", http_status=0, content_type=""):
                 if not (local_recovery_payload.get("runtimeTaskId") or local_recovery_payload.get("clientTaskId")):
                     _local_proxy_debug("image.cache.skipped", status=status, reason="no_local_task_id")
@@ -3621,13 +3675,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                     return
 
                         full_content = b"".join(chunks)
+                        response_content_type = str(resp.headers.get("Content-Type", "") or "application/json; charset=utf-8")
+                        full_content, response_content_type = _normalize_video_proxy_sse_response(full_content, response_content_type)
                         _cache_local_proxy_success_bytes(
                             full_content,
                             status_code=resp.status_code,
-                            content_type=str(resp.headers.get("Content-Type", "") or "application/json; charset=utf-8"),
+                            content_type=response_content_type,
                         )
                         self.send_response(resp.status_code)
-                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.send_header("Content-Type", response_content_type or "application/json; charset=utf-8")
                         _send_cors_origin_header(self)
                         self.end_headers()
                         self.wfile.write(full_content)
@@ -3705,10 +3761,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             if found_task_id:
                                 _send_image_proxy_task_id_response(found_task_id, "grsai-submit")
                                 return
+                        resp_data, content_type = _normalize_video_proxy_sse_response(resp_data, content_type or "application/json; charset=utf-8")
                         _cache_local_proxy_success_bytes(
                             resp_data,
                             status_code=status_code,
-                            content_type=content_type or "application/json; charset=utf-8",
+                            content_type=content_type,
                         )
                         self.send_response(status_code)
                         self.send_header("Content-Type", content_type or "application/json; charset=utf-8")

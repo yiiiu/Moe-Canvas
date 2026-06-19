@@ -458,15 +458,6 @@ function renderProviderCard(provider) {
           />
         </div>
         <div>
-          <div class="settings-label">供应商 ID</div>
-          <input
-            type="text"
-            class="settings-input settings-input--mb10"
-            value="${escapeHtml(provider.id)}"
-            readonly
-          />
-        </div>
-        <div>
           <div class="settings-label">接口地址</div>
           <input
             type="text"

@@ -34,6 +34,14 @@ class LocalProxyTaskRegistryTest(unittest.TestCase):
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
 
+    def _wait_until(self, predicate, timeout=5, interval=0.05):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if predicate():
+                return True
+            time.sleep(interval)
+        return bool(predicate())
+
     def test_missing_local_task_returns_explicit_missing_status(self):
         self.assertEqual(
             server._get_local_proxy_task("", ""),
@@ -242,7 +250,7 @@ class LocalProxyTaskRegistryTest(unittest.TestCase):
             self.assertEqual(running.get("runtimeTaskId"), "runtime-text-route-1")
             self.assertEqual(running.get("clientTaskId"), "client-text-route-1")
             self.assertEqual(running.get("kind"), "text")
-            self.assertTrue(upstream_seen)
+            self.assertTrue(self._wait_until(lambda: bool(upstream_seen)))
             self.assertNotIn("runtimeTaskId", upstream_seen[0])
             self.assertNotIn("clientTaskId", upstream_seen[0])
             self.assertNotIn("apiKey", upstream_seen[0])
@@ -261,6 +269,164 @@ class LocalProxyTaskRegistryTest(unittest.TestCase):
             self.assertEqual(success.get("result", {}).get("choices", [])[0].get("message", {}).get("content"), "路由恢复文本")
         finally:
             upstream_release.set()
+            upstream_httpd.shutdown()
+            upstream_httpd.server_close()
+            app_httpd.shutdown()
+            app_httpd.server_close()
+
+    def test_proxy_video_route_registers_running_then_success_for_local_task(self):
+        upstream_release = threading.Event()
+        upstream_seen = []
+
+        class UpstreamHandler(server.http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                return
+
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(length).decode("utf-8")
+                upstream_seen.append(json.loads(body or "{}"))
+                upstream_release.wait(timeout=5)
+                response = json.dumps({
+                    "status": "succeeded",
+                    "results": [{"videoUrl": "https://cdn.example/video-route.mp4"}],
+                }).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+
+        upstream_httpd, upstream_url = self._start_http_server(UpstreamHandler)
+        app_httpd, app_url = self._start_http_server(server.Handler)
+        video_error = []
+        video_result = []
+
+        def submit_video():
+            try:
+                video_result.append(self._json_request(
+                    f"{app_url}/api/v2/proxy/video",
+                    {
+                        "apiUrl": upstream_url,
+                        "apiKey": "frontend-secret",
+                        "model": "veo-mini",
+                        "prompt": "animate a skyline",
+                        "runtimeTaskId": "runtime-video-route-1",
+                        "clientTaskId": "client-video-route-1",
+                        "nodeId": "video-node-route-1",
+                        "canvasId": "canvas-route-1",
+                        "provider": "custom_acme",
+                        "kind": "video",
+                    },
+                    method="POST",
+                    timeout=10,
+                ))
+            except Exception as exc:
+                video_error.append(exc)
+
+        thread = threading.Thread(target=submit_video, daemon=True)
+        thread.start()
+        try:
+            deadline = time.time() + 5
+            running = None
+            while time.time() < deadline:
+                running = self._json_request(
+                    f"{app_url}/api/v2/proxy/local-task?runtimeTaskId=runtime-video-route-1&clientTaskId=client-video-route-1",
+                    timeout=5,
+                )
+                if running.get("status") == "running":
+                    break
+                time.sleep(0.05)
+
+            self.assertEqual(running.get("status"), "running")
+            self.assertEqual(running.get("runtimeTaskId"), "runtime-video-route-1")
+            self.assertEqual(running.get("clientTaskId"), "client-video-route-1")
+            self.assertEqual(running.get("kind"), "video")
+            self.assertTrue(upstream_seen)
+            self.assertEqual(upstream_seen[0].get("model"), "veo-mini")
+            self.assertEqual(upstream_seen[0].get("prompt"), "animate a skyline")
+            self.assertNotIn("runtimeTaskId", upstream_seen[0])
+            self.assertNotIn("clientTaskId", upstream_seen[0])
+            self.assertNotIn("apiKey", upstream_seen[0])
+
+            upstream_release.set()
+            thread.join(timeout=10)
+            self.assertFalse(video_error)
+            self.assertTrue(video_result)
+
+            success = self._json_request(
+                f"{app_url}/api/v2/proxy/local-task?runtimeTaskId=runtime-video-route-1&clientTaskId=client-video-route-1",
+                timeout=5,
+            )
+            self.assertEqual(success.get("status"), "success")
+            self.assertEqual(success.get("result", {}).get("results", [])[0].get("videoUrl"), "https://cdn.example/video-route.mp4")
+        finally:
+            upstream_release.set()
+            upstream_httpd.shutdown()
+            upstream_httpd.server_close()
+            app_httpd.shutdown()
+            app_httpd.server_close()
+
+    def test_proxy_video_route_normalizes_openai_compatible_sse_video_url(self):
+        upstream_seen = []
+
+        class UpstreamHandler(server.http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                return
+
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(length).decode("utf-8")
+                upstream_seen.append(json.loads(body or "{}"))
+                chunks = [
+                    'data: {"id":"chatcmpl-video-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"视频正在生成 0%\\n"}}]}\n\n',
+                    'data: {"id":"chatcmpl-video-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"视频正在生成 75%\\n"}}]}\n\n',
+                    'data: {"id":"chatcmpl-video-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":"https://cdn.example/grok-video-final.mp4"}}]}\n\n',
+                    'data: [DONE]\n\n',
+                ]
+                response = ''.join(chunks).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+
+        upstream_httpd, upstream_url = self._start_http_server(UpstreamHandler)
+        app_httpd, app_url = self._start_http_server(server.Handler)
+        try:
+            result = self._json_request(
+                f"{app_url}/api/v2/proxy/video",
+                {
+                    "apiUrl": upstream_url,
+                    "apiKey": "frontend-secret",
+                    "model": "grok-imagine-video-1.5-preview",
+                    "prompt": "animate a skyline",
+                    "runtimeTaskId": "runtime-video-sse-1",
+                    "clientTaskId": "client-video-sse-1",
+                    "nodeId": "video-node-sse-1",
+                    "canvasId": "canvas-sse-1",
+                    "provider": "custom_grok",
+                    "kind": "video",
+                },
+                method="POST",
+                timeout=10,
+            )
+
+            self.assertTrue(upstream_seen)
+            self.assertNotIn("runtimeTaskId", upstream_seen[0])
+            self.assertNotIn("clientTaskId", upstream_seen[0])
+            self.assertEqual(result.get("videoUrl"), "https://cdn.example/grok-video-final.mp4")
+            self.assertEqual(result.get("results", [])[0].get("videoUrl"), "https://cdn.example/grok-video-final.mp4")
+            self.assertNotIn("reasoning_content", json.dumps(result, ensure_ascii=False))
+
+            success = self._json_request(
+                f"{app_url}/api/v2/proxy/local-task?runtimeTaskId=runtime-video-sse-1&clientTaskId=client-video-sse-1",
+                timeout=5,
+            )
+            self.assertEqual(success.get("status"), "success")
+            self.assertEqual(success.get("result", {}).get("videoUrl"), "https://cdn.example/grok-video-final.mp4")
+            self.assertEqual(success.get("result", {}).get("results", [])[0].get("videoUrl"), "https://cdn.example/grok-video-final.mp4")
+        finally:
             upstream_httpd.shutdown()
             upstream_httpd.server_close()
             app_httpd.shutdown()

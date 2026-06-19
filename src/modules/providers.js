@@ -76,6 +76,12 @@ export const PROVIDERS_META = {
     defaultUrl: '',
     logoPath: null,
   },
+  hellobabygo: {
+    id: 'hellobabygo',
+    label: '斑点蛙',
+    defaultUrl: 'https://api.hellobabygo.com',
+    logoPath: null,
+  },
   aicanvas: {
     id: 'aicanvas',
     label: 'AICanvas',

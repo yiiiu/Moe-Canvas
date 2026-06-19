@@ -2502,6 +2502,71 @@
                   placeholder="sk-..."
                 />
               </div>
+              <div class="settings-section settings-card">
+                <div class="settings-card-head">
+                  <div class="settings-card-badge">蛙</div>
+                  <span class="settings-card-title">斑点蛙</span>
+                  <span
+                    class="settings-provider-status settings-provider-status--test"
+                    id="providerTestStatus-hellobabygo"
+                    hidden
+                  ></span>
+                  <button
+                    type="button"
+                    class="settings-provider-test-btn"
+                    data-provider-test="hellobabygo"
+                    title="测试斑点蛙连接"
+                    aria-label="测试斑点蛙连接"
+                  >
+                    <svg
+                      class="settings-btn-icon"
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
+                      />
+                      <path
+                        d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
+                      />
+                    </svg>
+                    <span class="settings-btn-label">测试连接</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-external-url="https://api.hellobabygo.com/"
+                    title="前往斑点蛙"
+                    class="settings-getkey"
+                  >
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
+                      />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                    获取 Key
+                  </button>
+                </div>
+                <div class="settings-label">API 密钥</div>
+                <input
+                  type="password"
+                  id="providerKey-hellobabygo"
+                  class="settings-input"
+                  placeholder="Bearer Token..."
+                />
+              </div>
               <div class="settings-section settings-card dev-mode-only">
                 <div class="settings-card-head">
                   <img

@@ -121,6 +121,38 @@ test('custom provider connection test falls back to chat completion when models 
   assert.equal(requests.length, 2);
 });
 
+test('hellobabygo built-in provider connection test uses models probe without generation', async () => {
+  const requests = [];
+
+  const result = await withMockedFetch(async (input, init = {}) => {
+    const url = String(input);
+    requests.push({ url, init });
+
+    if (url.includes('/api/v2/proxy/task?apiUrl=')) {
+      const upstreamUrl = decodeURIComponent(url.split('apiUrl=')[1] || '');
+      assert.equal(upstreamUrl, 'https://api.hellobabygo.com/v1/models');
+      assert.equal(init.method, 'GET');
+      assert.equal(init.headers?.Authorization, 'Bearer sk-hellobabygo');
+      return createJsonResponse({ data: [{ id: 'grok-imagine-video-1.5-preview' }] });
+    }
+
+    if (url.endsWith('/api/v2/proxy/video')) {
+      throw new Error('hellobabygo connection test must not submit video generation');
+    }
+
+    throw new Error(`unexpected fetch: ${url}`);
+  }, async () =>
+    testProviderConnection('hellobabygo', {
+      apiUrl: 'https://api.hellobabygo.com',
+      apiKey: 'sk-hellobabygo',
+    }),
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.label, '斑点蛙');
+  assert.equal(requests.length, 1);
+});
+
 test('providerConnectionTestApi includes custom providers in batch test results', async () => {
   const result = await withMockedFetch(async (input, init = {}) => {
     const url = String(input);

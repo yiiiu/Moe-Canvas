@@ -11,6 +11,10 @@ import {
   CUSTOM_PROVIDER_RUNTIME_CHANGED_EVENT,
 } from './customProviderRuntimeRegistry.js';
 import {
+  hellobabyGoVideoExecutionManifests,
+  hellobabyGoVideoModelManifests,
+} from './video/hellobabygoVideoManifest.js';
+import {
   getExecutionManifest as getStaticExecutionManifest,
   getModelManifest as getStaticModelManifest,
   getModelsByKind as getStaticModelsByKind,
@@ -197,6 +201,12 @@ export function listModelManifests() {
   );
 }
 
+registerManifestBundle({
+  sourceId: 'hellobabygo.video',
+  executions: hellobabyGoVideoExecutionManifests,
+  models: hellobabyGoVideoModelManifests,
+});
+
 export {
   QWEN_IMAGE_EDIT_EXECUTION_ID,
   QWEN_IMAGE_EDIT_MODEL_ID,
@@ -290,6 +300,10 @@ export {
   dreaminaVideoExecutionManifests,
   dreaminaVideoModelManifests,
 } from './video/dreamina/dreaminaVideoManifest.js';
+export {
+  hellobabyGoVideoExecutionManifests,
+  hellobabyGoVideoModelManifests,
+} from './video/hellobabygoVideoManifest.js';
 export {
   RH_AUDIO_INDEXTTS2_CLONE_EXECUTION_ID,
   RH_AUDIO_INDEXTTS2_CLONE_MODEL_ID,

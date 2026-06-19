@@ -175,13 +175,23 @@ test('custom provider video route builds OpenAI-compatible manifest request', as
         aspectRatio: '9:16',
         resolution: '1080p',
       },
+      runtimeTaskId: 'async:video:custom_acme:node-video-1:1000',
+      clientTaskId: 'client:async:video:custom_acme:node-video-1:1000',
+      nodeId: 'node-video-1',
+      canvasId: 'canvas-video-1',
     });
 
-    assert.equal(request.url, '/api/v2/proxy/image');
+    assert.equal(request.url, '/api/v2/proxy/video');
     assert.equal(request.body.apiUrl, `${CUSTOM_API_URL}/v1/videos/generations`);
     assert.equal(request.body.apiKey, CUSTOM_API_KEY);
     assert.equal(request.body.model, 'veo-mini');
     assert.equal(request.body.prompt, 'animate a skyline at dusk');
+    assert.equal(request.body.runtimeTaskId, 'async:video:custom_acme:node-video-1:1000');
+    assert.equal(request.body.clientTaskId, 'client:async:video:custom_acme:node-video-1:1000');
+    assert.equal(request.body.nodeId, 'node-video-1');
+    assert.equal(request.body.canvasId, 'canvas-video-1');
+    assert.equal(request.body.provider, CUSTOM_PROVIDER_ID);
+    assert.equal(request.body.kind, 'video');
     assert.deepEqual(request.body.messages, [
       { role: 'user', content: 'animate a skyline at dusk' },
     ]);

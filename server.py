@@ -1677,6 +1677,36 @@ def _build_image_proxy_upstream_payload(payload):
     return data, local_recovery_payload
 
 
+def _is_hellobabygo_grok_multipart_payload(data, local_recovery_payload=None, api_url=""):
+    if not isinstance(data, dict):
+        return False
+    references = data.get("image_reference")
+    if references is None:
+        references = data.get("input_reference")
+    if not isinstance(references, list):
+        return False
+    model = str(data.get("model") or "").strip().lower()
+    model_key = model.rsplit("/", 1)[-1]
+    if not model_key.startswith("grok-imagine-video"):
+        return False
+    provider = ""
+    if isinstance(local_recovery_payload, dict):
+        provider = str(local_recovery_payload.get("provider") or "").strip().lower()
+    normalized_url = str(api_url or "").strip().lower()
+    return provider == "hellobabygo" or "hellobabygo.com" in normalized_url
+
+
+def _normalize_hellobabygo_grok_reference_field(data):
+    if not isinstance(data, dict):
+        return data
+    input_references = data.get("input_reference")
+    image_references = data.get("image_reference")
+    if (not isinstance(input_references, list) or len(input_references) == 0) and isinstance(image_references, list):
+        data["input_reference"] = image_references
+    data.pop("image_reference", None)
+    return data
+
+
 def _pop_proxy_multipart_options(data):
     if not isinstance(data, dict):
         return {"enabled": False, "arrayFieldName": ""}
@@ -3321,6 +3351,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             local_authorization_payload = dict(data) if isinstance(data, dict) else {}
             data, local_recovery_payload = _build_image_proxy_upstream_payload(data)
             multipart_options = _pop_proxy_multipart_options(data)
+            if _is_hellobabygo_grok_multipart_payload(data, local_recovery_payload, api_url):
+                data = _normalize_hellobabygo_grok_reference_field(data)
+                multipart_options = {"enabled": True, "arrayFieldName": "input_reference"}
             if local_recovery_payload.get("runtimeTaskId") or local_recovery_payload.get("clientTaskId"):
                 _local_proxy_debug(
                     "image.register",

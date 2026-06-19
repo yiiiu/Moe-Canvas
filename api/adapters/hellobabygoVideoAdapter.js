@@ -59,16 +59,24 @@ export function resolveHellobabyGoVideoInputReference(value, { context } = {}) {
     return undefined;
   }
   if (isGrokMultiReferenceModelToken(modelToken)) {
-    return (Array.isArray(value) ? value : [value])
+    const references = (Array.isArray(value) ? value : [value])
       .map(item => String(item || '').trim())
       .filter(Boolean)
       .slice(0, 7);
+    if (references.length === 0) {
+      throw new Error('斑点蛙 Grok 图生视频需要至少 1 张参考图，不支持纯文本生成视频。');
+    }
+    return references;
   }
   if (isGrokPreviewModelToken(modelToken)) {
-    return (Array.isArray(value) ? value : [value])
+    const references = (Array.isArray(value) ? value : [value])
       .map(item => String(item || '').trim())
       .filter(Boolean)
       .slice(0, 1);
+    if (references.length === 0) {
+      throw new Error('斑点蛙 Grok 图生视频需要至少 1 张参考图，不支持纯文本生成视频。');
+    }
+    return references;
   }
   if (getGenerationType(context) !== 'reference') {
     return value;

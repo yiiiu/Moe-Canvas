@@ -235,7 +235,18 @@ function createHellobabyGoVideoExecutionManifest() {
           transform: 'hellobabygoVideoInputReference',
           omitWhenEmpty: true,
           when: Object.freeze([
+            Object.freeze({ field: 'model', in: Object.freeze(['hellobabygo/grok-imagine-video', 'hellobabygo/grok-imagine-video-1.5-preview']) }),
+          ]),
+        }),
+        Object.freeze({
+          path: 'input_reference',
+          from: 'inputImages',
+          transform: 'hellobabygoVideoInputReference',
+          omitWhenEmpty: true,
+          when: Object.freeze([
             Object.freeze({ field: 'model', notEquals: 'hellobabygo/omni_flash' }),
+            Object.freeze({ field: 'model', notEquals: 'hellobabygo/grok-imagine-video' }),
+            Object.freeze({ field: 'model', notEquals: 'hellobabygo/grok-imagine-video-1.5-preview' }),
             Object.freeze({ field: 'generationParams.generation_type', notEquals: 'frame' }),
           ]),
         }),
@@ -248,7 +259,7 @@ function createHellobabyGoVideoExecutionManifest() {
         Object.freeze({
           path: '__arrayFieldName',
           from: 'constant',
-          value: 'input_reference[]',
+          value: 'input_reference',
           when: Object.freeze({ field: 'model', in: Object.freeze(['hellobabygo/grok-imagine-video', 'hellobabygo/grok-imagine-video-1.5-preview']) }),
         }),
         Object.freeze({

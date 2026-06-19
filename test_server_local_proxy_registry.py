@@ -98,6 +98,7 @@ class LocalProxyTaskRegistryTest(unittest.TestCase):
             server._get_local_proxy_task("runtime-expired", ""),
             {"status": "missing", "reason": "request_lost"},
         )
+
     def test_proxy_image_upstream_payload_removes_local_and_sensitive_fields(self):
         payload = {
             "prompt": "cat",
@@ -342,7 +343,7 @@ class LocalProxyTaskRegistryTest(unittest.TestCase):
             self.assertEqual(running.get("runtimeTaskId"), "runtime-video-route-1")
             self.assertEqual(running.get("clientTaskId"), "client-video-route-1")
             self.assertEqual(running.get("kind"), "video")
-            self.assertTrue(upstream_seen)
+            self.assertTrue(self._wait_until(lambda: bool(upstream_seen)))
             self.assertEqual(upstream_seen[0].get("model"), "veo-mini")
             self.assertEqual(upstream_seen[0].get("prompt"), "animate a skyline")
             self.assertNotIn("runtimeTaskId", upstream_seen[0])
@@ -398,9 +399,9 @@ class LocalProxyTaskRegistryTest(unittest.TestCase):
                     "prompt": "animate by references",
                     "size": "720x1280",
                     "seconds": "10",
-                    "input_reference": ["https://cdn.example/ref-1.jpg", "https://cdn.example/ref-2.jpg"],
+                    "image_reference": ["https://cdn.example/ref-1.jpg", "https://cdn.example/ref-2.jpg"],
                     "__requestEncoding": "multipart",
-                    "__arrayFieldName": "input_reference[]",
+                    "__arrayFieldName": "image_reference[]",
                     "runtimeTaskId": "runtime-grok-form-1",
                     "clientTaskId": "client-grok-form-1",
                     "nodeId": "video-node-grok-form-1",
@@ -415,13 +416,134 @@ class LocalProxyTaskRegistryTest(unittest.TestCase):
             self.assertEqual(result.get("task_id"), "hbg-grok-task-1")
             self.assertTrue(upstream_seen)
             self.assertIn("multipart/form-data", upstream_seen[0]["contentType"])
-            self.assertIn('name="input_reference[]"', upstream_seen[0]["body"])
+            self.assertIn('name="input_reference"', upstream_seen[0]["body"])
+            self.assertNotIn('name="image_reference"', upstream_seen[0]["body"])
+            self.assertNotIn('name="image_reference[]"', upstream_seen[0]["body"])
+            self.assertNotIn('name="input_reference[]"', upstream_seen[0]["body"])
             self.assertIn("https://cdn.example/ref-1.jpg", upstream_seen[0]["body"])
             self.assertIn("https://cdn.example/ref-2.jpg", upstream_seen[0]["body"])
             self.assertIn('name="model"', upstream_seen[0]["body"])
             self.assertIn("grok-imagine-video", upstream_seen[0]["body"])
             self.assertNotIn("__requestEncoding", upstream_seen[0]["body"])
             self.assertNotIn("__arrayFieldName", upstream_seen[0]["body"])
+        finally:
+            upstream_httpd.shutdown()
+            upstream_httpd.server_close()
+            app_httpd.shutdown()
+            app_httpd.server_close()
+
+    def test_proxy_video_route_sends_grok_url_references_as_image_reference_form_fields(self):
+        upstream_seen = []
+
+        class UpstreamHandler(server.http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                return
+
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(length).decode("utf-8")
+                content_type = self.headers.get("Content-Type", "")
+                upstream_seen.append({"contentType": content_type, "body": body})
+                response = json.dumps({"task_id": "hbg-grok-task-stale-marker"}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+
+        upstream_httpd, upstream_url = self._start_http_server(UpstreamHandler)
+        app_httpd, app_url = self._start_http_server(server.Handler)
+        try:
+            result = self._json_request(
+                f"{app_url}/api/v2/proxy/video",
+                {
+                    "apiUrl": upstream_url,
+                    "apiKey": "frontend-secret",
+                    "model": "grok-imagine-video",
+                    "prompt": "animate by references",
+                    "size": "720x1280",
+                    "seconds": "10",
+                    "image_reference": ["https://cdn.example/ref-1.jpg", "https://cdn.example/ref-2.jpg"],
+                    "__requestEncoding": "multipart",
+                    "__arrayFieldName": "image_reference[]",
+                    "runtimeTaskId": "runtime-grok-form-stale-marker",
+                    "clientTaskId": "client-grok-form-stale-marker",
+                    "nodeId": "video-node-grok-form-stale-marker",
+                    "canvasId": "canvas-grok-form-stale-marker",
+                    "provider": "hellobabygo",
+                    "kind": "video",
+                },
+                method="POST",
+                timeout=10,
+            )
+
+            self.assertEqual(result.get("task_id"), "hbg-grok-task-stale-marker")
+            self.assertTrue(upstream_seen)
+            self.assertIn("multipart/form-data", upstream_seen[0]["contentType"])
+            self.assertIn('name="input_reference"', upstream_seen[0]["body"])
+            self.assertNotIn('name="image_reference"', upstream_seen[0]["body"])
+            self.assertNotIn('name="image_reference[]"', upstream_seen[0]["body"])
+            self.assertNotIn('name="input_reference[]"', upstream_seen[0]["body"])
+            self.assertIn("https://cdn.example/ref-1.jpg", upstream_seen[0]["body"])
+            self.assertIn("https://cdn.example/ref-2.jpg", upstream_seen[0]["body"])
+        finally:
+            upstream_httpd.shutdown()
+            upstream_httpd.server_close()
+            app_httpd.shutdown()
+            app_httpd.server_close()
+
+    def test_proxy_video_route_auto_sends_hellobabygo_grok_arrays_as_multipart_form_data(self):
+        upstream_seen = []
+
+        class UpstreamHandler(server.http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                return
+
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(length).decode("utf-8")
+                content_type = self.headers.get("Content-Type", "")
+                upstream_seen.append({"contentType": content_type, "body": body})
+                response = json.dumps({"task_id": "hbg-grok-task-auto"}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+
+        upstream_httpd, upstream_url = self._start_http_server(UpstreamHandler)
+        app_httpd, app_url = self._start_http_server(server.Handler)
+        try:
+            result = self._json_request(
+                f"{app_url}/api/v2/proxy/video",
+                {
+                    "apiUrl": upstream_url,
+                    "apiKey": "frontend-secret",
+                    "model": "grok-imagine-video",
+                    "prompt": "animate by references",
+                    "size": "720x1280",
+                    "seconds": "10",
+                    "input_reference": ["https://cdn.example/ref-1.jpg", "https://cdn.example/ref-2.jpg"],
+                    "runtimeTaskId": "runtime-grok-form-auto",
+                    "clientTaskId": "client-grok-form-auto",
+                    "nodeId": "video-node-grok-form-auto",
+                    "canvasId": "canvas-grok-form-auto",
+                    "provider": "hellobabygo",
+                    "kind": "video",
+                },
+                method="POST",
+                timeout=10,
+            )
+
+            self.assertEqual(result.get("task_id"), "hbg-grok-task-auto")
+            self.assertTrue(upstream_seen)
+            self.assertIn("multipart/form-data", upstream_seen[0]["contentType"])
+            self.assertIn('name="input_reference"', upstream_seen[0]["body"])
+            self.assertNotIn('name="image_reference"', upstream_seen[0]["body"])
+            self.assertNotIn('name="image_reference[]"', upstream_seen[0]["body"])
+            self.assertNotIn('name="input_reference[]"', upstream_seen[0]["body"])
+            self.assertIn("https://cdn.example/ref-1.jpg", upstream_seen[0]["body"])
+            self.assertIn("https://cdn.example/ref-2.jpg", upstream_seen[0]["body"])
         finally:
             upstream_httpd.shutdown()
             upstream_httpd.server_close()

@@ -62,6 +62,30 @@ test('hellobabygo is registered as a built-in provider', () => {
   assert.equal(provider?.defaultUrl, HELLOBABYGO_API_URL);
 });
 
+test('hellobabygo Grok preview rejects text-to-video before reaching provider', async () => {
+  await withConfigMock(async () => {
+    await assert.rejects(
+      () => buildGenerateVideoRequest({
+        provider: 'hellobabygo',
+        model: 'hellobabygo/grok-imagine-video-1.5-preview',
+        prompt: '只用文字生成视频',
+        inputUrls: [],
+        videos: [],
+        audios: [],
+        generationParams: {
+          aspectRatio: '9:16',
+          seconds: 10,
+        },
+        runtimeTaskId: 'runtime-hbg-grok-no-image',
+        clientTaskId: 'client-hbg-grok-no-image',
+        nodeId: 'node-hbg-grok-no-image',
+        canvasId: 'canvas-hbg-grok-no-image',
+      }),
+      /Grok.*参考图|参考图.*Grok|input image/i,
+    );
+  });
+});
+
 test('hellobabygo grok video manifest posts to documented videos endpoint', async () => {
   await withConfigMock(async () => {
     const execution = resolveModelExecution('hellobabygo/grok-imagine-video-1.5-preview', {
@@ -75,7 +99,7 @@ test('hellobabygo grok video manifest posts to documented videos endpoint', asyn
       provider: 'hellobabygo',
       model: 'hellobabygo/grok-imagine-video-1.5-preview',
       prompt: '一只小猫在雨后街道奔跑',
-      inputUrls: [],
+      inputUrls: ['https://example.com/ref-1.jpg'],
       videos: [],
       audios: [],
       generationParams: {
@@ -95,7 +119,8 @@ test('hellobabygo grok video manifest posts to documented videos endpoint', asyn
     assert.equal(request.body.prompt, '一只小猫在雨后街道奔跑');
     assert.equal(request.body.size, '720x1280');
     assert.equal(request.body.seconds, '10');
-    assert.equal(request.body.input_reference, undefined);
+    assert.deepEqual(request.body.input_reference, ['https://telegra.ph/ref-1.jpg']);
+    assert.equal(request.body.image_reference, undefined);
     assert.equal(request.body.runtimeTaskId, 'runtime-hbg-video-1');
     assert.equal(request.body.clientTaskId, 'client-hbg-video-1');
     assert.equal(request.body.nodeId, 'node-hbg-video-1');
@@ -241,7 +266,7 @@ test('hellobabygo non-VEO models do not map duration to provider seconds', async
       provider: 'hellobabygo',
       model: 'hellobabygo/grok-imagine-video-1.5-preview',
       prompt: 'grok duration 不应覆盖秒数',
-      inputUrls: [],
+      inputUrls: ['https://example.com/ref-1.jpg'],
       videos: [],
       audios: [],
       generationParams: {
@@ -258,6 +283,8 @@ test('hellobabygo non-VEO models do not map duration to provider seconds', async
     assert.equal(request.body.size, '1280x720');
     assert.equal(request.body.seconds, '10');
     assert.equal(request.body.duration, undefined);
+    assert.deepEqual(request.body.input_reference, ['https://telegra.ph/ref-1.jpg']);
+    assert.equal(request.body.image_reference, undefined);
   });
 });
 
@@ -497,8 +524,9 @@ test('hellobabygo Grok image model sends seven form-data reference images at 10 
       'https://telegra.ph/ref-6.jpg',
       'https://telegra.ph/ref-7.jpg',
     ]);
+    assert.equal(request.body.image_reference, undefined);
     assert.equal(request.body.__requestEncoding, 'multipart');
-    assert.equal(request.body.__arrayFieldName, 'input_reference[]');
+    assert.equal(request.body.__arrayFieldName, 'input_reference');
   });
 });
 
@@ -526,7 +554,8 @@ test('hellobabygo Grok preview keeps only one reference image and allows 15 seco
     assert.equal(request.body.size, '1280x720');
     assert.equal(request.body.seconds, '15');
     assert.deepEqual(request.body.input_reference, ['https://telegra.ph/ref-1.jpg']);
+    assert.equal(request.body.image_reference, undefined);
     assert.equal(request.body.__requestEncoding, 'multipart');
-    assert.equal(request.body.__arrayFieldName, 'input_reference[]');
+    assert.equal(request.body.__arrayFieldName, 'input_reference');
   });
 });

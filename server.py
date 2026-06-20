@@ -50,6 +50,7 @@ from backend.services.json_file_route_service import JsonFileRouteService
 from backend.services.library_file_route_service import LibraryFileRouteService
 from backend.services.media_file_route_service import MediaFileRouteService
 from backend.services.asset_registry_service import AssetRegistryService
+from backend.services.asset_usage_index_service import AssetUsageIndexService
 from backend.services.storage_bucket_service import StorageBucketService
 from backend.services.local_media_processing_route_service import LocalMediaProcessingRouteService
 from backend.services.remote_proxy_route_service import RemoteProxyRouteService
@@ -1395,6 +1396,10 @@ LIBRARY_FILE_ROUTE_SERVICE = LibraryFileRouteService(
     workflow_thumbs_dir_getter=lambda: WORKFLOW_THUMBS_DIR,
     subscription_gate_service_getter=lambda: SUBSCRIPTION_GATE_SERVICE,
 )
+ASSET_USAGE_INDEX_SERVICE = AssetUsageIndexService(
+    assets_file_path=os.path.join(USER_DIR, "assets.json"),
+    canvas_dir_getter=lambda: CANVAS_DIR,
+)
 
 def _get_custom_ai_config():
     return CONFIG_ROUTE_SERVICE.get_custom_ai_config()
@@ -2693,6 +2698,34 @@ def _handle_asset_batch_request(handler):
     return True
 
 
+def _handle_asset_rebuild_usage_index_request(handler):
+    _read_body(handler)
+    try:
+        _json_ok(handler, ASSET_USAGE_INDEX_SERVICE.rebuild_usage_index())
+    except Exception as exc:
+        _json_err(handler, 500, str(exc))
+    return True
+
+
+def _handle_asset_usage_get_request(handler, path):
+    prefix = "/api/v2/assets/usage/"
+    asset_id = urllib.parse.unquote(str(path or "")[len(prefix):]).strip()
+    if not asset_id or "/" in asset_id:
+        _json_err(handler, 400, "Invalid assetId")
+        return True
+    usage = ASSET_USAGE_INDEX_SERVICE.get_usage(asset_id)
+    if not usage:
+        _json_err(handler, 404, "Asset not found")
+        return True
+    _json_ok(handler, {"success": True, "usage": usage})
+    return True
+
+
+def _handle_asset_orphans_get_request(handler):
+    _json_ok(handler, {"success": True, "assets": ASSET_USAGE_INDEX_SERVICE.list_orphans()})
+    return True
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
@@ -2864,6 +2897,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             _json_ok(self, _get_local_proxy_task_from_request(self))
             return
 
+        if path.startswith("/api/v2/assets/usage/"):
+            if _handle_asset_usage_get_request(self, path):
+                return
+
+        if path == "/api/v2/assets/orphans":
+            if _handle_asset_orphans_get_request(self):
+                return
+
         if path.startswith("/api/v2/assets/") and path != "/api/v2/assets/batch":
             if _handle_asset_get_request(self, path):
                 return
@@ -2904,6 +2945,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/v2/assets/batch":
             if _handle_asset_batch_request(self):
+                return
+
+        if path == "/api/v2/assets/rebuild-usage-index":
+            if _handle_asset_rebuild_usage_index_request(self):
                 return
 
         if HTTP_ROUTE_DISPATCHER.handle_post(self, path):

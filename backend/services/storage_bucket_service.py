@@ -279,6 +279,7 @@ class StorageBucketService:
             "url": self._public_url(bucket, key),
             "key": key,
             "bucket": bucket.get("bucket"),
+            "endpoint": bucket.get("endpoint"),
             "size": len(payload),
             "contentType": content_type or "application/octet-stream",
         }

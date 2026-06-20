@@ -5,6 +5,7 @@ import unittest
 
 from backend.services.media_file_route_service import MediaFileRouteService
 import backend.services.media_file_route_service as media_file_route_service
+from backend.services.asset_registry_service import AssetRegistryService
 from backend.services.storage_bucket_service import StorageBucketService
 import backend.services.storage_bucket_service as storage_bucket_service
 
@@ -38,8 +39,11 @@ class FakeStorageBucketService:
             "url": f"https://cdn.example.com/ai-canvas/{filename}",
             "key": f"ai-canvas/{filename}",
             "bucket": "canvas-assets",
+            "endpoint": "http://127.0.0.1:9000",
             "size": len(file_bytes),
             "contentType": content_type,
+            "secretAccessKey": "minio-secret",
+            "Authorization": "AWS4-HMAC-SHA256 Signature=abc",
         }
 
     def sanitize_error(self, error):
@@ -47,7 +51,7 @@ class FakeStorageBucketService:
 
 
 class MediaFileRouteServiceDerivativeTest(unittest.TestCase):
-    def make_service(self, tmpdir, storage_bucket_service=None):
+    def make_service(self, tmpdir, storage_bucket_service=None, asset_registry_service=None):
         uploads_dir = os.path.join(tmpdir, "data", "uploads")
         output_dir = os.path.join(tmpdir, "output")
         os.makedirs(uploads_dir, exist_ok=True)
@@ -64,7 +68,17 @@ class MediaFileRouteServiceDerivativeTest(unittest.TestCase):
         )
         if storage_bucket_service is not None:
             service.storage_bucket_service = storage_bucket_service
+        if asset_registry_service is not None:
+            service.asset_registry_service = asset_registry_service
         return service
+
+    def make_asset_registry(self, tmpdir):
+        return AssetRegistryService(assets_file_path=os.path.join(tmpdir, "user", "assets.json"))
+
+    def load_asset_records(self, tmpdir):
+        with open(os.path.join(tmpdir, "user", "assets.json"), "r", encoding="utf-8") as file:
+            data = json.load(file)
+        return data.get("assets", [])
 
     def test_derivative_ensure_falls_back_to_original_when_pillow_unavailable_or_decode_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -177,6 +191,108 @@ class MediaFileRouteServiceDerivativeTest(unittest.TestCase):
             self.assertEqual(payload["url"], "https://cdn.example.com/ai-canvas/out.png")
             self.assertEqual(payload["storage"], "s3-compatible")
             self.assertEqual(bucket.uploads[0]["bytes"], b"remote-bytes")
+
+    def test_save_output_with_enabled_storage_bucket_creates_ready_asset_without_secrets(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bucket = FakeStorageBucketService()
+            registry = self.make_asset_registry(tmpdir)
+            service = self.make_service(tmpdir, storage_bucket_service=bucket, asset_registry_service=registry)
+            handler = FakeHandler(b"image-bytes", path="/api/v2/save_output?ext=png")
+
+            result = service._handle_save_output(handler)
+
+            self.assertEqual(result["kind"], "json_ok")
+            payload = result["data"]
+            self.assertTrue(payload.get("assetId"))
+            self.assertIsInstance(payload.get("asset"), dict)
+            self.assertEqual(payload["assetId"], payload["asset"]["assetId"])
+            self.assertEqual(payload["asset"]["type"], "image")
+            self.assertEqual(payload["asset"]["url"], "https://cdn.example.com/ai-canvas/out.png")
+            self.assertEqual(payload["asset"]["objectKey"], "ai-canvas/out.png")
+            self.assertEqual(payload["asset"]["storage"]["type"], "s3-compatible")
+            self.assertEqual(payload["asset"]["storage"]["bucket"], "canvas-assets")
+            self.assertEqual(payload["asset"]["storage"]["endpoint"], "http://127.0.0.1:9000")
+            serialized = json.dumps(payload["asset"], ensure_ascii=False)
+            self.assertNotIn("secretAccessKey", serialized)
+            self.assertNotIn("Authorization", serialized)
+            self.assertNotIn("minio-secret", serialized)
+            records = self.load_asset_records(tmpdir)
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["assetId"], payload["assetId"])
+
+    def test_save_output_without_storage_bucket_creates_local_ready_asset(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry = self.make_asset_registry(tmpdir)
+            service = self.make_service(tmpdir, asset_registry_service=registry)
+            handler = FakeHandler(b"image-bytes", path="/api/v2/save_output?ext=png")
+
+            result = service._handle_save_output(handler)
+
+            self.assertEqual(result["kind"], "json_ok")
+            payload = result["data"]
+            self.assertTrue(payload.get("assetId"))
+            self.assertEqual(payload["asset"]["type"], "image")
+            self.assertEqual(payload["asset"]["storage"]["type"], "local")
+            self.assertEqual(payload["asset"]["url"], "/output/out.png")
+            self.assertEqual(payload["asset"]["localPath"], "output/out.png")
+            records = self.load_asset_records(tmpdir)
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["status"], "ready")
+
+    def test_upload_failure_does_not_create_ready_asset(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bucket = FakeStorageBucketService(fail_message="upload failed with minio-secret")
+            registry = self.make_asset_registry(tmpdir)
+            service = self.make_service(tmpdir, storage_bucket_service=bucket, asset_registry_service=registry)
+            handler = FakeHandler(b"image-bytes", path="/api/v2/save_output?ext=png")
+
+            result = service._handle_save_output(handler)
+
+            self.assertEqual(result["kind"], "json_err")
+            self.assertFalse(os.path.exists(os.path.join(tmpdir, "user", "assets.json")))
+
+    def test_image_video_audio_outputs_create_assets(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            registry = self.make_asset_registry(tmpdir)
+            service = self.make_service(tmpdir, asset_registry_service=registry)
+            cases = [
+                ("png", b"image-bytes", "image"),
+                ("mp4", b"video-bytes", "video"),
+                ("mp3", b"audio-bytes", "audio"),
+            ]
+
+            for ext, body, expected_type in cases:
+                service._next_output_filename = lambda value, ext=ext: f"out.{ext}"
+                result = service._handle_save_output(FakeHandler(body, path=f"/api/v2/save_output?ext={ext}"))
+                self.assertEqual(result["kind"], "json_ok")
+                self.assertTrue(result["data"].get("assetId"))
+                self.assertEqual(result["data"]["asset"]["type"], expected_type)
+
+            records = self.load_asset_records(tmpdir)
+            self.assertEqual([record["type"] for record in records], ["image", "video", "audio"])
+
+    def test_upload_with_enabled_storage_bucket_creates_asset_record(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bucket = FakeStorageBucketService()
+            registry = self.make_asset_registry(tmpdir)
+            service = self.make_service(tmpdir, storage_bucket_service=bucket, asset_registry_service=registry)
+            handler = FakeHandler(
+                b"upload-bytes",
+                path="/api/upload?filename=sample.png",
+                headers={"Content-Type": "image/png"},
+            )
+
+            result = service._handle_upload(handler)
+
+            self.assertEqual(result["kind"], "json_ok")
+            payload = result["data"]
+            self.assertTrue(payload.get("assetId"))
+            self.assertEqual(payload["asset"]["type"], "image")
+            self.assertEqual(payload["asset"]["url"], "https://cdn.example.com/ai-canvas/sample.png")
+            self.assertEqual(payload["asset"]["localPath"], "data/uploads/sample.png")
+            records = self.load_asset_records(tmpdir)
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["assetId"], payload["assetId"])
 
     def test_storage_connection_uses_request_bucket_and_runs_full_probe_checks(self):
         class FakeResponse:

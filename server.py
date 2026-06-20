@@ -49,6 +49,7 @@ from backend.services.config_route_service import ConfigRouteService
 from backend.services.json_file_route_service import JsonFileRouteService
 from backend.services.library_file_route_service import LibraryFileRouteService
 from backend.services.media_file_route_service import MediaFileRouteService
+from backend.services.asset_registry_service import AssetRegistryService
 from backend.services.storage_bucket_service import StorageBucketService
 from backend.services.local_media_processing_route_service import LocalMediaProcessingRouteService
 from backend.services.remote_proxy_route_service import RemoteProxyRouteService
@@ -1010,7 +1011,7 @@ def _get_file_save_migration_status(job_id):
 def _refresh_storage_globals(paths):
     global USER_DIR, CANVAS_DIR, DATA_DIR, UPLOADS_DIR, ASSETS_DIR, ASSET_THUMBS_DIR
     global WORKFLOWS_DIR, WORKFLOW_THUMBS_DIR, OUTPUT_DIR, CONFIG_FILE, SETTINGS_FILE
-    global GEN_SEQ_STATE_FILE, DREAMINA_CLI_SERVICE, DREAMINA_ROUTE_SERVICE
+    global GEN_SEQ_STATE_FILE, DREAMINA_CLI_SERVICE, DREAMINA_ROUTE_SERVICE, ASSET_REGISTRY_SERVICE
     USER_DIR = os.path.abspath(paths["userDir"])
     CANVAS_DIR = os.path.abspath(paths.get("canvasDir") or DEFAULT_CANVAS_DIR)
     DATA_DIR = os.path.abspath(paths["dataDir"])
@@ -1023,6 +1024,8 @@ def _refresh_storage_globals(paths):
     CONFIG_FILE = os.path.join(USER_DIR, "config.json")
     SETTINGS_FILE = os.path.join(USER_DIR, "settings.json")
     GEN_SEQ_STATE_FILE = os.path.join(OUTPUT_DIR, ".gen_seq_state.json")
+    if "ASSET_REGISTRY_SERVICE" in globals():
+        ASSET_REGISTRY_SERVICE.assets_file_path = os.path.abspath(os.path.join(USER_DIR, "assets.json"))
     try:
         DREAMINA_CLI_SERVICE = DreaminaCliService(
             CONFIG_FILE,
@@ -1962,6 +1965,11 @@ STORAGE_BUCKET_SERVICE = StorageBucketService(
 )
 
 
+ASSET_REGISTRY_SERVICE = AssetRegistryService(
+    assets_file_path=os.path.join(USER_DIR, "assets.json"),
+)
+
+
 MEDIA_FILE_ROUTE_SERVICE = MediaFileRouteService(
     directory=DIRECTORY,
     uploads_dir_getter=lambda: UPLOADS_DIR,
@@ -1980,6 +1988,7 @@ MEDIA_FILE_ROUTE_SERVICE = MediaFileRouteService(
     image_derivative_thumb_quality=IMAGE_DERIVATIVE_THUMB_QUALITY,
     image_derivative_root_dirname=IMAGE_DERIVATIVE_ROOT_DIRNAME,
     storage_bucket_service=STORAGE_BUCKET_SERVICE,
+    asset_registry_service=ASSET_REGISTRY_SERVICE,
 )
 
 

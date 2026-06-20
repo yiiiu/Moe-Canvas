@@ -44,6 +44,7 @@ class MediaFileRouteService:
         image_derivative_thumb_quality=70,
         image_derivative_root_dirname="_derived",
         storage_bucket_service=None,
+        asset_registry_service=None,
     ):
         self.directory = os.path.abspath(directory)
         self._get_uploads_dir = uploads_dir_getter
@@ -51,6 +52,7 @@ class MediaFileRouteService:
         self._get_assets_dir = assets_dir_getter or (lambda: os.path.join(self.directory, "data", "assets"))
         self._get_output_dir = output_dir_getter
         self.storage_bucket_service = storage_bucket_service
+        self.asset_registry_service = asset_registry_service
         self.max_upload_bytes = int(max_upload_bytes or 0)
         self._next_output_filename = next_output_filename
         self._load_json_file = load_json_file
@@ -218,12 +220,66 @@ class MediaFileRouteService:
         next_payload["storage"] = "s3-compatible"
         next_payload["storageKey"] = str(storage_result.get("key") or "")
         next_payload["storageBucket"] = str(storage_result.get("bucket") or "")
+        if storage_result.get("endpoint") is not None:
+            next_payload["storageEndpoint"] = str(storage_result.get("endpoint") or "")
         if storage_result.get("size") is not None:
             try:
                 next_payload["size"] = int(storage_result.get("size") or 0)
             except Exception:
                 pass
         return next_payload
+
+    def _asset_type_from_filename(self, filename):
+        kind = self._classify_media_kind(filename)
+        return kind if kind in ("image", "video", "audio") else "file"
+
+    def _register_saved_asset(self, payload, abs_path, local_path, *, storage_result=None, request_meta=None):
+        registry = getattr(self, "asset_registry_service", None)
+        if not registry or not isinstance(payload, dict):
+            return payload
+        if payload.get("success") is False:
+            return payload
+        request_meta = request_meta if isinstance(request_meta, dict) else {}
+        storage_result = storage_result if isinstance(storage_result, dict) else {}
+        filename = str(payload.get("filename") or os.path.basename(str(local_path or "")) or "")
+        storage_type = "s3-compatible" if str(payload.get("storage") or "") == "s3-compatible" else "local"
+        try:
+            size = int(payload.get("size") or storage_result.get("size") or os.path.getsize(abs_path))
+        except Exception:
+            size = 0
+        asset = registry.create_ready_asset(
+            {
+                "type": self._asset_type_from_filename(filename or local_path),
+                "url": str(payload.get("url") or f"/{local_path}"),
+                "localPath": str(local_path or payload.get("localPath") or ""),
+                "objectKey": str(payload.get("storageKey") or storage_result.get("key") or ""),
+                "storage": {
+                    "type": storage_type,
+                    "bucket": str(payload.get("storageBucket") or storage_result.get("bucket") or ""),
+                    "endpoint": str(payload.get("storageEndpoint") or storage_result.get("endpoint") or ""),
+                },
+                "runtimeTaskId": request_meta.get("runtimeTaskId"),
+                "nodeId": request_meta.get("nodeId"),
+                "canvasId": request_meta.get("canvasId"),
+                "provider": request_meta.get("provider"),
+                "mimeType": str(payload.get("mimeType") or mimetypes.guess_type(filename or local_path)[0] or ""),
+                "size": size,
+            }
+        )
+        next_payload = dict(payload)
+        next_payload["assetId"] = asset.get("assetId")
+        next_payload["asset"] = asset
+        return next_payload
+
+    @staticmethod
+    def _extract_asset_request_meta(source):
+        data = source if isinstance(source, dict) else {}
+        result = {}
+        for key in ("runtimeTaskId", "nodeId", "canvasId", "provider"):
+            value = str(data.get(key) or "").strip()
+            if value:
+                result[key] = value
+        return result
 
     @staticmethod
     def _hash_dedupe_key(value):
@@ -571,6 +627,7 @@ class MediaFileRouteService:
                 "filename": safe_fn,
                 "storedFilename": stored_fn,
             }
+            storage_result = None
             if self._storage_bucket_enabled():
                 try:
                     storage_result = self._upload_to_storage_bucket(
@@ -582,13 +639,19 @@ class MediaFileRouteService:
                 except Exception as exc:
                     return self._json_err(502, self._storage_bucket_upload_error(exc))
                 payload = self._apply_storage_bucket_result(payload, storage_result)
-            return self._json_ok(
-                self.augment_saved_media_response(
-                    payload,
-                    fpath,
-                    local_path,
-                )
+            payload = self.augment_saved_media_response(
+                payload,
+                fpath,
+                local_path,
             )
+            payload = self._register_saved_asset(
+                payload,
+                fpath,
+                local_path,
+                storage_result=storage_result,
+                request_meta=self._extract_asset_request_meta({key: qs.get(key, [""])[0] for key in ("runtimeTaskId", "nodeId", "canvasId", "provider")}),
+            )
+            return self._json_ok(payload)
         except Exception as exc:
             return self._json_err(500, f"Upload failed: {str(exc)}")
 
@@ -669,6 +732,7 @@ class MediaFileRouteService:
             with open(fpath, "wb") as file:
                 file.write(body)
 
+            storage_result = None
             if self._storage_bucket_enabled():
                 try:
                     storage_result = self._upload_to_storage_bucket(
@@ -679,18 +743,24 @@ class MediaFileRouteService:
                     )
                 except Exception as exc:
                     return self._json_err(502, self._storage_bucket_upload_error(exc))
-                return self._json_ok(
-                    self._apply_storage_bucket_result(
-                        {
-                            "success": True,
-                            "filename": filename,
-                            "path": rel_path,
-                            "localPath": rel_path,
-                            "url": f"/{rel_path}",
-                        },
-                        storage_result,
-                    )
+                payload = self._apply_storage_bucket_result(
+                    {
+                        "success": True,
+                        "filename": filename,
+                        "path": rel_path,
+                        "localPath": rel_path,
+                        "url": f"/{rel_path}",
+                    },
+                    storage_result,
                 )
+                payload = self._register_saved_asset(
+                    payload,
+                    fpath,
+                    rel_path,
+                    storage_result=storage_result,
+                    request_meta=self._extract_asset_request_meta({key: qs.get(key, [""])[0] for key in ("runtimeTaskId", "nodeId", "canvasId", "provider")}),
+                )
+                return self._json_ok(payload)
 
             if kind:
                 meta_file = os.path.join(self._output_dir(), ".output_meta.json")
@@ -713,19 +783,24 @@ class MediaFileRouteService:
                 except Exception:
                     pass
 
-            return self._json_ok(
-                self.augment_saved_media_response(
-                    {
-                        "success": True,
-                        "filename": filename,
-                        "path": rel_path,
-                        "localPath": rel_path,
-                        "url": f"/{rel_path}",
-                    },
-                    fpath,
-                    rel_path,
-                )
+            payload = self.augment_saved_media_response(
+                {
+                    "success": True,
+                    "filename": filename,
+                    "path": rel_path,
+                    "localPath": rel_path,
+                    "url": f"/{rel_path}",
+                },
+                fpath,
+                rel_path,
             )
+            payload = self._register_saved_asset(
+                payload,
+                fpath,
+                rel_path,
+                request_meta=self._extract_asset_request_meta({key: qs.get(key, [""])[0] for key in ("runtimeTaskId", "nodeId", "canvasId", "provider")}),
+            )
+            return self._json_ok(payload)
         except Exception as exc:
             return self._json_err(500, f"save_output failed: {str(exc)}")
 
@@ -854,20 +929,25 @@ class MediaFileRouteService:
         if isinstance(dedupe_owner, tuple):
             rel_path, cached_path = dedupe_owner
             filename = os.path.basename(cached_path)
-            return self._json_ok(
-                self.augment_saved_media_response(
-                    {
-                        "success": True,
-                        "filename": filename,
-                        "path": rel_path,
-                        "localPath": rel_path,
-                        "url": f"/{rel_path}",
-                        "deduped": True,
-                    },
-                    cached_path,
-                    rel_path,
-                )
+            payload = self.augment_saved_media_response(
+                {
+                    "success": True,
+                    "filename": filename,
+                    "path": rel_path,
+                    "localPath": rel_path,
+                    "url": f"/{rel_path}",
+                    "deduped": True,
+                },
+                cached_path,
+                rel_path,
             )
+            payload = self._register_saved_asset(
+                payload,
+                cached_path,
+                rel_path,
+                request_meta=self._extract_asset_request_meta(data),
+            )
+            return self._json_ok(payload)
 
         try:
             max_bytes = int(data.get("maxBytes") or 1024 * 1024 * 300)
@@ -917,6 +997,7 @@ class MediaFileRouteService:
                 "localPath": rel_path,
                 "url": f"/{rel_path}",
             }
+            storage_result = None
             if self._storage_bucket_enabled():
                 try:
                     with open(fpath, "rb") as saved_file:
@@ -930,13 +1011,19 @@ class MediaFileRouteService:
                 except Exception as exc:
                     return self._json_err(502, self._storage_bucket_upload_error(exc))
                 payload = self._apply_storage_bucket_result(payload, storage_result)
-            return self._json_ok(
-                self.augment_saved_media_response(
-                    payload,
-                    fpath,
-                    rel_path,
-                )
+            payload = self.augment_saved_media_response(
+                payload,
+                fpath,
+                rel_path,
             )
+            payload = self._register_saved_asset(
+                payload,
+                fpath,
+                rel_path,
+                storage_result=storage_result,
+                request_meta=self._extract_asset_request_meta(data),
+            )
+            return self._json_ok(payload)
         finally:
             self._finish_save_output_from_url_owner(dedupe_hash, dedupe_owner)
 

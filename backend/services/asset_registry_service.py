@@ -116,3 +116,28 @@ class AssetRegistryService:
         registry["assets"].append(record)
         self._save(registry)
         return record
+
+    def get_asset(self, asset_id):
+        target = self._text(asset_id)
+        if not target:
+            return None
+        registry = self._load()
+        for record in registry.get("assets", []):
+            if not isinstance(record, dict):
+                continue
+            if self._text(record.get("assetId")) == target:
+                return self._sanitize_mapping(record)
+        return None
+
+    def get_assets(self, asset_ids):
+        result = []
+        seen = set()
+        for value in asset_ids if isinstance(asset_ids, (list, tuple)) else []:
+            asset_id = self._text(value)
+            if not asset_id or asset_id in seen:
+                continue
+            seen.add(asset_id)
+            asset = self.get_asset(asset_id)
+            if asset:
+                result.append(asset)
+        return result

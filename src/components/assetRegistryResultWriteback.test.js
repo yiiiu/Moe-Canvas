@@ -39,3 +39,16 @@ test('generation result renderers copy assetId to node data patch without changi
   assert.equal(audioPatch.assetId, 'asset_audio');
   assert.equal(audioPatch.asset.assetId, 'asset_audio');
 });
+
+test('image result renderer uses embedded asset url as legacy imageUrl when imageUrl is missing', () => {
+  const patch = buildImageGenerationResultPatch({
+    assetId: 'asset_image_url_only',
+    asset: { assetId: 'asset_image_url_only', type: 'image', url: 'https://cdn.example.com/image-only-asset.png' },
+    localPath: 'output/image-only-asset.png',
+  });
+
+  assert.equal(patch.imageUrl, 'https://cdn.example.com/image-only-asset.png');
+  assert.equal(patch.assetId, 'asset_image_url_only');
+  assert.equal(patch.asset.url, 'https://cdn.example.com/image-only-asset.png');
+  assert.equal(patch.localPath, 'output/image-only-asset.png');
+});

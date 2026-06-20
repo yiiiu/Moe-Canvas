@@ -3,6 +3,7 @@ import os
 import re
 from urllib.parse import parse_qs, unquote, urlparse
 
+from backend.services.asset_registry_service import AssetRegistryService
 from backend.services.media_file_route_service import MediaFileRouteService
 
 
@@ -156,6 +157,95 @@ class JsonFileRouteService:
         return MediaFileRouteService.normalize_virtual_local_path(value)
 
     @classmethod
+    def _asset_registry_match_keys(cls, value):
+        text = str(value or "").strip()
+        if not text:
+            return []
+        normalized = cls._normalize_virtual_path(text)
+        keys = {text, text.replace("\\", "/")}
+        if normalized:
+            keys.add(normalized)
+            keys.add("/" + normalized.lstrip("/"))
+        return [key for key in keys if key]
+
+    @classmethod
+    def _asset_registry_record_keys(cls, record):
+        keys = []
+        for key in ("url", "localPath", "objectKey"):
+            keys.extend(cls._asset_registry_match_keys(record.get(key) if isinstance(record, dict) else ""))
+        return keys
+
+    @classmethod
+    def _generation_history_node_match_keys(cls, history_asset, item, node_data):
+        keys = []
+        for source in (history_asset, item, node_data):
+            if not isinstance(source, dict):
+                continue
+            for key in (
+                "url",
+                "coverUrl",
+                "localPath",
+                "originalLocalPath",
+                "displayLocalPath",
+                "imageUrl",
+                "videoUrl",
+                "audioUrl",
+                "src",
+                "thumbUrl",
+                "thumbnailUrl",
+                "thumbSrc",
+            ):
+                keys.extend(cls._asset_registry_match_keys(source.get(key)))
+        return keys
+
+    def _load_ready_asset_registry_index(self):
+        registry_path = os.path.join(self._get_user_dir(), "assets.json")
+        registry = AssetRegistryService(assets_file_path=registry_path)._load()
+        index = {}
+        for record in registry.get("assets", []):
+            if not isinstance(record, dict):
+                continue
+            if str(record.get("status") or "").strip() != "ready":
+                continue
+            sanitized = AssetRegistryService._sanitize_mapping(record)
+            if not sanitized.get("assetId"):
+                continue
+            for key in self._asset_registry_record_keys(sanitized):
+                index.setdefault(key, sanitized)
+        return index
+
+    def _enrich_generation_history_assets_with_asset_records(self, assets):
+        if not isinstance(assets, list):
+            return assets
+        asset_index = self._load_ready_asset_registry_index()
+        if not asset_index:
+            return assets
+        for history_asset in assets:
+            if not isinstance(history_asset, dict):
+                continue
+            if str(history_asset.get("kind") or "").strip() != "generation-history":
+                continue
+            items = history_asset.get("items")
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                node_data = item.get("nodeData")
+                if not isinstance(node_data, dict):
+                    continue
+                matched_asset = None
+                for key in self._generation_history_node_match_keys(history_asset, item, node_data):
+                    matched_asset = asset_index.get(key)
+                    if matched_asset:
+                        break
+                if not matched_asset:
+                    continue
+                node_data["assetId"] = matched_asset.get("assetId")
+                node_data["asset"] = matched_asset
+        return assets
+
+    @classmethod
     def _asset_primary_media_paths(cls, asset):
         paths = []
 
@@ -233,7 +323,9 @@ class JsonFileRouteService:
         return True
 
     def _list_assets(self, handler, path):
-        assets = self._list_json_objects(self._get_assets_dir(), id_from_filename=True)
+        assets = self._enrich_generation_history_assets_with_asset_records(
+            self._list_json_objects(self._get_assets_dir(), id_from_filename=True)
+        )
         raw_query = getattr(handler, "path", path) if handler is not None else path
         query = parse_qs(urlparse(str(raw_query or "")).query, keep_blank_values=True)
         if not query:

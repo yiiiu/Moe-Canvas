@@ -2667,6 +2667,32 @@ def _resolve_local_virtual_path(src_path):
     return MEDIA_FILE_ROUTE_SERVICE.resolve_local_virtual_path(src_path)
 
 
+def _handle_asset_get_request(handler, path):
+    prefix = "/api/v2/assets/"
+    asset_id = urllib.parse.unquote(str(path or "")[len(prefix):]).strip()
+    if not asset_id or "/" in asset_id:
+        _json_err(handler, 400, "Invalid assetId")
+        return True
+    asset = ASSET_REGISTRY_SERVICE.get_asset(asset_id)
+    if not asset:
+        _json_err(handler, 404, "Asset not found")
+        return True
+    _json_ok(handler, {"success": True, "asset": asset})
+    return True
+
+
+def _handle_asset_batch_request(handler):
+    try:
+        payload = json.loads(_read_body(handler) or b"{}")
+    except Exception:
+        _json_err(handler, 400, "Invalid JSON")
+        return True
+    asset_ids = payload.get("assetIds") if isinstance(payload, dict) else []
+    assets = ASSET_REGISTRY_SERVICE.get_assets(asset_ids)
+    _json_ok(handler, {"success": True, "assets": assets})
+    return True
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
@@ -2838,6 +2864,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             _json_ok(self, _get_local_proxy_task_from_request(self))
             return
 
+        if path.startswith("/api/v2/assets/") and path != "/api/v2/assets/batch":
+            if _handle_asset_get_request(self, path):
+                return
+
         if HTTP_ROUTE_DISPATCHER.handle_get(self, path):
             return
 
@@ -2871,6 +2901,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         path = self.path.split("?")[0]
         if not _enforce_local_api_access(self, path):
             return
+
+        if path == "/api/v2/assets/batch":
+            if _handle_asset_batch_request(self):
+                return
 
         if HTTP_ROUTE_DISPATCHER.handle_post(self, path):
             return

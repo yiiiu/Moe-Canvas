@@ -18714,6 +18714,80 @@ html[data-app-theme="dawn"] #appThemeGroup .cursor-size-btn[data-app-theme="dawn
 .settings-file-migration-error:last-child {
   border-bottom: 0;
 }
+.settings-storage-usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+.settings-storage-usage-card[data-tone="warning"] {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.08);
+}
+.settings-storage-usage-card[data-tone="danger"] {
+  border-color: rgba(239, 68, 68, 0.62);
+  background: rgba(239, 68, 68, 0.08);
+}
+.settings-storage-usage-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+.settings-storage-usage-percent {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--stroke-08);
+  border-radius: var(--radius-8);
+  background: var(--white-06);
+  color: var(--text-primary);
+  font-size: var(--font-13);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+.settings-storage-usage-card[data-tone="warning"] .settings-storage-usage-percent {
+  color: #f59e0b;
+}
+.settings-storage-usage-card[data-tone="danger"] .settings-storage-usage-percent {
+  color: #ef4444;
+}
+.settings-storage-usage-main,
+.settings-storage-usage-breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-10);
+}
+.settings-storage-usage-metric,
+.settings-storage-usage-breakdown > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-10);
+  min-width: 0;
+  padding: var(--space-10) var(--space-12);
+  border: 1px solid var(--stroke-08);
+  border-radius: var(--radius-8);
+  background: var(--white-03);
+}
+.settings-storage-usage-metric strong,
+.settings-storage-usage-breakdown strong {
+  flex-shrink: 0;
+  color: var(--text-primary);
+  font-size: var(--font-14);
+}
+.settings-storage-usage-breakdown span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-storage-usage-status {
+  min-height: 18px;
+}
+.settings-storage-usage-block-mode {
+  color: var(--text-muted);
+}
 .settings-local-cleanup-card[hidden] {
   display: none;
 }

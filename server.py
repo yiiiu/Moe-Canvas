@@ -52,6 +52,7 @@ from backend.services.media_file_route_service import MediaFileRouteService
 from backend.services.asset_registry_service import AssetRegistryService
 from backend.services.asset_usage_index_service import AssetUsageIndexService
 from backend.services.asset_lifecycle_service import AssetLifecycleService
+from backend.services.storage_usage_service import StorageUsageService
 from backend.services.storage_bucket_service import StorageBucketService
 from backend.services.local_media_processing_route_service import LocalMediaProcessingRouteService
 from backend.services.remote_proxy_route_service import RemoteProxyRouteService
@@ -1984,6 +1985,12 @@ ASSET_LIFECYCLE_SERVICE = AssetLifecycleService(
 )
 
 
+STORAGE_USAGE_SERVICE = StorageUsageService(
+    assets_file_path=os.path.join(USER_DIR, "assets.json"),
+    settings_file_getter=lambda: os.path.join(USER_DIR, "settings.json"),
+)
+
+
 MEDIA_FILE_ROUTE_SERVICE = MediaFileRouteService(
     directory=DIRECTORY,
     uploads_dir_getter=lambda: UPLOADS_DIR,
@@ -2755,6 +2762,14 @@ def _handle_asset_delete_request(handler):
     return True
 
 
+def _handle_storage_usage_get_request(handler):
+    try:
+        _json_ok(handler, STORAGE_USAGE_SERVICE.get_storage_usage())
+    except Exception as exc:
+        _json_err(handler, 500, str(exc))
+    return True
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
@@ -2925,6 +2940,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/v2/proxy/local-task":
             _json_ok(self, _get_local_proxy_task_from_request(self))
             return
+
+        if path == "/api/v2/storage/usage":
+            if _handle_storage_usage_get_request(self):
+                return
 
         if path.startswith("/api/v2/assets/usage/"):
             if _handle_asset_usage_get_request(self, path):

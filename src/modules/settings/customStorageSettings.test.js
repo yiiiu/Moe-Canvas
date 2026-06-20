@@ -68,6 +68,7 @@ test('custom storage settings merge into existing user settings without dropping
     {
       theme: 'dark',
       fileSavePaths: { outputDir: 'D:/output' },
+      storageQuota: { enabled: true, limitBytes: 2147483648, warningPercent: 80, blockWhenExceeded: false },
       customStorage: { enabled: false, activeBucketId: '', buckets: [] },
     },
     {
@@ -93,6 +94,7 @@ test('custom storage settings merge into existing user settings without dropping
 
   assert.equal(merged.theme, 'dark');
   assert.deepEqual(merged.fileSavePaths, { outputDir: 'D:/output' });
+  assert.deepEqual(merged.storageQuota, { enabled: true, limitBytes: 2147483648, warningPercent: 80, blockWhenExceeded: false });
   assert.equal(merged.customStorage.enabled, true);
   assert.equal(merged.customStorage.buckets[0].providerType, 's3-compatible');
   assert.equal(merged.customStorage.buckets[0].prefix, 'media/');

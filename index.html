@@ -1953,6 +1953,55 @@
                 </div>
               </div>
               <div
+                class="settings-section settings-card settings-storage-usage-card"
+                id="storageUsageCard"
+                data-tone="normal"
+              >
+                <div class="settings-storage-usage-head">
+                  <div>
+                    <div class="settings-label">存储用量与配额</div>
+                    <div class="settings-desc">
+                      基于 Asset Registry 统计当前占用。第一版只展示提醒，不自动删除、不阻断生成或上传。
+                    </div>
+                  </div>
+                  <div class="settings-storage-usage-percent" id="storageUsagePercent">
+                    配额未启用
+                  </div>
+                </div>
+                <div class="settings-storage-usage-main">
+                  <div class="settings-storage-usage-metric">
+                    <span class="settings-desc">当前用量</span>
+                    <strong id="storageUsageTotal">0 B</strong>
+                  </div>
+                  <div class="settings-storage-usage-metric">
+                    <span class="settings-desc">配额上限</span>
+                    <strong id="storageUsageQuotaLimit">未启用</strong>
+                  </div>
+                  <div class="settings-storage-usage-metric">
+                    <span class="settings-desc">本地存储</span>
+                    <strong id="storageUsageLocal">0 B</strong>
+                  </div>
+                  <div class="settings-storage-usage-metric">
+                    <span class="settings-desc">S3-compatible</span>
+                    <strong id="storageUsageS3Compatible">0 B</strong>
+                  </div>
+                </div>
+                <div class="settings-storage-usage-breakdown">
+                  <div><span>图片</span><strong id="storageUsageTypeImage">0 B</strong></div>
+                  <div><span>视频</span><strong id="storageUsageTypeVideo">0 B</strong></div>
+                  <div><span>音频</span><strong id="storageUsageTypeAudio">0 B</strong></div>
+                  <div><span>文件</span><strong id="storageUsageTypeFile">0 B</strong></div>
+                  <div><span>孤儿资源占用</span><strong id="storageUsageOrphan">0 B</strong></div>
+                  <div><span>已删除记录</span><strong id="storageUsageDeleted">0 B</strong></div>
+                </div>
+                <div class="settings-desc settings-storage-usage-status" id="storageUsageStatus" aria-live="polite">
+                  正在加载存储用量...
+                </div>
+                <div class="settings-desc settings-storage-usage-block-mode" id="storageUsageBlockMode">
+                  超额阻断：关闭
+                </div>
+              </div>
+              <div
                 class="settings-section settings-card settings-custom-storage-card"
                 id="customStorageSettingsCard"
               >

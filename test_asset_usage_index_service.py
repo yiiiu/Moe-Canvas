@@ -148,6 +148,41 @@ class AssetUsageIndexServiceTest(unittest.TestCase):
         self.assertEqual(len(summary["warnings"]), 1)
         self.assertIn("broken.json", summary["warnings"][0]["projectFile"])
 
+    def test_rebuild_usage_index_preserves_deleted_lifecycle_status(self):
+        self._write_json(
+            self.assets_file,
+            {
+                "version": 1,
+                "assets": [
+                    {
+                        "assetId": "asset_deleted",
+                        "type": "image",
+                        "url": "/output/deleted.png",
+                        "objectKey": "media/deleted.png",
+                        "storage": {"type": "s3-compatible", "bucket": "safe"},
+                        "usage": {"usageCount": 0, "references": []},
+                        "lifecycleStatus": "deleted",
+                        "deletedAt": 123,
+                        "deleteMode": "manual",
+                    }
+                ],
+            },
+        )
+        self._write_json(
+            os.path.join(self.canvas_dir, "project-deleted.json"),
+            {"nodes": [{"id": "node_deleted", "type": "source-image", "assetId": "asset_deleted"}]},
+        )
+
+        summary = self._service().rebuild_usage_index()
+        asset = self._read_assets()["assets"][0]
+
+        self.assertEqual(summary["usedAssets"], 0)
+        self.assertEqual(summary["orphanAssets"], 0)
+        self.assertEqual(asset["lifecycleStatus"], "deleted")
+        self.assertEqual(asset["deletedAt"], 123)
+        self.assertEqual(asset["deleteMode"], "manual")
+        self.assertEqual(asset["usage"]["usageCount"], 0)
+
     def test_usage_and_orphan_queries_return_sanitized_payloads(self):
         self._write_json(
             self.assets_file,

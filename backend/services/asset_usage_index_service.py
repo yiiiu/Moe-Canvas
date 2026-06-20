@@ -115,6 +115,8 @@ class AssetUsageIndexService:
         assets = [asset for asset in registry.get("assets", []) if isinstance(asset, dict)]
         asset_by_id = {}
         for asset in assets:
+            if self._text(asset.get("lifecycleStatus")) == "deleted":
+                continue
             asset_id = self._text(asset.get("assetId"))
             if asset_id and asset_id not in asset_by_id:
                 asset_by_id[asset_id] = asset
@@ -157,7 +159,8 @@ class AssetUsageIndexService:
         orphan_assets = 0
         for asset in assets:
             asset_id = self._text(asset.get("assetId"))
-            references = references_by_asset_id.get(asset_id, [])
+            is_deleted = self._text(asset.get("lifecycleStatus")) == "deleted"
+            references = [] if is_deleted else references_by_asset_id.get(asset_id, [])
             usage_count = len(references)
             last_used_at = now if usage_count else int(asset.get("lastUsedAt") or 0)
             asset["usage"] = {
@@ -167,6 +170,8 @@ class AssetUsageIndexService:
             }
             asset["lastScannedAt"] = now
             asset["lastUsedAt"] = last_used_at
+            if is_deleted:
+                continue
             if usage_count:
                 asset["lifecycleStatus"] = "active"
                 used_assets += 1

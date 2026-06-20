@@ -51,6 +51,7 @@ from backend.services.library_file_route_service import LibraryFileRouteService
 from backend.services.media_file_route_service import MediaFileRouteService
 from backend.services.asset_registry_service import AssetRegistryService
 from backend.services.asset_usage_index_service import AssetUsageIndexService
+from backend.services.asset_lifecycle_service import AssetLifecycleService
 from backend.services.storage_bucket_service import StorageBucketService
 from backend.services.local_media_processing_route_service import LocalMediaProcessingRouteService
 from backend.services.remote_proxy_route_service import RemoteProxyRouteService
@@ -1975,6 +1976,14 @@ ASSET_REGISTRY_SERVICE = AssetRegistryService(
 )
 
 
+ASSET_LIFECYCLE_SERVICE = AssetLifecycleService(
+    assets_file_path=os.path.join(USER_DIR, "assets.json"),
+    canvas_dir_getter=lambda: CANVAS_DIR,
+    storage_bucket_service=STORAGE_BUCKET_SERVICE,
+    local_root_dir=DIRECTORY,
+)
+
+
 MEDIA_FILE_ROUTE_SERVICE = MediaFileRouteService(
     directory=DIRECTORY,
     uploads_dir_getter=lambda: UPLOADS_DIR,
@@ -2726,6 +2735,26 @@ def _handle_asset_orphans_get_request(handler):
     return True
 
 
+def _handle_asset_cleanup_candidates_get_request(handler):
+    _json_ok(handler, {"success": True, "assets": ASSET_LIFECYCLE_SERVICE.list_cleanup_candidates()})
+    return True
+
+
+def _handle_asset_delete_request(handler):
+    try:
+        payload = json.loads(_read_body(handler) or b"{}")
+    except Exception:
+        _json_err(handler, 400, "Invalid JSON")
+        return True
+    if not isinstance(payload, dict):
+        _json_err(handler, 400, "Invalid JSON")
+        return True
+    asset_ids = payload.get("assetIds") if isinstance(payload.get("assetIds"), list) else []
+    dry_run = payload.get("dryRun") is not False
+    _json_ok(handler, ASSET_LIFECYCLE_SERVICE.delete_assets(asset_ids, dry_run=dry_run))
+    return True
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
@@ -2905,6 +2934,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if _handle_asset_orphans_get_request(self):
                 return
 
+        if path == "/api/v2/assets/cleanup-candidates":
+            if _handle_asset_cleanup_candidates_get_request(self):
+                return
+
         if path.startswith("/api/v2/assets/") and path != "/api/v2/assets/batch":
             if _handle_asset_get_request(self, path):
                 return
@@ -2949,6 +2982,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/v2/assets/rebuild-usage-index":
             if _handle_asset_rebuild_usage_index_request(self):
+                return
+
+        if path == "/api/v2/assets/delete":
+            if _handle_asset_delete_request(self):
                 return
 
         if HTTP_ROUTE_DISPATCHER.handle_post(self, path):

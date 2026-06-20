@@ -284,6 +284,23 @@ class StorageBucketService:
             "contentType": content_type or "application/octet-stream",
         }
 
+    def delete_object(self, object_key, bucket_name=""):
+        bucket = self.validate_bucket(self.active_bucket())
+        key = self._text(object_key)
+        if not key:
+            raise StorageBucketConfigError("缺少 objectKey")
+        expected_bucket = self._text(bucket_name)
+        if expected_bucket and expected_bucket != self._text(bucket.get("bucket")):
+            raise StorageBucketConfigError("存储桶不匹配")
+        try:
+            with urllib.request.urlopen(self._signed_delete_request(bucket, key), timeout=120) as response:
+                status = int(getattr(response, "status", 200) or 200)
+                if status >= 400:
+                    raise RuntimeError(f"HTTP {status}")
+        except Exception as exc:
+            raise RuntimeError(self._classify_request_error(exc, bucket, operation="delete")) from exc
+        return {"success": True, "key": key, "bucket": bucket.get("bucket")}
+
     def _request_success(self, request, *, timeout=30, expected_body=None):
         with urllib.request.urlopen(request, timeout=timeout) as response:
             status = int(getattr(response, "status", 200) or 200)

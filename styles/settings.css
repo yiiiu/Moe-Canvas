@@ -284,15 +284,22 @@ body.dev-mode .settings-card.dev-mode-only {
   gap: var(--space-4);
   padding: var(--space-3) var(--space-8);
   border-radius: var(--radius-6);
-  background: var(--action-btn-bg);
-  border: 1px solid var(--action-btn-bg);
-  color: var(--text-on-icon-badge);
+  background: var(--blue-10);
+  border: 1px solid var(--blue-25);
+  color: var(--blue);
   font-size: var(--font-11);
   text-decoration: none;
-  transition: background 0.15s;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
-.settings-getkey:hover {
-  background: var(--action-btn-hover-bg);
+.settings-getkey:hover,
+.settings-getkey:focus-visible {
+  background: var(--blue-15);
+  border-color: var(--blue-40);
+  color: var(--blue);
+  outline: 0;
 }
 .settings-getkey--muted {
   background: var(--white-05);
@@ -338,6 +345,62 @@ body.dev-mode .settings-card.dev-mode-only {
 }
 .settings-save-row {
   gap: var(--space-8);
+}
+.settings-save-btn {
+  padding: 9px 22px;
+  border: 1px solid var(--settings-save-btn-border, var(--indigo-30));
+  border-radius: 9px;
+  background: var(--settings-save-btn-bg, var(--indigo-15));
+  color: var(--settings-save-btn-color, var(--indigo-text));
+  font-size: var(--font-13);
+  font-weight: 700;
+  font-family: inherit;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.15s ease;
+  box-shadow: var(--settings-save-btn-shadow, none);
+}
+.settings-save-btn:hover,
+.settings-save-btn:focus-visible {
+  background: var(--settings-save-btn-bg-hover, var(--indigo-25));
+  border-color: var(--settings-save-btn-border-hover, var(--indigo-40));
+  color: var(--settings-save-btn-color-hover, var(--indigo-text));
+  transform: translateY(-1px);
+  box-shadow: var(--settings-save-btn-shadow-hover, none);
+  outline: 0;
+}
+:is(html[data-theme="light"], html.is-canvas-theme-light) .settings-save-btn {
+  --settings-save-btn-border: rgba(217, 119, 6, 0.26);
+  --settings-save-btn-bg: rgba(245, 158, 11, 0.14);
+  --settings-save-btn-color: #b45309;
+  --settings-save-btn-shadow: none;
+  --settings-save-btn-border-hover: rgba(217, 119, 6, 0.36);
+  --settings-save-btn-bg-hover: rgba(245, 158, 11, 0.22);
+  --settings-save-btn-color-hover: #92400e;
+  --settings-save-btn-shadow-hover: none;
+}
+html[data-app-theme="dawn"] .settings-save-btn {
+  --settings-save-btn-border: rgba(139, 92, 246, 0.3);
+  --settings-save-btn-bg: rgba(139, 92, 246, 0.16);
+  --settings-save-btn-color: #c4b5fd;
+  --settings-save-btn-shadow: none;
+  --settings-save-btn-border-hover: rgba(139, 92, 246, 0.42);
+  --settings-save-btn-bg-hover: rgba(139, 92, 246, 0.24);
+  --settings-save-btn-color-hover: #ddd6fe;
+  --settings-save-btn-shadow-hover: none;
+}
+html[data-app-theme="day"] .settings-save-btn {
+  --settings-save-btn-border: rgba(217, 119, 6, 0.26);
+  --settings-save-btn-bg: rgba(245, 158, 11, 0.14);
+  --settings-save-btn-color: #b45309;
+  --settings-save-btn-shadow: none;
+  --settings-save-btn-border-hover: rgba(217, 119, 6, 0.36);
+  --settings-save-btn-bg-hover: rgba(245, 158, 11, 0.22);
+  --settings-save-btn-color-hover: #92400e;
+  --settings-save-btn-shadow-hover: none;
 }
 .settings-api-test-btn {
   display: inline-flex;
@@ -1332,7 +1395,10 @@ body.dev-mode .settings-card.dev-mode-only {
 .settings-retention-policy-status,
 .settings-retention-candidate-list,
 .settings-retention-scheduler,
-.settings-retention-scheduler-runs {
+.settings-retention-scheduler-runs,
+.settings-cleanup-queue,
+.settings-cleanup-queue-filters,
+.settings-cleanup-queue-list {
   grid-column: 1 / -1;
 }
 .settings-retention-policy-head {
@@ -1432,6 +1498,164 @@ body.dev-mode .settings-card.dev-mode-only {
 }
 .settings-retention-scheduler-run-item:last-child {
   border-bottom: 0;
+}
+.settings-cleanup-queue {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--stroke-08);
+}
+.settings-cleanup-queue-warning {
+  grid-column: 1 / -1;
+  padding: var(--space-10) var(--space-12);
+  border: 1px solid var(--warning-border, rgba(245, 158, 11, 0.35));
+  border-radius: var(--radius-8);
+  background: var(--warning-bg, rgba(245, 158, 11, 0.08));
+  color: var(--text-primary);
+}
+.settings-cleanup-queue-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.settings-cleanup-queue-summary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-cleanup-queue-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-10);
+}
+.settings-cleanup-select {
+  position: relative;
+  margin-top: var(--space-6);
+}
+.settings-cleanup-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 var(--space-12) 0 var(--space-14);
+  border: 1px solid rgba(200, 182, 255, 0.22);
+  border-radius: var(--radius-10, 10px);
+  background:
+    linear-gradient(135deg, rgba(99, 102, 241, 0.16), rgba(139, 92, 246, 0.08)),
+    rgba(38, 24, 34, 0.94);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.settings-cleanup-select-trigger:hover {
+  border-color: rgba(200, 182, 255, 0.34);
+  background-color: rgba(48, 30, 43, 0.98);
+}
+.settings-cleanup-select-trigger:focus-visible,
+.settings-cleanup-select[data-open="true"] .settings-cleanup-select-trigger {
+  border-color: rgba(139, 92, 246, 0.62);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.16);
+  outline: 0;
+}
+.settings-cleanup-select-caret {
+  width: 8px;
+  height: 8px;
+  margin-left: var(--space-10);
+  border-right: 2px solid rgba(247, 242, 255, 0.78);
+  border-bottom: 2px solid rgba(247, 242, 255, 0.78);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.16s ease;
+}
+.settings-cleanup-select[data-open="true"] .settings-cleanup-select-caret {
+  transform: rotate(225deg) translate(-2px, -1px);
+}
+.settings-cleanup-select-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  display: none;
+  overflow: hidden;
+  padding: var(--space-6);
+  border: 1px solid rgba(200, 182, 255, 0.2);
+  border-radius: var(--radius-10, 10px);
+  background: rgba(31, 20, 29, 0.98);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px);
+}
+.settings-cleanup-select[data-open="true"] .settings-cleanup-select-menu {
+  display: grid;
+  gap: var(--space-4);
+}
+.settings-cleanup-select-option {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 var(--space-10);
+  border: 0;
+  border-radius: var(--radius-8);
+  background: transparent;
+  color: rgba(247, 242, 255, 0.88);
+  font: inherit;
+  font-size: var(--font-13);
+  font-weight: 620;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-cleanup-select-option:hover,
+.settings-cleanup-select-option[data-selected="true"] {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.88), rgba(139, 92, 246, 0.78));
+  color: #fff;
+}
+.settings-cleanup-queue-list {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--stroke-08);
+  border-radius: var(--radius-8);
+  background: var(--white-03);
+}
+.settings-cleanup-queue-list[hidden] {
+  display: none;
+}
+.settings-cleanup-queue-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-10);
+  align-items: center;
+  padding: var(--space-8) var(--space-10);
+  border-bottom: 1px solid var(--stroke-08);
+  color: var(--text-primary);
+  font-size: var(--font-12);
+}
+.settings-cleanup-queue-item:last-child {
+  border-bottom: 0;
+}
+.settings-cleanup-queue-item-body {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-cleanup-queue-result {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.settings-cleanup-queue-result[data-status="success"] {
+  color: var(--green);
+}
+.settings-cleanup-queue-result[data-status="error"] {
+  color: var(--error-text);
+}
+.settings-btn-danger {
+  border-color: var(--error-border, rgba(239, 68, 68, 0.5));
+  background: var(--error-bg, rgba(239, 68, 68, 0.12));
+  color: var(--error-text);
 }
 .settings-local-cleanup-card[hidden] {
   display: none;

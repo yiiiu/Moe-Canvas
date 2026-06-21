@@ -52,6 +52,7 @@ from backend.services.media_file_route_service import MediaFileRouteService
 from backend.services.asset_registry_service import AssetRegistryService
 from backend.services.asset_usage_index_service import AssetUsageIndexService
 from backend.services.asset_lifecycle_service import AssetLifecycleService
+from backend.services.asset_cleanup_queue_service import AssetCleanupQueueService
 from backend.services.asset_retention_policy_service import AssetRetentionPolicyService
 from backend.services.asset_retention_scheduler_service import AssetRetentionSchedulerService
 from backend.services.storage_usage_service import StorageUsageService
@@ -1998,6 +1999,14 @@ ASSET_LIFECYCLE_SERVICE = AssetLifecycleService(
 )
 
 
+ASSET_CLEANUP_QUEUE_SERVICE = AssetCleanupQueueService(
+    assets_file_path=os.path.join(USER_DIR, "assets.json"),
+    canvas_dir_getter=lambda: CANVAS_DIR,
+    lifecycle_service=ASSET_LIFECYCLE_SERVICE,
+    local_root_dir=DIRECTORY,
+)
+
+
 STORAGE_USAGE_SERVICE = StorageUsageService(
     assets_file_path=os.path.join(USER_DIR, "assets.json"),
     settings_file_getter=lambda: os.path.join(USER_DIR, "settings.json"),
@@ -2767,6 +2776,59 @@ def _handle_asset_cleanup_candidates_get_request(handler):
     return True
 
 
+def _handle_asset_cleanup_queue_get_request(handler):
+    try:
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(handler.path).query)
+        filters = {key: values[0] for key, values in query.items() if values}
+        _json_ok(handler, ASSET_CLEANUP_QUEUE_SERVICE.list_queue(filters))
+    except Exception as exc:
+        _json_err(handler, 500, AssetCleanupQueueService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_cleanup_queue_dry_run_request(handler):
+    payload, error = _read_json_object_request(handler)
+    if error:
+        _json_err(handler, 400, error)
+        return True
+    try:
+        asset_ids = payload.get("assetIds") if isinstance(payload.get("assetIds"), list) else []
+        _json_ok(handler, ASSET_CLEANUP_QUEUE_SERVICE.dry_run(asset_ids))
+    except Exception as exc:
+        _json_err(handler, 500, AssetCleanupQueueService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_cleanup_queue_delete_request(handler):
+    payload, error = _read_json_object_request(handler)
+    if error:
+        _json_err(handler, 400, error)
+        return True
+    try:
+        asset_ids = payload.get("assetIds") if isinstance(payload.get("assetIds"), list) else []
+        result = ASSET_CLEANUP_QUEUE_SERVICE.delete(asset_ids, confirm=payload.get("confirm") is True)
+        if result.get("success") is False:
+            _json_err(handler, 400, result.get("error") or "cleanup_queue_delete_failed")
+            return True
+        _json_ok(handler, result)
+    except Exception as exc:
+        _json_err(handler, 500, AssetCleanupQueueService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_cleanup_queue_reject_request(handler):
+    payload, error = _read_json_object_request(handler)
+    if error:
+        _json_err(handler, 400, error)
+        return True
+    try:
+        asset_ids = payload.get("assetIds") if isinstance(payload.get("assetIds"), list) else []
+        _json_ok(handler, ASSET_CLEANUP_QUEUE_SERVICE.reject(asset_ids, reason=payload.get("reason") or ""))
+    except Exception as exc:
+        _json_err(handler, 500, AssetCleanupQueueService._sanitize_text(exc))
+    return True
+
+
 def _handle_asset_delete_request(handler):
     try:
         payload = json.loads(_read_body(handler) or b"{}")
@@ -3107,6 +3169,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if _handle_asset_cleanup_candidates_get_request(self):
                 return
 
+        if path == "/api/v2/assets/cleanup-queue":
+            if _handle_asset_cleanup_queue_get_request(self):
+                return
+
         if path == "/api/v2/assets/retention/policy":
             if _handle_asset_retention_policy_get_request(self):
                 return
@@ -3179,6 +3245,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/v2/assets/retention/scheduler/run":
             if _handle_asset_retention_scheduler_run_request(self):
+                return
+
+        if path == "/api/v2/assets/cleanup-queue/dry-run":
+            if _handle_asset_cleanup_queue_dry_run_request(self):
+                return
+
+        if path == "/api/v2/assets/cleanup-queue/delete":
+            if _handle_asset_cleanup_queue_delete_request(self):
+                return
+
+        if path == "/api/v2/assets/cleanup-queue/reject":
+            if _handle_asset_cleanup_queue_reject_request(self):
                 return
 
         if path == "/api/v2/assets/delete":

@@ -2151,6 +2151,91 @@
                     <div class="settings-desc settings-retention-policy-status" id="assetRetentionSchedulerStatus" aria-live="polite"></div>
                     <div class="settings-retention-scheduler-runs" id="assetRetentionSchedulerRuns" hidden></div>
                   </div>
+                  <div class="settings-cleanup-queue" id="assetCleanupQueueSettingsForm">
+                    <div class="settings-retention-policy-head">
+                      <div>
+                        <div class="settings-label">清理队列</div>
+                        <div class="settings-desc">
+                          lifecycleStatus = deleted_candidate 的资产会进入审核队列。删除前会二次校验 usage，并继续走安全删除逻辑。
+                        </div>
+                      </div>
+                    </div>
+                    <div class="settings-desc settings-cleanup-queue-warning">
+                      删除后将移除 MinIO/S3/本地文件，但保留 AssetRecord 审计。active、pinned、usageCount &gt; 0 的资产永远不会删除。
+                    </div>
+                    <div class="settings-retention-policy-summary settings-cleanup-queue-summary">
+                      <div><span>待清理数量</span><strong id="assetCleanupQueueCount">0</strong></div>
+                      <div><span>预计释放空间</span><strong id="assetCleanupQueueBytes">0 B</strong></div>
+                      <div><span>按类型</span><strong id="assetCleanupQueueByType">—</strong></div>
+                      <div><span>按存储后端</span><strong id="assetCleanupQueueByStorage">—</strong></div>
+                    </div>
+                    <div class="settings-cleanup-queue-filters">
+                      <label class="settings-field">
+                        <span>类型</span>
+                        <input type="hidden" id="assetCleanupQueueTypeFilter" value="" />
+                        <div class="settings-cleanup-select" data-cleanup-queue-select="assetCleanupQueueTypeFilter">
+                          <button type="button" class="settings-cleanup-select-trigger" data-cleanup-queue-select-trigger aria-haspopup="listbox" aria-expanded="false">
+                            <span data-cleanup-queue-select-value>全部</span>
+                            <span class="settings-cleanup-select-caret" aria-hidden="true"></span>
+                          </button>
+                          <div class="settings-cleanup-select-menu" role="listbox">
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="" role="option">全部</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="image" role="option">image</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="video" role="option">video</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="audio" role="option">audio</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="file" role="option">file</button>
+                          </div>
+                        </div>
+                      </label>
+                      <label class="settings-field">
+                        <span>存储后端</span>
+                        <input type="hidden" id="assetCleanupQueueStorageFilter" value="" />
+                        <div class="settings-cleanup-select" data-cleanup-queue-select="assetCleanupQueueStorageFilter">
+                          <button type="button" class="settings-cleanup-select-trigger" data-cleanup-queue-select-trigger aria-haspopup="listbox" aria-expanded="false">
+                            <span data-cleanup-queue-select-value>全部</span>
+                            <span class="settings-cleanup-select-caret" aria-hidden="true"></span>
+                          </button>
+                          <div class="settings-cleanup-select-menu" role="listbox">
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="" role="option">全部</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="local" role="option">local</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="s3-compatible" role="option">s3-compatible</button>
+                          </div>
+                        </div>
+                      </label>
+                      <label class="settings-field">
+                        <span>排序</span>
+                        <input type="hidden" id="assetCleanupQueueSort" value="size_desc" />
+                        <div class="settings-cleanup-select" data-cleanup-queue-select="assetCleanupQueueSort">
+                          <button type="button" class="settings-cleanup-select-trigger" data-cleanup-queue-select-trigger aria-haspopup="listbox" aria-expanded="false">
+                            <span data-cleanup-queue-select-value>size_desc</span>
+                            <span class="settings-cleanup-select-caret" aria-hidden="true"></span>
+                          </button>
+                          <div class="settings-cleanup-select-menu" role="listbox">
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="size_desc" role="option">size_desc</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="size_asc" role="option">size_asc</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="created_desc" role="option">created_desc</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="created_asc" role="option">created_asc</button>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                    <div class="settings-retention-policy-actions">
+                      <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetCleanupQueueRefresh">
+                        刷新队列
+                      </button>
+                      <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetCleanupQueueDryRun">
+                        批量 dryRun
+                      </button>
+                      <button type="button" class="settings-save-btn settings-btn-danger" id="btnAssetCleanupQueueDelete">
+                        确认删除所选
+                      </button>
+                      <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetCleanupQueueReject">
+                        拒绝清理所选
+                      </button>
+                    </div>
+                    <div class="settings-desc settings-retention-policy-status" id="assetCleanupQueueStatus" aria-live="polite"></div>
+                    <div class="settings-cleanup-queue-list" id="assetCleanupQueueList" hidden></div>
+                  </div>
                 </div>
               </div>
               <div

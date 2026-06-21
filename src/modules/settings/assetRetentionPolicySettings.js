@@ -46,6 +46,19 @@ const FIELD_IDS = Object.freeze({
   schedulerRunNowButton: 'btnAssetRetentionSchedulerRunNow',
   schedulerStatus: 'assetRetentionSchedulerStatus',
   schedulerRuns: 'assetRetentionSchedulerRuns',
+  cleanupQueueCount: 'assetCleanupQueueCount',
+  cleanupQueueBytes: 'assetCleanupQueueBytes',
+  cleanupQueueByType: 'assetCleanupQueueByType',
+  cleanupQueueByStorage: 'assetCleanupQueueByStorage',
+  cleanupQueueList: 'assetCleanupQueueList',
+  cleanupQueueTypeFilter: 'assetCleanupQueueTypeFilter',
+  cleanupQueueStorageFilter: 'assetCleanupQueueStorageFilter',
+  cleanupQueueSort: 'assetCleanupQueueSort',
+  cleanupQueueRefreshButton: 'btnAssetCleanupQueueRefresh',
+  cleanupQueueDryRunButton: 'btnAssetCleanupQueueDryRun',
+  cleanupQueueDeleteButton: 'btnAssetCleanupQueueDelete',
+  cleanupQueueRejectButton: 'btnAssetCleanupQueueReject',
+  cleanupQueueStatus: 'assetCleanupQueueStatus',
 });
 
 function number(value) {
@@ -81,6 +94,60 @@ function setValue(id, value) {
 
 function readValue(id) {
   return String(element(id)?.value ?? '').trim();
+}
+
+function setCleanupQueueCustomSelectOpen(control, open) {
+  if (!control) {
+    return;
+  }
+  control.dataset.open = open ? 'true' : 'false';
+  const trigger = control.querySelector?.('[data-cleanup-queue-select-trigger]');
+  trigger?.setAttribute?.('aria-expanded', open ? 'true' : 'false');
+}
+
+function setCleanupQueueCustomSelectValue(control, value, label) {
+  const valueLabel = control?.querySelector?.('[data-cleanup-queue-select-value]');
+  if (valueLabel) {
+    valueLabel.textContent = label || value || '全部';
+  }
+  for (const option of control?.querySelectorAll?.('[data-cleanup-queue-option]') || []) {
+    const selected = String(option?.dataset?.value ?? '') === String(value ?? '');
+    option.dataset.selected = selected ? 'true' : 'false';
+    option.setAttribute?.('aria-selected', selected ? 'true' : 'false');
+  }
+}
+
+export function __bindAssetCleanupQueueFilterControls(controls = Array.from(document.querySelectorAll?.('[data-cleanup-queue-select]') || [])) {
+  for (const control of controls || []) {
+    if (!control || control.__assetCleanupQueueSelectBound) {
+      continue;
+    }
+    control.__assetCleanupQueueSelectBound = true;
+    const inputId = control.dataset?.cleanupQueueSelect || '';
+    const input = element(inputId);
+    const trigger = control.querySelector?.('[data-cleanup-queue-select-trigger]') || control;
+    const options = Array.from(control.querySelectorAll?.('[data-cleanup-queue-option]') || []);
+    const currentValue = String(input?.value ?? '');
+    const currentOption = options.find(option => String(option?.dataset?.value ?? '') === currentValue) || options[0];
+    setCleanupQueueCustomSelectValue(control, currentValue, currentOption?.textContent || '全部');
+    setCleanupQueueCustomSelectOpen(control, false);
+    trigger?.addEventListener?.('click', event => {
+      event?.preventDefault?.();
+      setCleanupQueueCustomSelectOpen(control, control.dataset?.open !== 'true');
+    });
+    for (const option of options) {
+      option.addEventListener?.('click', async event => {
+        event?.preventDefault?.();
+        const value = String(option?.dataset?.value ?? '');
+        if (input) {
+          input.value = value;
+        }
+        setCleanupQueueCustomSelectValue(control, value, option?.textContent || value || '全部');
+        setCleanupQueueCustomSelectOpen(control, false);
+        await __refreshAssetCleanupQueueSettings();
+      });
+    }
+  }
 }
 
 function setText(id, value) {
@@ -271,6 +338,207 @@ export function renderAssetRetentionSchedulerRuns(runs = []) {
   }
 }
 
+function formatCleanupBreakdown(value = {}) {
+  return Object.entries(value || {})
+    .map(([key, item]) => `${key}: ${Number(item?.count || 0)} / ${formatStorageUsageBytes(item?.bytes || 0)}`)
+    .join('；') || '—';
+}
+
+function setCleanupQueueStatus(message, tone = '') {
+  const target = element(FIELD_IDS.cleanupQueueStatus);
+  if (!target) {
+    return;
+  }
+  target.textContent = message || '';
+  target.dataset.status = tone;
+}
+
+function selectedCleanupQueueAssetIds() {
+  const list = element(FIELD_IDS.cleanupQueueList);
+  const boxes = list?.querySelectorAll?.('input[data-asset-id]') || [];
+  return Array.from(boxes)
+    .filter(box => box.checked)
+    .map(box => String(box.dataset.assetId || '').trim())
+    .filter(Boolean);
+}
+
+function renderCleanupQueueDryRunResults(results = []) {
+  const byId = new Map((Array.isArray(results) ? results : []).map(item => [String(item?.assetId || ''), item]));
+  const list = element(FIELD_IDS.cleanupQueueList);
+  for (const row of list?.children || []) {
+    const assetId = String(row?.dataset?.assetId || '');
+    const item = byId.get(assetId);
+    if (!item) {
+      continue;
+    }
+    const result = row.querySelector?.('[data-cleanup-result]');
+    const text = item.canDelete
+      ? `可删除 · ${formatStorageUsageBytes(item.releasableBytes || 0)}`
+      : `blocked · ${item.reason || 'blocked'}`;
+    if (result) {
+      result.textContent = text;
+      result.dataset.status = item.canDelete ? 'success' : 'error';
+    } else {
+      row.textContent += ` · ${text}`;
+    }
+  }
+}
+
+export function renderAssetCleanupQueue(payload = {}) {
+  if (payload.dryRunResults) {
+    renderCleanupQueueDryRunResults(payload.dryRunResults);
+    return;
+  }
+  const queue = Array.isArray(payload.queue) ? payload.queue : [];
+  const summary = payload.summary || {};
+  setText(FIELD_IDS.cleanupQueueCount, String(summary.totalCount ?? queue.length));
+  setText(FIELD_IDS.cleanupQueueBytes, formatStorageUsageBytes(summary.totalBytes || 0));
+  setText(FIELD_IDS.cleanupQueueByType, formatCleanupBreakdown(summary.byType));
+  setText(FIELD_IDS.cleanupQueueByStorage, formatCleanupBreakdown(summary.byStorage));
+  const list = element(FIELD_IDS.cleanupQueueList);
+  if (!list) {
+    return;
+  }
+  list.replaceChildren?.();
+  list.hidden = queue.length === 0;
+  for (const item of queue) {
+    const row = document.createElement('label');
+    row.className = 'settings-cleanup-queue-item';
+    row.dataset.assetId = item?.assetId || '';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.assetId = item?.assetId || '';
+    const body = document.createElement('span');
+    body.className = 'settings-cleanup-queue-item-body';
+    const storage = item?.storage || {};
+    const usageCount = Number(item?.usage?.usageCount || 0);
+    body.textContent = `${item?.assetId || 'unknown'} · ${item?.type || 'file'} · ${storage.type || 'local'}${storage.bucket ? `/${storage.bucket}` : ''} · ${formatStorageUsageBytes(item?.size || 0)} · usage ${usageCount}${item?.pinned ? ' · pinned' : ''}`;
+    const result = document.createElement('span');
+    result.className = 'settings-cleanup-queue-result';
+    result.dataset.cleanupResult = 'true';
+    row.appendChild(checkbox);
+    row.appendChild(body);
+    row.appendChild(result);
+    list.appendChild(row);
+  }
+}
+
+function cleanupQueueQueryString() {
+  const params = new URLSearchParams();
+  const type = readValue(FIELD_IDS.cleanupQueueTypeFilter);
+  const storageType = readValue(FIELD_IDS.cleanupQueueStorageFilter);
+  const sort = readValue(FIELD_IDS.cleanupQueueSort) || 'size_desc';
+  if (type) {
+    params.set('type', type);
+  }
+  if (storageType) {
+    params.set('storageType', storageType);
+  }
+  params.set('sort', sort);
+  params.set('page', '1');
+  params.set('pageSize', '50');
+  return params.toString();
+}
+
+export async function __refreshAssetCleanupQueueSettings() {
+  const button = element(FIELD_IDS.cleanupQueueRefreshButton);
+  setBusy(button, true, '刷新队列');
+  try {
+    const payload = await requestJson(`/api/v2/assets/cleanup-queue?${cleanupQueueQueryString()}`);
+    renderAssetCleanupQueue(payload);
+    setCleanupQueueStatus(`待清理 ${payload.summary?.totalCount ?? payload.queue?.length ?? 0} 项，预计释放 ${formatStorageUsageBytes(payload.summary?.totalBytes || 0)}`, 'success');
+    return payload;
+  } catch (error) {
+    setCleanupQueueStatus(error?.message || '加载清理队列失败', 'error');
+    return null;
+  } finally {
+    setBusy(button, false, '刷新队列');
+  }
+}
+
+export async function __dryRunAssetCleanupQueueSettings() {
+  const button = element(FIELD_IDS.cleanupQueueDryRunButton);
+  const assetIds = selectedCleanupQueueAssetIds();
+  if (!assetIds.length) {
+    setCleanupQueueStatus('请选择要预检的资产', 'error');
+    return null;
+  }
+  setBusy(button, true, '批量 dryRun');
+  try {
+    const payload = await requestJson('/api/v2/assets/cleanup-queue/dry-run', {
+      method: 'POST',
+      body: JSON.stringify({ assetIds }),
+    });
+    renderAssetCleanupQueue({ dryRunResults: payload.results || [] });
+    const releasable = (payload.results || []).reduce((sum, item) => sum + Number(item?.releasableBytes || 0), 0);
+    const blocked = (payload.results || []).filter(item => item?.canDelete !== true).length;
+    setCleanupQueueStatus(`dryRun 完成，预计释放 ${formatStorageUsageBytes(releasable)}，blocked ${blocked} 项`, blocked ? 'error' : 'success');
+    return payload;
+  } catch (error) {
+    setCleanupQueueStatus(error?.message || '清理队列 dryRun 失败', 'error');
+    return null;
+  } finally {
+    setBusy(button, false, '批量 dryRun');
+  }
+}
+
+export async function __deleteAssetCleanupQueueSettings() {
+  const button = element(FIELD_IDS.cleanupQueueDeleteButton);
+  const assetIds = selectedCleanupQueueAssetIds();
+  if (!assetIds.length) {
+    setCleanupQueueStatus('请选择要删除的资产', 'error');
+    return null;
+  }
+  const confirmed = globalThis.confirm?.('删除后将移除 MinIO/S3/本地文件，但保留 AssetRecord 审计。确认删除所选资产？') === true;
+  if (!confirmed) {
+    setCleanupQueueStatus('已取消删除', '');
+    return null;
+  }
+  setBusy(button, true, '确认删除所选');
+  try {
+    const payload = await requestJson('/api/v2/assets/cleanup-queue/delete', {
+      method: 'POST',
+      body: JSON.stringify({ assetIds, confirm: true }),
+    });
+    const deleted = (payload.results || []).filter(item => item?.deleted === true).length;
+    const blocked = (payload.results || []).filter(item => item?.deleted !== true).length;
+    const releasable = (payload.results || []).reduce((sum, item) => sum + Number(item?.releasableBytes || 0), 0);
+    await __refreshAssetCleanupQueueSettings();
+    setCleanupQueueStatus(`删除完成 ${deleted} 项，blocked ${blocked} 项，释放 ${formatStorageUsageBytes(releasable)}`, blocked ? 'error' : 'success');
+    return payload;
+  } catch (error) {
+    setCleanupQueueStatus(error?.message || '清理队列删除失败', 'error');
+    return null;
+  } finally {
+    setBusy(button, false, '确认删除所选');
+  }
+}
+
+export async function __rejectAssetCleanupQueueSettings() {
+  const button = element(FIELD_IDS.cleanupQueueRejectButton);
+  const assetIds = selectedCleanupQueueAssetIds();
+  if (!assetIds.length) {
+    setCleanupQueueStatus('请选择要拒绝的资产', 'error');
+    return null;
+  }
+  setBusy(button, true, '拒绝清理所选');
+  try {
+    const payload = await requestJson('/api/v2/assets/cleanup-queue/reject', {
+      method: 'POST',
+      body: JSON.stringify({ assetIds, reason: 'manual_reject' }),
+    });
+    const rejected = (payload.results || []).filter(item => item?.rejected === true).length;
+    await __refreshAssetCleanupQueueSettings();
+    setCleanupQueueStatus(`已拒绝 ${rejected} 项，文件未删除`, 'success');
+    return payload;
+  } catch (error) {
+    setCleanupQueueStatus(error?.message || '拒绝清理失败', 'error');
+    return null;
+  } finally {
+    setBusy(button, false, '拒绝清理所选');
+  }
+}
+
 export async function fetchAssetRetentionPolicySettings() {
   const payload = await requestJson('/api/v2/assets/retention/policy', { method: 'GET' });
   return payload?.policy || {};
@@ -403,6 +671,11 @@ export function initAssetRetentionPolicySettings() {
   const applyButton = element(FIELD_IDS.applyButton);
   const schedulerSaveButton = element(FIELD_IDS.schedulerSaveButton);
   const schedulerRunNowButton = element(FIELD_IDS.schedulerRunNowButton);
+  const cleanupQueueRefreshButton = element(FIELD_IDS.cleanupQueueRefreshButton);
+  const cleanupQueueDryRunButton = element(FIELD_IDS.cleanupQueueDryRunButton);
+  const cleanupQueueDeleteButton = element(FIELD_IDS.cleanupQueueDeleteButton);
+  const cleanupQueueRejectButton = element(FIELD_IDS.cleanupQueueRejectButton);
+  const cleanupQueueFilterControls = Array.from(document.querySelectorAll?.('[data-cleanup-queue-select]') || []);
   if (!saveButton || saveButton.__assetRetentionBound) {
     return;
   }
@@ -420,6 +693,7 @@ export function initAssetRetentionPolicySettings() {
       }
     });
   void fetchAssetRetentionSchedulerRuns().catch(() => null);
+  void __refreshAssetCleanupQueueSettings().catch(() => null);
   saveButton.addEventListener('click', () => {
     void __saveAssetRetentionPolicySettings();
   });
@@ -435,4 +709,17 @@ export function initAssetRetentionPolicySettings() {
   schedulerRunNowButton?.addEventListener('click', () => {
     void __runAssetRetentionSchedulerNow();
   });
+  cleanupQueueRefreshButton?.addEventListener('click', () => {
+    void __refreshAssetCleanupQueueSettings();
+  });
+  cleanupQueueDryRunButton?.addEventListener('click', () => {
+    void __dryRunAssetCleanupQueueSettings();
+  });
+  cleanupQueueDeleteButton?.addEventListener('click', () => {
+    void __deleteAssetCleanupQueueSettings();
+  });
+  cleanupQueueRejectButton?.addEventListener('click', () => {
+    void __rejectAssetCleanupQueueSettings();
+  });
+  __bindAssetCleanupQueueFilterControls(cleanupQueueFilterControls);
 }

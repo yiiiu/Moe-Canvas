@@ -5,14 +5,20 @@ import { join } from 'node:path';
 
 import {
   __applyAssetRetentionPolicySettings,
+  __deleteAssetCleanupQueueSettings,
+  __dryRunAssetCleanupQueueSettings,
   __evaluateAssetRetentionPolicySettings,
+  __refreshAssetCleanupQueueSettings,
+  __rejectAssetCleanupQueueSettings,
   __runAssetRetentionSchedulerNow,
   __saveAssetRetentionPolicySettings,
   __saveAssetRetentionSchedulerSettings,
+  __bindAssetCleanupQueueFilterControls,
   normalizeAssetRetentionPolicySettings,
   normalizeAssetRetentionSchedulerSettings,
   readAssetRetentionPolicyForm,
   readAssetRetentionSchedulerForm,
+  renderAssetCleanupQueue,
   renderAssetRetentionPolicyForm,
   renderAssetRetentionSchedulerForm,
   renderAssetRetentionSchedulerRuns,
@@ -37,11 +43,13 @@ function makeElement(value = '', tagName = 'div') {
   return {
     tagName,
     value,
+    type: '',
     checked: false,
     disabled: false,
     hidden: false,
     textContent: '',
     dataset: {},
+    attributes: {},
     children: [],
     listeners: {},
     className: '',
@@ -50,15 +58,48 @@ function makeElement(value = '', tagName = 'div') {
       remove() {},
       toggle() {},
     },
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    },
+    getAttribute(name) {
+      return this.attributes[name];
+    },
+    removeAttribute(name) {
+      delete this.attributes[name];
+    },
     appendChild(child) {
       this.children.push(child);
+      if (child?.textContent) {
+        this.textContent += child.textContent;
+      }
       return child;
     },
     replaceChildren(...children) {
       this.children = children;
+      this.textContent = children.map(child => child?.textContent || '').join('');
     },
     addEventListener(event, handler) {
       this.listeners[event] = handler;
+    },
+    querySelector(selector) {
+      if (selector === '[data-cleanup-result]') {
+        return this.children.find(child => child.dataset?.cleanupResult) || null;
+      }
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector === 'input[data-asset-id]') {
+        return this.children.flatMap(child => {
+          if (child.dataset?.assetId && child.tagName === 'input') {
+            return [child];
+          }
+          if (typeof child.querySelectorAll === 'function') {
+            return Array.from(child.querySelectorAll(selector));
+          }
+          return [];
+        });
+      }
+      return [];
     },
   };
 }
@@ -88,6 +129,19 @@ function makeRetentionElements() {
     ['btnAssetRetentionSchedulerRunNow', makeElement()],
     ['assetRetentionSchedulerStatus', makeElement()],
     ['assetRetentionSchedulerRuns', makeElement()],
+    ['assetCleanupQueueCount', makeElement()],
+    ['assetCleanupQueueBytes', makeElement()],
+    ['assetCleanupQueueByType', makeElement()],
+    ['assetCleanupQueueByStorage', makeElement()],
+    ['assetCleanupQueueList', makeElement()],
+    ['assetCleanupQueueTypeFilter', makeElement('')],
+    ['assetCleanupQueueStorageFilter', makeElement('')],
+    ['assetCleanupQueueSort', makeElement('size_desc')],
+    ['btnAssetCleanupQueueRefresh', makeElement()],
+    ['btnAssetCleanupQueueDryRun', makeElement()],
+    ['btnAssetCleanupQueueDelete', makeElement()],
+    ['btnAssetCleanupQueueReject', makeElement()],
+    ['assetCleanupQueueStatus', makeElement()],
   ]);
 }
 
@@ -300,12 +354,161 @@ test('asset retention scheduler runs render recent run records', () => {
   assert.match(elements.get('assetRetentionSchedulerRuns').children[0].textContent, /标记 1/);
 });
 
-test('asset retention settings markup exposes candidate marking but no immediate delete action', () => {
+test('asset cleanup queue renders summary, selectable items and blocked dry-run results', () => {
+  const elements = makeRetentionElements();
+  const restore = installDocument(elements);
+  try {
+    renderAssetCleanupQueue({
+      queue: [
+        { assetId: 'asset-a', type: 'image', size: 2048, storage: { type: 'local', bucket: '' }, usage: { usageCount: 0 }, pinned: false },
+        { assetId: 'asset-b', type: 'video', size: 4096, storage: { type: 's3-compatible', bucket: 'safe' }, usage: { usageCount: 0 }, pinned: true },
+      ],
+      summary: {
+        totalCount: 2,
+        totalBytes: 6144,
+        byType: { image: { count: 1, bytes: 2048 }, video: { count: 1, bytes: 4096 } },
+        byStorage: { local: { count: 1, bytes: 2048 }, 's3-compatible': { count: 1, bytes: 4096 } },
+      },
+    });
+    renderAssetCleanupQueue({
+      dryRunResults: [
+        { assetId: 'asset-a', canDelete: true, releasableBytes: 2048, reason: 'orphan_asset' },
+        { assetId: 'asset-b', canDelete: false, releasableBytes: 0, reason: 'asset_pinned' },
+      ],
+    });
+  } finally {
+    restore();
+  }
+
+  assert.equal(elements.get('assetCleanupQueueCount').textContent, '2');
+  assert.match(elements.get('assetCleanupQueueBytes').textContent, /6 KB/);
+  assert.match(elements.get('assetCleanupQueueByType').textContent, /image/);
+  assert.match(elements.get('assetCleanupQueueByStorage').textContent, /s3-compatible/);
+  assert.equal(elements.get('assetCleanupQueueList').children.length, 2);
+  assert.match(elements.get('assetCleanupQueueList').children[1].textContent, /asset-b/);
+  assert.match(elements.get('assetCleanupQueueList').children[1].textContent, /asset_pinned|pinned/);
+});
+
+test('asset cleanup queue actions use queue endpoints and require confirm before delete', async () => {
+  const elements = makeRetentionElements();
+  const restoreDocument = installDocument(elements);
+  const previousFetch = globalThis.fetch;
+  const previousConfirm = globalThis.confirm;
+  const requests = [];
+  globalThis.confirm = () => true;
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (url.startsWith('/api/v2/assets/cleanup-queue?')) {
+      return { ok: true, json: async () => ({ success: true, queue: [{ assetId: 'asset-a', size: 2048, storage: { type: 'local' }, usage: { usageCount: 0 } }], summary: { totalCount: 1, totalBytes: 2048, byType: {}, byStorage: {} } }) };
+    }
+    if (url === '/api/v2/assets/cleanup-queue/dry-run') {
+      return { ok: true, json: async () => ({ success: true, results: [{ assetId: 'asset-a', canDelete: true, releasableBytes: 2048, reason: 'orphan_asset' }] }) };
+    }
+    if (url === '/api/v2/assets/cleanup-queue/delete') {
+      return { ok: true, json: async () => ({ success: true, results: [{ assetId: 'asset-a', deleted: true, releasableBytes: 2048, reason: 'orphan_asset' }] }) };
+    }
+    if (url === '/api/v2/assets/cleanup-queue/reject') {
+      return { ok: true, json: async () => ({ success: true, results: [{ assetId: 'asset-a', rejected: true, reason: 'rejected' }] }) };
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  try {
+    await __refreshAssetCleanupQueueSettings();
+    elements.get('assetCleanupQueueList').querySelectorAll('input[data-asset-id]').forEach(input => {
+      input.checked = true;
+    });
+    await __dryRunAssetCleanupQueueSettings();
+    await __deleteAssetCleanupQueueSettings();
+    elements.get('assetCleanupQueueList').querySelectorAll('input[data-asset-id]').forEach(input => {
+      input.checked = true;
+    });
+    await __rejectAssetCleanupQueueSettings();
+  } finally {
+    restoreDocument();
+    globalThis.fetch = previousFetch;
+    globalThis.confirm = previousConfirm;
+  }
+
+  assert.deepEqual(requests.map(request => request.url), [
+    '/api/v2/assets/cleanup-queue?sort=size_desc&page=1&pageSize=50',
+    '/api/v2/assets/cleanup-queue/dry-run',
+    '/api/v2/assets/cleanup-queue/delete',
+    '/api/v2/assets/cleanup-queue?sort=size_desc&page=1&pageSize=50',
+    '/api/v2/assets/cleanup-queue/reject',
+    '/api/v2/assets/cleanup-queue?sort=size_desc&page=1&pageSize=50',
+  ]);
+  assert.equal(JSON.parse(requests[2].options.body).confirm, true);
+  assert.doesNotMatch(JSON.stringify(requests), /\/api\/v2\/assets\/delete/);
+  assert.match(elements.get('assetCleanupQueueStatus').textContent, /已拒绝|删除/);
+});
+
+test('asset cleanup queue custom filter control updates hidden value and refreshes queue', async () => {
+  const elements = makeRetentionElements();
+  const typeValue = elements.get('assetCleanupQueueTypeFilter');
+  const typeText = makeElement('全部');
+  const videoOption = makeElement('video');
+  videoOption.dataset.value = 'video';
+  const customSelect = makeElement('', 'div');
+  customSelect.dataset.cleanupQueueSelect = 'assetCleanupQueueTypeFilter';
+  customSelect.children = [typeText, videoOption];
+  customSelect.querySelector = selector => {
+    if (selector === '[data-cleanup-queue-select-value]') {
+      return typeText;
+    }
+    return null;
+  };
+  customSelect.querySelectorAll = selector => {
+    if (selector === '[data-cleanup-queue-option]') {
+      return [videoOption];
+    }
+    return [];
+  };
+  const restoreDocument = installDocument(elements);
+  const previousFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (url.startsWith('/api/v2/assets/cleanup-queue?')) {
+      return { ok: true, json: async () => ({ success: true, queue: [], summary: { totalCount: 0, totalBytes: 0, byType: {}, byStorage: {} } }) };
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  try {
+    __bindAssetCleanupQueueFilterControls([customSelect]);
+    await videoOption.listeners.click();
+  } finally {
+    restoreDocument();
+    globalThis.fetch = previousFetch;
+  }
+
+  assert.equal(typeValue.value, 'video');
+  assert.equal(typeText.textContent, 'video');
+  assert.deepEqual(requests.map(request => request.url), [
+    '/api/v2/assets/cleanup-queue?type=video&sort=size_desc&page=1&pageSize=50',
+  ]);
+});
+
+test('asset retention settings markup uses custom cleanup queue dropdowns instead of native selects', () => {
+  const html = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
+  const cleanupQueueMarkup = html.slice(
+    html.indexOf('id="assetCleanupQueueSettingsForm"'),
+    html.indexOf('id="assetCleanupQueueStatus"'),
+  );
+
+  assert.doesNotMatch(cleanupQueueMarkup, /<select\b/);
+  assert.match(cleanupQueueMarkup, /data-cleanup-queue-select="assetCleanupQueueTypeFilter"/);
+  assert.match(cleanupQueueMarkup, /data-cleanup-queue-option/);
+});
+
+test('asset retention settings markup exposes candidate marking and cleanup queue review actions', () => {
   const html = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 
   assert.match(html, /生命周期策略/);
   assert.match(html, /评估可清理资源/);
   assert.match(html, /标记为清理候选/);
+  assert.match(html, /清理队列/);
+  assert.match(html, /删除后将移除 MinIO\/S3\/本地文件，但保留 AssetRecord 审计/);
+  assert.match(html, /确认删除所选/);
+  assert.match(html, /拒绝清理所选/);
   assert.match(html, /当前版本不支持自动删除/);
-  assert.doesNotMatch(html, /立即删除/);
 });

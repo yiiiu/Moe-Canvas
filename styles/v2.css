@@ -603,10 +603,13 @@ canvas.ref-thumb-media {
 }
 .v2-node.rh-anime-real-node .img-gen-btn {
   background: var(--red-20);
+  border-color: var(--red-30);
   color: var(--red);
 }
-.v2-node.rh-anime-real-node .img-gen-btn:hover {
+.v2-node.rh-anime-real-node .img-gen-btn:hover,
+.v2-node.rh-anime-real-node .img-gen-btn:focus-visible {
   background: var(--red-30);
+  border-color: var(--red-60);
 }
 .v2-node.rh-anime-real-node .img-gen-btn:disabled {
   background: var(--red-10);

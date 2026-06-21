@@ -71,6 +71,7 @@ import { initImageInputUploadQualitySettings } from "./settings/imageInputUpload
 import { initCustomStorageSettings } from "./settings/customStorageSettings.js";
 import { initStorageUsageSettings } from "./settings/storageUsageSettings.js";
 import { initStorageQuotaSettings } from "./settings/storageQuotaSettings.js";
+import { initAssetRetentionPolicySettings } from "./settings/assetRetentionPolicySettings.js";
 import { initAboutSettings } from "./settings/aboutSettings.js";
 const SettingsManager = {
   init(_0x5d7541 = {}) {
@@ -86,6 +87,7 @@ const SettingsManager = {
       initCustomStorageSettings(),
       initStorageUsageSettings(),
       initStorageQuotaSettings(),
+      initAssetRetentionPolicySettings(),
       initAutoSaveSettings(),
       initLocalAssetCleanupSettings(),
       initInterfaceCacheSettings(),

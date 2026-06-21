@@ -2042,6 +2042,66 @@
                     <span class="settings-desc settings-storage-quota-status" id="storageQuotaSettingsStatus" aria-live="polite"></span>
                   </div>
                 </div>
+                <div class="settings-retention-policy-form" id="assetRetentionPolicySettingsForm">
+                  <div class="settings-retention-policy-head">
+                    <div>
+                      <div class="settings-label">生命周期策略</div>
+                      <div class="settings-desc">
+                        只评估并标记孤儿资源为清理候选，不会自动删除本地文件或 MinIO/S3 object。
+                      </div>
+                    </div>
+                    <span class="settings-retention-auto-delete" id="assetRetentionAutoDeleteStatus">
+                      当前版本不支持自动删除
+                    </span>
+                  </div>
+                  <label class="settings-switch-inline">
+                    <input type="checkbox" id="assetRetentionEnabled" />
+                    <span>启用策略</span>
+                  </label>
+                  <label class="settings-field">
+                    <span>orphan 保留天数</span>
+                    <input
+                      type="number"
+                      id="assetRetentionOrphanDays"
+                      class="settings-input"
+                      min="0"
+                      step="1"
+                      placeholder="7"
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>最小资产年龄（小时）</span>
+                    <input
+                      type="number"
+                      id="assetRetentionMinAssetAgeHours"
+                      class="settings-input"
+                      min="0"
+                      step="1"
+                      placeholder="1"
+                    />
+                  </label>
+                  <label class="settings-switch-inline">
+                    <input type="checkbox" id="assetRetentionDeleteCandidateOnly" checked disabled />
+                    <span>只标记候选，不删除文件</span>
+                  </label>
+                  <div class="settings-retention-policy-summary">
+                    <div><span>候选数量</span><strong id="assetRetentionCandidateCount">0</strong></div>
+                    <div><span>预计可释放</span><strong id="assetRetentionReclaimable">0 B</strong></div>
+                  </div>
+                  <div class="settings-retention-policy-actions">
+                    <button type="button" class="settings-save-btn" id="btnAssetRetentionPolicySave">
+                      保存策略
+                    </button>
+                    <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetRetentionEvaluate">
+                      评估可清理资源
+                    </button>
+                    <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetRetentionApply">
+                      标记为清理候选
+                    </button>
+                  </div>
+                  <div class="settings-desc settings-retention-policy-status" id="assetRetentionStatus" aria-live="polite"></div>
+                  <div class="settings-retention-candidate-list" id="assetRetentionCandidateList" hidden></div>
+                </div>
               </div>
               <div
                 class="settings-section settings-card settings-custom-storage-card"

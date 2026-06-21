@@ -52,6 +52,7 @@ from backend.services.media_file_route_service import MediaFileRouteService
 from backend.services.asset_registry_service import AssetRegistryService
 from backend.services.asset_usage_index_service import AssetUsageIndexService
 from backend.services.asset_lifecycle_service import AssetLifecycleService
+from backend.services.asset_retention_policy_service import AssetRetentionPolicyService
 from backend.services.storage_usage_service import StorageUsageService
 from backend.services.storage_quota_service import StorageQuotaService
 from backend.services.storage_bucket_service import StorageBucketService
@@ -1401,6 +1402,11 @@ LIBRARY_FILE_ROUTE_SERVICE = LibraryFileRouteService(
 )
 ASSET_USAGE_INDEX_SERVICE = AssetUsageIndexService(
     assets_file_path=os.path.join(USER_DIR, "assets.json"),
+    canvas_dir_getter=lambda: CANVAS_DIR,
+)
+ASSET_RETENTION_POLICY_SERVICE = AssetRetentionPolicyService(
+    assets_file_path=os.path.join(USER_DIR, "assets.json"),
+    settings_file_getter=lambda: os.path.join(USER_DIR, "settings.json"),
     canvas_dir_getter=lambda: CANVAS_DIR,
 )
 
@@ -2770,6 +2776,60 @@ def _handle_asset_delete_request(handler):
     return True
 
 
+def _read_json_object_request(handler):
+    try:
+        payload = json.loads(_read_body(handler) or b"{}")
+    except Exception:
+        return None, "Invalid JSON"
+    if not isinstance(payload, dict):
+        return None, "Invalid JSON"
+    return payload, ""
+
+
+def _handle_asset_retention_policy_get_request(handler):
+    try:
+        _json_ok(handler, ASSET_RETENTION_POLICY_SERVICE.get_policy())
+    except Exception as exc:
+        _json_err(handler, 500, AssetRetentionPolicyService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_retention_policy_put_request(handler):
+    payload, error = _read_json_object_request(handler)
+    if error:
+        _json_err(handler, 400, error)
+        return True
+    try:
+        _json_ok(handler, ASSET_RETENTION_POLICY_SERVICE.update_policy(payload))
+    except Exception as exc:
+        _json_err(handler, 500, AssetRetentionPolicyService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_retention_evaluate_request(handler):
+    payload, error = _read_json_object_request(handler)
+    if error:
+        _json_err(handler, 400, error)
+        return True
+    try:
+        _json_ok(handler, ASSET_RETENTION_POLICY_SERVICE.evaluate(payload))
+    except Exception as exc:
+        _json_err(handler, 500, AssetRetentionPolicyService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_retention_apply_request(handler):
+    payload, error = _read_json_object_request(handler)
+    if error:
+        _json_err(handler, 400, error)
+        return True
+    try:
+        _json_ok(handler, ASSET_RETENTION_POLICY_SERVICE.apply(payload))
+    except Exception as exc:
+        _json_err(handler, 500, AssetRetentionPolicyService._sanitize_text(exc))
+    return True
+
+
 def _handle_storage_usage_get_request(handler):
     try:
         _json_ok(handler, STORAGE_USAGE_SERVICE.get_storage_usage())
@@ -2922,7 +2982,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not _enforce_local_api_access(self, path):
             return
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, PATCH, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
         self.send_header(
             "Access-Control-Allow-Headers",
             "Content-Type, Authorization, X-AIC-Install-Id, X-AIC-Device-Id, X-AIC-Local-Token",
@@ -2954,6 +3014,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         _json_err(self, 400, "Invalid request")
 
     # ════════════════════════════════════════════════════
+    #  PUT
+    # ════════════════════════════════════════════════════
+    def do_PUT(self):
+        path = self.path.split("?")[0]
+        if not _enforce_local_api_access(self, path):
+            return
+
+        if path == "/api/v2/assets/retention/policy":
+            if _handle_asset_retention_policy_put_request(self):
+                return
+
+        _json_err(self, 400, "Invalid request")
+
+    # ════════════════════════════════════════════════════
     #  GET
     # ════════════════════════════════════════════════════
     def do_GET(self):
@@ -2979,6 +3053,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/v2/assets/cleanup-candidates":
             if _handle_asset_cleanup_candidates_get_request(self):
+                return
+
+        if path == "/api/v2/assets/retention/policy":
+            if _handle_asset_retention_policy_get_request(self):
                 return
 
         if path.startswith("/api/v2/assets/") and path != "/api/v2/assets/batch":
@@ -3029,6 +3107,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/v2/assets/rebuild-usage-index":
             if _handle_asset_rebuild_usage_index_request(self):
+                return
+
+        if path == "/api/v2/assets/retention/evaluate":
+            if _handle_asset_retention_evaluate_request(self):
+                return
+
+        if path == "/api/v2/assets/retention/apply":
+            if _handle_asset_retention_apply_request(self):
                 return
 
         if path == "/api/v2/assets/delete":

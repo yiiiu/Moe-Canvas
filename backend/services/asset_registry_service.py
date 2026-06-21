@@ -108,6 +108,7 @@ class AssetRegistryService:
             "mimeType": self._text(data.get("mimeType")),
             "size": self._safe_int(data.get("size")),
             "status": "ready",
+            "pinned": bool(data.get("pinned") is True),
             "createdAt": now,
             "updatedAt": now,
         }

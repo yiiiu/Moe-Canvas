@@ -63,6 +63,17 @@ class AssetRegistryQueryServiceTest(unittest.TestCase):
             self.assertEqual(assets[0]["url"], second["url"])
             self.assertEqual(assets[1]["url"], first["url"])
 
+    def test_create_ready_asset_defaults_pinned_to_false_for_retention_policy(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            assets_file = os.path.join(tmpdir, "user", "assets.json")
+            registry = AssetRegistryService(assets_file_path=assets_file)
+
+            asset = registry.create_ready_asset({"assetId": "asset_retention", "type": "image", "url": "/output/a.png"})
+            loaded = registry.get_asset("asset_retention")
+
+            self.assertFalse(asset["pinned"])
+            self.assertFalse(loaded["pinned"])
+
 
 if __name__ == "__main__":
     unittest.main()

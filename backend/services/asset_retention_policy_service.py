@@ -285,7 +285,11 @@ class AssetRetentionPolicyService:
         now_ms = self._now_ms()
         marked = []
         policy = evaluation.get("policy") if isinstance(evaluation.get("policy"), dict) else self.normalize_policy()
-        for candidate in evaluation.get("candidates", []):
+        candidates = evaluation.get("candidates", [])
+        max_candidates = self._safe_int(data.get("maxCandidates") or data.get("maxAssetsPerRun"), 0)
+        if max_candidates > 0:
+            candidates = candidates[:max_candidates]
+        for candidate in candidates:
             asset_id = self._text(candidate.get("assetId"))
             asset = by_id.get(asset_id)
             if not asset:

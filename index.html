@@ -2101,6 +2101,56 @@
                   </div>
                   <div class="settings-desc settings-retention-policy-status" id="assetRetentionStatus" aria-live="polite"></div>
                   <div class="settings-retention-candidate-list" id="assetRetentionCandidateList" hidden></div>
+                  <div class="settings-retention-scheduler" id="assetRetentionSchedulerSettingsForm">
+                    <div class="settings-retention-policy-head">
+                      <div>
+                        <div class="settings-label">调度器</div>
+                        <div class="settings-desc">
+                          调度器只会定时评估并标记清理候选，不会删除本地文件或 MinIO/S3 object。
+                        </div>
+                      </div>
+                      <span class="settings-retention-auto-delete" id="assetRetentionSchedulerAutoDeleteStatus">
+                        自动删除不支持 / 已禁用
+                      </span>
+                    </div>
+                    <label class="settings-switch-inline">
+                      <input type="checkbox" id="assetRetentionSchedulerEnabled" />
+                      <span>启用调度器</span>
+                    </label>
+                    <label class="settings-field">
+                      <span>运行间隔（小时）</span>
+                      <input
+                        type="number"
+                        id="assetRetentionSchedulerIntervalHours"
+                        class="settings-input"
+                        min="1"
+                        step="1"
+                        placeholder="24"
+                      />
+                    </label>
+                    <label class="settings-switch-inline">
+                      <input type="checkbox" id="assetRetentionSchedulerRunOnStartup" />
+                      <span>启动时检查一次</span>
+                    </label>
+                    <label class="settings-switch-inline">
+                      <input type="checkbox" id="assetRetentionSchedulerMarkCandidates" checked />
+                      <span>自动标记清理候选</span>
+                    </label>
+                    <div class="settings-retention-policy-summary">
+                      <div><span>上次运行</span><strong id="assetRetentionSchedulerLastRunAt">从未运行</strong></div>
+                      <div><span>下次运行</span><strong id="assetRetentionSchedulerNextRunAt">未计划</strong></div>
+                    </div>
+                    <div class="settings-retention-policy-actions">
+                      <button type="button" class="settings-save-btn" id="btnAssetRetentionSchedulerSave">
+                        保存调度器
+                      </button>
+                      <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetRetentionSchedulerRunNow">
+                        立即评估 / 标记候选
+                      </button>
+                    </div>
+                    <div class="settings-desc settings-retention-policy-status" id="assetRetentionSchedulerStatus" aria-live="polite"></div>
+                    <div class="settings-retention-scheduler-runs" id="assetRetentionSchedulerRuns" hidden></div>
+                  </div>
                 </div>
               </div>
               <div

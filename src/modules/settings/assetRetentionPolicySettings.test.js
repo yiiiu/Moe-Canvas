@@ -6,10 +6,16 @@ import { join } from 'node:path';
 import {
   __applyAssetRetentionPolicySettings,
   __evaluateAssetRetentionPolicySettings,
+  __runAssetRetentionSchedulerNow,
   __saveAssetRetentionPolicySettings,
+  __saveAssetRetentionSchedulerSettings,
   normalizeAssetRetentionPolicySettings,
+  normalizeAssetRetentionSchedulerSettings,
   readAssetRetentionPolicyForm,
+  readAssetRetentionSchedulerForm,
   renderAssetRetentionPolicyForm,
+  renderAssetRetentionSchedulerForm,
+  renderAssetRetentionSchedulerRuns,
 } from './assetRetentionPolicySettings.js';
 
 function installDocument(elements) {
@@ -71,6 +77,17 @@ function makeRetentionElements() {
     ['assetRetentionCandidateCount', makeElement()],
     ['assetRetentionReclaimable', makeElement()],
     ['assetRetentionCandidateList', makeElement()],
+    ['assetRetentionSchedulerEnabled', makeElement()],
+    ['assetRetentionSchedulerIntervalHours', makeElement('24')],
+    ['assetRetentionSchedulerRunOnStartup', makeElement()],
+    ['assetRetentionSchedulerMarkCandidates', makeElement()],
+    ['assetRetentionSchedulerAutoDeleteStatus', makeElement()],
+    ['assetRetentionSchedulerLastRunAt', makeElement()],
+    ['assetRetentionSchedulerNextRunAt', makeElement()],
+    ['btnAssetRetentionSchedulerSave', makeElement()],
+    ['btnAssetRetentionSchedulerRunNow', makeElement()],
+    ['assetRetentionSchedulerStatus', makeElement()],
+    ['assetRetentionSchedulerRuns', makeElement()],
   ]);
 }
 
@@ -161,6 +178,126 @@ test('asset retention policy save, evaluate and apply use retention endpoints wi
   assert.match(elements.get('assetRetentionCandidateCount').textContent, /1/);
   assert.match(elements.get('assetRetentionReclaimable').textContent, /2 KB/);
   assert.match(elements.get('assetRetentionStatus').textContent, /已标记 1 个清理候选/);
+});
+
+test('asset retention scheduler settings normalize to disabled and never auto-delete', () => {
+  assert.deepEqual(normalizeAssetRetentionSchedulerSettings({ intervalHours: 0, autoDelete: true }), {
+    enabled: false,
+    intervalHours: 1,
+    runOnStartup: false,
+    markCandidates: true,
+    autoDelete: false,
+    maxAssetsPerRun: 500,
+    lastRunAt: 0,
+    nextRunAt: 0,
+  });
+});
+
+test('asset retention scheduler form reads and renders safe scheduler fields', () => {
+  const elements = makeRetentionElements();
+  elements.get('assetRetentionSchedulerEnabled').checked = true;
+  elements.get('assetRetentionSchedulerIntervalHours').value = '6';
+  elements.get('assetRetentionSchedulerRunOnStartup').checked = true;
+  elements.get('assetRetentionSchedulerMarkCandidates').checked = true;
+  const restore = installDocument(elements);
+  try {
+    assert.deepEqual(readAssetRetentionSchedulerForm(), {
+      enabled: true,
+      intervalHours: 6,
+      runOnStartup: true,
+      markCandidates: true,
+      autoDelete: false,
+      maxAssetsPerRun: 500,
+      lastRunAt: 0,
+      nextRunAt: 0,
+    });
+
+    renderAssetRetentionSchedulerForm({
+      enabled: false,
+      intervalHours: 12,
+      runOnStartup: false,
+      markCandidates: true,
+      autoDelete: true,
+      lastRunAt: 1710000000000,
+      nextRunAt: 1710086400000,
+    });
+  } finally {
+    restore();
+  }
+
+  assert.equal(elements.get('assetRetentionSchedulerEnabled').checked, false);
+  assert.equal(elements.get('assetRetentionSchedulerIntervalHours').value, '12');
+  assert.equal(elements.get('assetRetentionSchedulerRunOnStartup').checked, false);
+  assert.equal(elements.get('assetRetentionSchedulerMarkCandidates').checked, true);
+  assert.match(elements.get('assetRetentionSchedulerAutoDeleteStatus').textContent, /不支持|已禁用/);
+  assert.notEqual(elements.get('assetRetentionSchedulerLastRunAt').textContent, '从未运行');
+  assert.notEqual(elements.get('assetRetentionSchedulerNextRunAt').textContent, '未计划');
+});
+
+test('asset retention scheduler save and run use scheduler endpoints without delete endpoint', async () => {
+  const elements = makeRetentionElements();
+  elements.get('assetRetentionSchedulerEnabled').checked = true;
+  elements.get('assetRetentionSchedulerIntervalHours').value = '8';
+  elements.get('assetRetentionSchedulerRunOnStartup').checked = true;
+  elements.get('assetRetentionSchedulerMarkCandidates').checked = true;
+  const restoreDocument = installDocument(elements);
+  const previousFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (url === '/api/v2/assets/retention/scheduler' && options.method === 'PUT') {
+      return { ok: true, json: async () => ({ success: true, scheduler: JSON.parse(options.body), warnings: [] }) };
+    }
+    if (url === '/api/v2/assets/retention/scheduler/run') {
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          run: { status: 'success', candidateCount: 2, markedCount: 2, candidateBytes: 4096 },
+          scheduler: { enabled: true, intervalHours: 8, lastRunAt: 1710000000000, nextRunAt: 1710028800000 },
+        }),
+      };
+    }
+    if (url === '/api/v2/assets/retention/scheduler/runs') {
+      return { ok: true, json: async () => ({ success: true, runs: [{ runId: 'run-1', status: 'success', markedCount: 2 }] }) };
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  try {
+    await __saveAssetRetentionSchedulerSettings();
+    await __runAssetRetentionSchedulerNow();
+  } finally {
+    restoreDocument();
+    globalThis.fetch = previousFetch;
+  }
+
+  assert.deepEqual(requests.map(request => request.url), [
+    '/api/v2/assets/retention/scheduler',
+    '/api/v2/assets/retention/scheduler/run',
+    '/api/v2/assets/retention/scheduler/runs',
+  ]);
+  assert.equal(requests[0].options.method, 'PUT');
+  assert.equal(requests[1].options.method, 'POST');
+  assert.equal(JSON.parse(requests[1].options.body).dryRun, false);
+  assert.doesNotMatch(JSON.stringify(requests), /\/api\/v2\/assets\/delete/);
+  assert.match(elements.get('assetRetentionSchedulerStatus').textContent, /已完成|已标记/);
+});
+
+test('asset retention scheduler runs render recent run records', () => {
+  const elements = makeRetentionElements();
+  const restore = installDocument(elements);
+  try {
+    renderAssetRetentionSchedulerRuns([
+      { runId: 'run-1', status: 'success', mode: 'manual', candidateCount: 2, markedCount: 1, candidateBytes: 1024 },
+    ]);
+  } finally {
+    restore();
+  }
+
+  assert.equal(elements.get('assetRetentionSchedulerRuns').hidden, false);
+  assert.equal(elements.get('assetRetentionSchedulerRuns').children.length, 1);
+  assert.match(elements.get('assetRetentionSchedulerRuns').children[0].textContent, /manual/);
+  assert.match(elements.get('assetRetentionSchedulerRuns').children[0].textContent, /标记 1/);
 });
 
 test('asset retention settings markup exposes candidate marking but no immediate delete action', () => {

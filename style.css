@@ -18827,7 +18827,9 @@ html[data-app-theme="dawn"] #appThemeGroup .cursor-size-btn[data-app-theme="dawn
 .settings-retention-policy-summary,
 .settings-retention-policy-actions,
 .settings-retention-policy-status,
-.settings-retention-candidate-list {
+.settings-retention-candidate-list,
+.settings-retention-scheduler,
+.settings-retention-scheduler-runs {
   grid-column: 1 / -1;
 }
 .settings-retention-policy-head {
@@ -18900,6 +18902,32 @@ html[data-app-theme="dawn"] #appThemeGroup .cursor-size-btn[data-app-theme="dawn
   font-size: var(--font-12);
 }
 .settings-retention-candidate-item:last-child {
+  border-bottom: 0;
+}
+.settings-retention-scheduler {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--stroke-08);
+}
+.settings-retention-scheduler-runs {
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--stroke-08);
+  border-radius: var(--radius-8);
+  background: var(--white-03);
+}
+.settings-retention-scheduler-runs[hidden] {
+  display: none;
+}
+.settings-retention-scheduler-run-item {
+  padding: var(--space-8) var(--space-10);
+  border-bottom: 1px solid var(--stroke-08);
+  color: var(--text-primary);
+  font-size: var(--font-12);
+}
+.settings-retention-scheduler-run-item:last-child {
   border-bottom: 0;
 }
 .settings-local-cleanup-card[hidden] {

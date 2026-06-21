@@ -11,6 +11,17 @@ const DEFAULT_RETENTION_POLICY = Object.freeze({
   excludeRecentlyUsedHours: 24,
 });
 
+const DEFAULT_RETENTION_SCHEDULER = Object.freeze({
+  enabled: false,
+  intervalHours: 24,
+  runOnStartup: false,
+  markCandidates: true,
+  autoDelete: false,
+  maxAssetsPerRun: 500,
+  lastRunAt: 0,
+  nextRunAt: 0,
+});
+
 const FIELD_IDS = Object.freeze({
   enabled: 'assetRetentionEnabled',
   orphanRetentionDays: 'assetRetentionOrphanDays',
@@ -24,6 +35,17 @@ const FIELD_IDS = Object.freeze({
   candidateCount: 'assetRetentionCandidateCount',
   reclaimable: 'assetRetentionReclaimable',
   candidateList: 'assetRetentionCandidateList',
+  schedulerEnabled: 'assetRetentionSchedulerEnabled',
+  schedulerIntervalHours: 'assetRetentionSchedulerIntervalHours',
+  schedulerRunOnStartup: 'assetRetentionSchedulerRunOnStartup',
+  schedulerMarkCandidates: 'assetRetentionSchedulerMarkCandidates',
+  schedulerAutoDeleteStatus: 'assetRetentionSchedulerAutoDeleteStatus',
+  schedulerLastRunAt: 'assetRetentionSchedulerLastRunAt',
+  schedulerNextRunAt: 'assetRetentionSchedulerNextRunAt',
+  schedulerSaveButton: 'btnAssetRetentionSchedulerSave',
+  schedulerRunNowButton: 'btnAssetRetentionSchedulerRunNow',
+  schedulerStatus: 'assetRetentionSchedulerStatus',
+  schedulerRuns: 'assetRetentionSchedulerRuns',
 });
 
 function number(value) {
@@ -111,6 +133,30 @@ export function normalizeAssetRetentionPolicySettings(value = {}) {
   };
 }
 
+export function normalizeAssetRetentionSchedulerSettings(value = {}) {
+  const source = value?.retentionScheduler && !Array.isArray(value.retentionScheduler)
+    ? value.retentionScheduler
+    : value;
+  return {
+    enabled: source.enabled !== undefined ? !!source.enabled : DEFAULT_RETENTION_SCHEDULER.enabled,
+    intervalHours: source.intervalHours !== undefined
+      ? clamp(Math.round(number(source.intervalHours)), 1, 24 * 365)
+      : DEFAULT_RETENTION_SCHEDULER.intervalHours,
+    runOnStartup: source.runOnStartup !== undefined ? !!source.runOnStartup : DEFAULT_RETENTION_SCHEDULER.runOnStartup,
+    markCandidates: source.markCandidates !== undefined ? !!source.markCandidates : DEFAULT_RETENTION_SCHEDULER.markCandidates,
+    autoDelete: false,
+    maxAssetsPerRun: source.maxAssetsPerRun !== undefined
+      ? clamp(Math.round(number(source.maxAssetsPerRun)), 1, 10000)
+      : DEFAULT_RETENTION_SCHEDULER.maxAssetsPerRun,
+    lastRunAt: source.lastRunAt !== undefined
+      ? clamp(Math.round(number(source.lastRunAt)), 0, Number.MAX_SAFE_INTEGER)
+      : DEFAULT_RETENTION_SCHEDULER.lastRunAt,
+    nextRunAt: source.nextRunAt !== undefined
+      ? clamp(Math.round(number(source.nextRunAt)), 0, Number.MAX_SAFE_INTEGER)
+      : DEFAULT_RETENTION_SCHEDULER.nextRunAt,
+  };
+}
+
 export function readAssetRetentionPolicyForm() {
   return normalizeAssetRetentionPolicySettings({
     enabled: readChecked(FIELD_IDS.enabled),
@@ -122,6 +168,42 @@ export function readAssetRetentionPolicyForm() {
     excludePinned: true,
     excludeRecentlyUsedHours: DEFAULT_RETENTION_POLICY.excludeRecentlyUsedHours,
   });
+}
+
+export function readAssetRetentionSchedulerForm() {
+  return normalizeAssetRetentionSchedulerSettings({
+    enabled: readChecked(FIELD_IDS.schedulerEnabled),
+    intervalHours: readValue(FIELD_IDS.schedulerIntervalHours),
+    runOnStartup: readChecked(FIELD_IDS.schedulerRunOnStartup),
+    markCandidates: readChecked(FIELD_IDS.schedulerMarkCandidates),
+    autoDelete: false,
+    maxAssetsPerRun: DEFAULT_RETENTION_SCHEDULER.maxAssetsPerRun,
+    lastRunAt: 0,
+    nextRunAt: 0,
+  });
+}
+
+function formatSchedulerTime(value, emptyText) {
+  const timestamp = Number(value || 0);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return emptyText;
+  }
+  try {
+    return new Date(timestamp).toLocaleString('zh-CN', { hour12: false });
+  } catch {
+    return emptyText;
+  }
+}
+
+export function renderAssetRetentionSchedulerForm(scheduler = {}) {
+  const normalized = normalizeAssetRetentionSchedulerSettings(scheduler);
+  setChecked(FIELD_IDS.schedulerEnabled, normalized.enabled);
+  setValue(FIELD_IDS.schedulerIntervalHours, String(normalized.intervalHours));
+  setChecked(FIELD_IDS.schedulerRunOnStartup, normalized.runOnStartup);
+  setChecked(FIELD_IDS.schedulerMarkCandidates, normalized.markCandidates);
+  setText(FIELD_IDS.schedulerAutoDeleteStatus, '自动删除不支持 / 已禁用');
+  setText(FIELD_IDS.schedulerLastRunAt, formatSchedulerTime(normalized.lastRunAt, '从未运行'));
+  setText(FIELD_IDS.schedulerNextRunAt, formatSchedulerTime(normalized.nextRunAt, '未计划'));
 }
 
 export function renderAssetRetentionPolicyForm(policy = {}) {
@@ -168,9 +250,90 @@ function renderRetentionResult(payload = {}, mode = 'evaluate') {
   }
 }
 
+export function renderAssetRetentionSchedulerRuns(runs = []) {
+  const list = element(FIELD_IDS.schedulerRuns);
+  if (!list) {
+    return;
+  }
+  const items = Array.isArray(runs) ? runs : [];
+  list.replaceChildren?.();
+  list.hidden = items.length === 0;
+  for (const item of items.slice(-10).reverse()) {
+    const row = document.createElement('div');
+    row.className = 'settings-retention-scheduler-run-item';
+    const mode = item?.mode || 'manual';
+    const status = item?.status || 'unknown';
+    const marked = Number(item?.markedCount || 0);
+    const candidates = Number(item?.candidateCount || 0);
+    const size = formatStorageUsageBytes(item?.candidateBytes || 0);
+    row.textContent = `${mode} · ${status} · 候选 ${candidates} · 标记 ${marked} · ${size}`;
+    list.appendChild(row);
+  }
+}
+
 export async function fetchAssetRetentionPolicySettings() {
   const payload = await requestJson('/api/v2/assets/retention/policy', { method: 'GET' });
   return payload?.policy || {};
+}
+
+export async function fetchAssetRetentionSchedulerSettings() {
+  const payload = await requestJson('/api/v2/assets/retention/scheduler', { method: 'GET' });
+  return payload?.scheduler || {};
+}
+
+export async function fetchAssetRetentionSchedulerRuns() {
+  const payload = await requestJson('/api/v2/assets/retention/scheduler/runs', { method: 'GET' });
+  renderAssetRetentionSchedulerRuns(payload?.runs || []);
+  return payload;
+}
+
+export async function __saveAssetRetentionSchedulerSettings() {
+  const button = element(FIELD_IDS.schedulerSaveButton);
+  const scheduler = readAssetRetentionSchedulerForm();
+  setBusy(button, true, '保存调度器');
+  try {
+    const payload = await requestJson('/api/v2/assets/retention/scheduler', {
+      method: 'PUT',
+      body: JSON.stringify(scheduler),
+    });
+    renderAssetRetentionSchedulerForm(payload.scheduler || scheduler);
+    const warning = Array.isArray(payload.warnings) && payload.warnings.length ? '；自动删除已强制禁用' : '';
+    setText(FIELD_IDS.schedulerStatus, `调度器设置已保存${warning}`);
+    element(FIELD_IDS.schedulerStatus)?.dataset && (element(FIELD_IDS.schedulerStatus).dataset.status = 'success');
+    return payload;
+  } catch (error) {
+    setText(FIELD_IDS.schedulerStatus, error?.message || '保存调度器失败');
+    element(FIELD_IDS.schedulerStatus)?.dataset && (element(FIELD_IDS.schedulerStatus).dataset.status = 'error');
+    return null;
+  } finally {
+    setBusy(button, false, '保存调度器');
+  }
+}
+
+export async function __runAssetRetentionSchedulerNow() {
+  const button = element(FIELD_IDS.schedulerRunNowButton);
+  setBusy(button, true, '立即评估 / 标记候选');
+  try {
+    const payload = await requestJson('/api/v2/assets/retention/scheduler/run', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'manual', dryRun: false }),
+    });
+    if (payload.scheduler) {
+      renderAssetRetentionSchedulerForm(payload.scheduler);
+    }
+    const run = payload.run || {};
+    const marked = Number(run.markedCount || 0);
+    setText(FIELD_IDS.schedulerStatus, `调度器运行已完成，已标记 ${marked} 个候选；未删除任何文件`);
+    element(FIELD_IDS.schedulerStatus)?.dataset && (element(FIELD_IDS.schedulerStatus).dataset.status = 'success');
+    await fetchAssetRetentionSchedulerRuns().catch(() => null);
+    return payload;
+  } catch (error) {
+    setText(FIELD_IDS.schedulerStatus, error?.message || '运行调度器失败');
+    element(FIELD_IDS.schedulerStatus)?.dataset && (element(FIELD_IDS.schedulerStatus).dataset.status = 'error');
+    return null;
+  } finally {
+    setBusy(button, false, '立即评估 / 标记候选');
+  }
 }
 
 export async function __saveAssetRetentionPolicySettings() {
@@ -238,6 +401,8 @@ export function initAssetRetentionPolicySettings() {
   const saveButton = element(FIELD_IDS.saveButton);
   const evaluateButton = element(FIELD_IDS.evaluateButton);
   const applyButton = element(FIELD_IDS.applyButton);
+  const schedulerSaveButton = element(FIELD_IDS.schedulerSaveButton);
+  const schedulerRunNowButton = element(FIELD_IDS.schedulerRunNowButton);
   if (!saveButton || saveButton.__assetRetentionBound) {
     return;
   }
@@ -245,6 +410,16 @@ export function initAssetRetentionPolicySettings() {
   fetchAssetRetentionPolicySettings()
     .then(renderAssetRetentionPolicyForm)
     .catch(() => setStatus('加载生命周期策略失败', 'error'));
+  fetchAssetRetentionSchedulerSettings()
+    .then(renderAssetRetentionSchedulerForm)
+    .catch(() => {
+      const target = element(FIELD_IDS.schedulerStatus);
+      if (target) {
+        target.textContent = '加载调度器失败';
+        target.dataset.status = 'error';
+      }
+    });
+  void fetchAssetRetentionSchedulerRuns().catch(() => null);
   saveButton.addEventListener('click', () => {
     void __saveAssetRetentionPolicySettings();
   });
@@ -253,5 +428,11 @@ export function initAssetRetentionPolicySettings() {
   });
   applyButton?.addEventListener('click', () => {
     void __applyAssetRetentionPolicySettings();
+  });
+  schedulerSaveButton?.addEventListener('click', () => {
+    void __saveAssetRetentionSchedulerSettings();
+  });
+  schedulerRunNowButton?.addEventListener('click', () => {
+    void __runAssetRetentionSchedulerNow();
   });
 }

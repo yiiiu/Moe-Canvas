@@ -53,6 +53,7 @@ from backend.services.asset_registry_service import AssetRegistryService
 from backend.services.asset_usage_index_service import AssetUsageIndexService
 from backend.services.asset_lifecycle_service import AssetLifecycleService
 from backend.services.asset_retention_policy_service import AssetRetentionPolicyService
+from backend.services.asset_retention_scheduler_service import AssetRetentionSchedulerService
 from backend.services.storage_usage_service import StorageUsageService
 from backend.services.storage_quota_service import StorageQuotaService
 from backend.services.storage_bucket_service import StorageBucketService
@@ -1408,6 +1409,11 @@ ASSET_RETENTION_POLICY_SERVICE = AssetRetentionPolicyService(
     assets_file_path=os.path.join(USER_DIR, "assets.json"),
     settings_file_getter=lambda: os.path.join(USER_DIR, "settings.json"),
     canvas_dir_getter=lambda: CANVAS_DIR,
+)
+ASSET_RETENTION_SCHEDULER_SERVICE = AssetRetentionSchedulerService(
+    retention_policy_service=ASSET_RETENTION_POLICY_SERVICE,
+    settings_file_getter=lambda: os.path.join(USER_DIR, "settings.json"),
+    runs_file_getter=lambda: os.path.join(USER_DIR, "retention_scheduler_runs.json"),
 )
 
 def _get_custom_ai_config():
@@ -2830,6 +2836,48 @@ def _handle_asset_retention_apply_request(handler):
     return True
 
 
+def _handle_asset_retention_scheduler_get_request(handler):
+    try:
+        _json_ok(handler, ASSET_RETENTION_SCHEDULER_SERVICE.get_scheduler())
+    except Exception as exc:
+        _json_err(handler, 500, AssetRetentionSchedulerService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_retention_scheduler_put_request(handler):
+    payload, error = _read_json_object_request(handler)
+    if error:
+        _json_err(handler, 400, error)
+        return True
+    try:
+        _json_ok(handler, ASSET_RETENTION_SCHEDULER_SERVICE.update_scheduler(payload))
+    except Exception as exc:
+        _json_err(handler, 500, AssetRetentionSchedulerService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_retention_scheduler_run_request(handler):
+    payload, error = _read_json_object_request(handler)
+    if error:
+        _json_err(handler, 400, error)
+        return True
+    try:
+        _json_ok(handler, ASSET_RETENTION_SCHEDULER_SERVICE.run_once(payload))
+    except Exception as exc:
+        _json_err(handler, 500, AssetRetentionSchedulerService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_retention_scheduler_runs_request(handler):
+    try:
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(handler.path).query)
+        limit = query.get("limit", [20])[0]
+        _json_ok(handler, ASSET_RETENTION_SCHEDULER_SERVICE.get_runs(limit))
+    except Exception as exc:
+        _json_err(handler, 500, AssetRetentionSchedulerService._sanitize_text(exc))
+    return True
+
+
 def _handle_storage_usage_get_request(handler):
     try:
         _json_ok(handler, STORAGE_USAGE_SERVICE.get_storage_usage())
@@ -3025,6 +3073,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if _handle_asset_retention_policy_put_request(self):
                 return
 
+        if path == "/api/v2/assets/retention/scheduler":
+            if _handle_asset_retention_scheduler_put_request(self):
+                return
+
         _json_err(self, 400, "Invalid request")
 
     # ════════════════════════════════════════════════════
@@ -3057,6 +3109,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/v2/assets/retention/policy":
             if _handle_asset_retention_policy_get_request(self):
+                return
+
+        if path == "/api/v2/assets/retention/scheduler":
+            if _handle_asset_retention_scheduler_get_request(self):
+                return
+
+        if path == "/api/v2/assets/retention/scheduler/runs":
+            if _handle_asset_retention_scheduler_runs_request(self):
                 return
 
         if path.startswith("/api/v2/assets/") and path != "/api/v2/assets/batch":
@@ -3115,6 +3175,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/v2/assets/retention/apply":
             if _handle_asset_retention_apply_request(self):
+                return
+
+        if path == "/api/v2/assets/retention/scheduler/run":
+            if _handle_asset_retention_scheduler_run_request(self):
                 return
 
         if path == "/api/v2/assets/delete":
@@ -4464,6 +4528,17 @@ def _display_urls(bind_host, port):
     return urls
 
 
+def _start_retention_scheduler_background():
+    try:
+        return ASSET_RETENTION_SCHEDULER_SERVICE.start_background_scheduler()
+    except Exception as exc:
+        try:
+            print(f"[retention-scheduler] startup skipped: {AssetRetentionSchedulerService._sanitize_text(exc)}")
+        except Exception:
+            pass
+    return None
+
+
 # --- 启动 ---
 def _is_benign_client_disconnect_error(error):
     current = error
@@ -4490,6 +4565,7 @@ if __name__ == "__main__":
     # 后台启动自动更新检查
     _t = threading.Thread(target=UPDATE_SERVICE.update_check_loop, daemon=True, name='AutoUpdateChecker')
     _t.start()
+    _start_retention_scheduler_background()
     port, requested_bind_host, lan_mode = _parse_server_args(sys.argv[1:])
     bind_host, bind_host_was_restricted = _resolve_bind_host(requested_bind_host, lan_mode)
     with QuietThreadingTCPServer((bind_host, port), Handler) as httpd:

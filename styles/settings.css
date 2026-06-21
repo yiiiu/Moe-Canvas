@@ -1291,6 +1291,33 @@ body.dev-mode .settings-card.dev-mode-only {
 .settings-storage-usage-block-mode {
   color: var(--text-muted);
 }
+.settings-storage-quota-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+  padding-top: var(--space-4);
+}
+.settings-storage-quota-form .settings-switch-inline,
+.settings-storage-quota-form .settings-storage-quota-note,
+.settings-storage-quota-actions {
+  grid-column: 1 / -1;
+}
+.settings-storage-quota-note,
+.settings-storage-quota-status {
+  color: var(--text-muted);
+}
+.settings-storage-quota-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  flex-wrap: wrap;
+}
+.settings-storage-quota-status[data-status="success"] {
+  color: var(--green);
+}
+.settings-storage-quota-status[data-status="error"] {
+  color: var(--error-text);
+}
 .settings-local-cleanup-card[hidden] {
   display: none;
 }

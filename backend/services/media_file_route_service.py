@@ -45,6 +45,7 @@ class MediaFileRouteService:
         image_derivative_root_dirname="_derived",
         storage_bucket_service=None,
         asset_registry_service=None,
+        storage_quota_service=None,
     ):
         self.directory = os.path.abspath(directory)
         self._get_uploads_dir = uploads_dir_getter
@@ -53,6 +54,7 @@ class MediaFileRouteService:
         self._get_output_dir = output_dir_getter
         self.storage_bucket_service = storage_bucket_service
         self.asset_registry_service = asset_registry_service
+        self.storage_quota_service = storage_quota_service
         self.max_upload_bytes = int(max_upload_bytes or 0)
         self._next_output_filename = next_output_filename
         self._load_json_file = load_json_file
@@ -190,6 +192,65 @@ class MediaFileRouteService:
             return bool(service and service.is_enabled())
         except Exception:
             return False
+
+    def _quota_preflight(self, *, operation, asset_type, incoming_bytes, source_url="", project_id="", node_id=""):
+        service = getattr(self, "storage_quota_service", None)
+        if not service:
+            return {"success": True, "allowed": True, "reason": "quota_service_disabled"}
+        request = {
+            "operation": str(operation or ""),
+            "assetType": str(asset_type or "file"),
+            "incomingBytes": int(incoming_bytes or 0),
+            "sourceUrl": str(source_url or ""),
+            "projectId": str(project_id or ""),
+            "nodeId": str(node_id or ""),
+        }
+        try:
+            result = service.preflight(request)
+        except Exception as exc:
+            return {"success": False, "allowed": True, "reason": "quota_preflight_failed", "message": str(exc)}
+        return result if isinstance(result, dict) else {"success": True, "allowed": True, "reason": "quota_preflight_invalid"}
+
+    @staticmethod
+    def _format_quota_bytes(value):
+        try:
+            size = float(value or 0)
+        except Exception:
+            size = 0
+        units = ("B", "KB", "MB", "GB", "TB")
+        unit_index = 0
+        while size >= 1024 and unit_index < len(units) - 1:
+            size /= 1024
+            unit_index += 1
+        if unit_index == 0:
+            return f"{int(size)} B"
+        rounded = round(size, 1)
+        text = str(int(rounded)) if float(rounded).is_integer() else str(rounded)
+        return f"{text} {units[unit_index]}"
+
+    def _quota_block_error(self, preflight):
+        payload = preflight if isinstance(preflight, dict) else {}
+        current_bytes = int(payload.get("currentBytes") or 0)
+        incoming_bytes = int(payload.get("incomingBytes") or 0)
+        limit_bytes = int(payload.get("limitBytes") or 0)
+        message = (
+            "storage_quota_exceeded: 存储空间不足，无法保存。"
+            f"本次需要 {self._format_quota_bytes(incoming_bytes)}，"
+            f"当前已用 {self._format_quota_bytes(current_bytes)} / {self._format_quota_bytes(limit_bytes)}。"
+        )
+        return self._json_err(507, message)
+
+    @staticmethod
+    def _content_length_from_headers(headers):
+        try:
+            value = headers.get("Content-Length")
+        except Exception:
+            value = None
+        try:
+            size = int(str(value or "").strip())
+        except Exception:
+            return 0
+        return size if size > 0 else 0
 
     def _storage_bucket_upload_error(self, error):
         return f"自定义存储桶上传失败：{str(error)}"
@@ -612,6 +673,16 @@ class MediaFileRouteService:
             if len(file_bytes) > self.max_upload_bytes:
                 return self._json_err(413, "Upload file too large")
 
+            quota = self._quota_preflight(
+                operation="upload",
+                asset_type=self._asset_type_from_filename(filename or "upload"),
+                incoming_bytes=len(file_bytes),
+                project_id=(qs.get("projectId", [""])[0] or "").strip(),
+                node_id=(qs.get("nodeId", [""])[0] or "").strip(),
+            )
+            if quota.get("allowed") is False:
+                return self._quota_block_error(quota)
+
             upload_dir = self._uploads_dir()
             os.makedirs(upload_dir, exist_ok=True)
             safe_fn, stored_fn, fpath = self._write_unique_upload_file(
@@ -727,6 +798,16 @@ class MediaFileRouteService:
             body = self._read_body(handler)
             if not body:
                 return self._json_err(400, "Empty payload")
+
+            quota = self._quota_preflight(
+                operation="save_output",
+                asset_type=self._asset_type_from_filename(filename),
+                incoming_bytes=len(body),
+                project_id=(qs.get("projectId", [""])[0] or "").strip(),
+                node_id=(qs.get("nodeId", [""])[0] or "").strip(),
+            )
+            if quota.get("allowed") is False:
+                return self._quota_block_error(quota)
 
             os.makedirs(os.path.dirname(fpath), exist_ok=True)
             with open(fpath, "wb") as file:
@@ -956,6 +1037,25 @@ class MediaFileRouteService:
 
         request_url = self._quote_download_url_for_request(url)
         try:
+            try:
+                head_request = urllib.request.Request(request_url, method="HEAD")
+                head_request.add_header("User-Agent", "AI-Canvas/1.0")
+                with urllib.request.urlopen(head_request, timeout=30) as head_resp:
+                    content_length = self._content_length_from_headers(head_resp.headers)
+                if content_length > 0:
+                    quota = self._quota_preflight(
+                        operation="save_output_from_url",
+                        asset_type=self._asset_type_from_filename(data.get("ext") or urllib.parse.urlparse(url).path),
+                        incoming_bytes=content_length,
+                        source_url=url,
+                        project_id=str(data.get("projectId") or "").strip(),
+                        node_id=str(data.get("nodeId") or "").strip(),
+                    )
+                    if quota.get("allowed") is False:
+                        return self._quota_block_error(quota)
+            except Exception:
+                pass
+
             request = urllib.request.Request(request_url, method="GET")
             request.add_header("User-Agent", "AI-Canvas/1.0")
             try:
@@ -989,6 +1089,25 @@ class MediaFileRouteService:
                 return self._json_err(502, f"Download failed: {str(exc)}")
 
             rel_path = f"output/{filename}"
+            try:
+                saved_size = os.path.getsize(fpath)
+            except Exception:
+                saved_size = 0
+            quota = self._quota_preflight(
+                operation="save_output_from_url",
+                asset_type=self._asset_type_from_filename(filename),
+                incoming_bytes=saved_size,
+                source_url=url,
+                project_id=str(data.get("projectId") or "").strip(),
+                node_id=str(data.get("nodeId") or "").strip(),
+            )
+            if quota.get("allowed") is False:
+                try:
+                    os.remove(fpath)
+                except Exception:
+                    pass
+                return self._quota_block_error(quota)
+
             self._remember_saved_output_from_url(dedupe_hash, rel_path, url)
             payload = {
                 "success": True,

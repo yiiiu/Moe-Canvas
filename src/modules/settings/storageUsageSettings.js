@@ -71,7 +71,7 @@ function buildStatusMessages(usage, quota, tone) {
   if (!quota?.enabled) {
     messages.push('配额提醒未启用，仅显示当前统计。');
   } else if (tone === 'danger') {
-    messages.push('已超过配额上限。第一版只展示提醒，不阻断生成或上传。');
+    messages.push(quota.blockWhenExceeded ? '已超过配额上限，新增媒体保存会被阻断。' : '已超过配额上限；当前仅提醒，不阻断新增媒体保存。');
   } else if (tone === 'warning') {
     messages.push(`已达到 ${quota.warningPercent || 80}% 提醒线。`);
   } else {
@@ -107,7 +107,7 @@ export function renderStorageUsageCard(payload = {}) {
   setText(STORAGE_USAGE_IDS.status, buildStatusMessages(usage, quota, tone));
   setText(
     STORAGE_USAGE_IDS.blockMode,
-    quota.blockWhenExceeded ? '超额阻断：已配置，但第一版只展示，不执行阻断' : '超额阻断：关闭',
+    quota.blockWhenExceeded ? '超额阻断：已开启，仅拦截新增媒体保存' : '超额阻断：关闭',
   );
 }
 

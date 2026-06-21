@@ -89,8 +89,9 @@ test('storage usage card renders totals, quota, storage backends and orphan remi
   assert.equal(elements.get('storageUsageOrphan').textContent, '30 B');
   assert.equal(elements.get('storageUsageDeleted').textContent, '20 B');
   assert.match(elements.get('storageUsageStatus').textContent, /已超过配额/);
+  assert.match(elements.get('storageUsageStatus').textContent, /新增媒体保存会被阻断/);
   assert.match(elements.get('storageUsageStatus').textContent, /孤儿资源/);
-  assert.match(elements.get('storageUsageBlockMode').textContent, /只展示/);
+  assert.match(elements.get('storageUsageBlockMode').textContent, /已开启/);
 });
 
 test('storage usage card shows clear disabled quota label instead of dash', () => {

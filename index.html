@@ -58,7 +58,7 @@
         color: #4f46e5;
       }
     </style>
-    <link rel="stylesheet" href="style.css?v=2026060309" />
+    <link rel="stylesheet" href="style.css?v=2026060310" />
   </head>
   <body>
     <div id="v2-server-disconnect-alert">
@@ -1961,7 +1961,7 @@
                   <div>
                     <div class="settings-label">存储用量与配额</div>
                     <div class="settings-desc">
-                      基于 Asset Registry 统计当前占用。第一版只展示提醒，不自动删除、不阻断生成或上传。
+                      基于 Asset Registry 统计当前占用。默认只提醒；开启超额阻断后，仅拦截新增媒体保存。
                     </div>
                   </div>
                   <div class="settings-storage-usage-percent" id="storageUsagePercent">
@@ -1999,6 +1999,48 @@
                 </div>
                 <div class="settings-desc settings-storage-usage-block-mode" id="storageUsageBlockMode">
                   超额阻断：关闭
+                </div>
+                <div class="settings-storage-quota-form" id="storageQuotaSettingsForm">
+                  <label class="settings-switch-inline">
+                    <input type="checkbox" id="storageQuotaEnabled" />
+                    <span>启用配额提醒</span>
+                  </label>
+                  <label class="settings-field">
+                    <span>配额上限（GB）</span>
+                    <input
+                      type="number"
+                      id="storageQuotaLimitGB"
+                      class="settings-input"
+                      min="0"
+                      step="0.1"
+                      placeholder="例如 2"
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>提醒阈值（%）</span>
+                    <input
+                      type="number"
+                      id="storageQuotaWarningPercent"
+                      class="settings-input"
+                      min="1"
+                      max="100"
+                      step="1"
+                      placeholder="80"
+                    />
+                  </label>
+                  <label class="settings-switch-inline settings-storage-quota-block-switch">
+                    <input type="checkbox" id="storageQuotaBlockWhenExceeded" />
+                    <span>超过配额时阻断新增媒体保存</span>
+                  </label>
+                  <div class="settings-desc settings-storage-quota-note">
+                    默认关闭硬拦截；关闭时仅展示风险，不阻断上传或生成结果保存。
+                  </div>
+                  <div class="settings-storage-quota-actions">
+                    <button type="button" class="settings-save-btn" id="btnStorageQuotaSave">
+                      保存配额设置
+                    </button>
+                    <span class="settings-desc settings-storage-quota-status" id="storageQuotaSettingsStatus" aria-live="polite"></span>
+                  </div>
                 </div>
               </div>
               <div

@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { showToast } from './toastService.js';
 
@@ -22,6 +24,17 @@ function createElementMock(tagName) {
     }
   };
 }
+
+test('toast error style reuses the existing light error pill tokens', () => {
+  const rootCss = readFileSync(join(process.cwd(), 'style.css'), 'utf8');
+  const toastCss = readFileSync(join(process.cwd(), 'styles', 'toast.css'), 'utf8');
+  const errorToastRulePattern = /\.v2-toast\.error\s*\{[^}]*background:\s*var\(--fill-danger-soft\)[^}]*border-color:\s*var\(--error-border\)[^}]*color:\s*var\(--error-text-light\)/;
+
+  assert.match(rootCss, errorToastRulePattern);
+  assert.match(toastCss, errorToastRulePattern);
+  assert.doesNotMatch(rootCss, /--toast-error-bg/);
+  assert.doesNotMatch(toastCss, /--toast-error-bg/);
+});
 
 test('toastService formats structured object messages as readable text', () => {
   const wrap = createElementMock('div');

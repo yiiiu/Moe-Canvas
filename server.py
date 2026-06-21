@@ -53,6 +53,7 @@ from backend.services.asset_registry_service import AssetRegistryService
 from backend.services.asset_usage_index_service import AssetUsageIndexService
 from backend.services.asset_lifecycle_service import AssetLifecycleService
 from backend.services.storage_usage_service import StorageUsageService
+from backend.services.storage_quota_service import StorageQuotaService
 from backend.services.storage_bucket_service import StorageBucketService
 from backend.services.local_media_processing_route_service import LocalMediaProcessingRouteService
 from backend.services.remote_proxy_route_service import RemoteProxyRouteService
@@ -1991,6 +1992,12 @@ STORAGE_USAGE_SERVICE = StorageUsageService(
 )
 
 
+STORAGE_QUOTA_SERVICE = StorageQuotaService(
+    assets_file_path=os.path.join(USER_DIR, "assets.json"),
+    settings_file_getter=lambda: os.path.join(USER_DIR, "settings.json"),
+)
+
+
 MEDIA_FILE_ROUTE_SERVICE = MediaFileRouteService(
     directory=DIRECTORY,
     uploads_dir_getter=lambda: UPLOADS_DIR,
@@ -2010,6 +2017,7 @@ MEDIA_FILE_ROUTE_SERVICE = MediaFileRouteService(
     image_derivative_root_dirname=IMAGE_DERIVATIVE_ROOT_DIRNAME,
     storage_bucket_service=STORAGE_BUCKET_SERVICE,
     asset_registry_service=ASSET_REGISTRY_SERVICE,
+    storage_quota_service=STORAGE_QUOTA_SERVICE,
 )
 
 
@@ -2770,6 +2778,22 @@ def _handle_storage_usage_get_request(handler):
     return True
 
 
+def _handle_storage_quota_preflight_request(handler):
+    try:
+        payload = json.loads(_read_body(handler) or b"{}")
+    except Exception:
+        _json_err(handler, 400, "Invalid JSON")
+        return True
+    if not isinstance(payload, dict):
+        _json_err(handler, 400, "Invalid JSON")
+        return True
+    try:
+        _json_ok(handler, STORAGE_QUOTA_SERVICE.preflight(payload))
+    except Exception as exc:
+        _json_err(handler, 500, str(exc))
+    return True
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
@@ -2994,6 +3018,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         path = self.path.split("?")[0]
         if not _enforce_local_api_access(self, path):
             return
+
+        if path == "/api/v2/storage/quota/preflight":
+            if _handle_storage_quota_preflight_request(self):
+                return
 
         if path == "/api/v2/assets/batch":
             if _handle_asset_batch_request(self):

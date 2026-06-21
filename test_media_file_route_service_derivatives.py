@@ -50,8 +50,31 @@ class FakeStorageBucketService:
         return str(error).replace("minio-secret", "***")
 
 
+class FakeStorageQuotaService:
+    def __init__(self, *, allowed=True, reason="within_quota"):
+        self.allowed = allowed
+        self.reason = reason
+        self.calls = []
+
+    def preflight(self, request):
+        self.calls.append(dict(request or {}))
+        incoming_bytes = int((request or {}).get("incomingBytes") or 0)
+        return {
+            "success": True,
+            "allowed": self.allowed,
+            "reason": self.reason,
+            "error": "" if self.allowed else "storage_quota_exceeded",
+            "currentBytes": 90,
+            "incomingBytes": incoming_bytes,
+            "projectedBytes": 90 + incoming_bytes,
+            "limitBytes": 100,
+            "projectedPercent": 90 + incoming_bytes,
+            "quota": {"enabled": True, "limitBytes": 100, "warningPercent": 80, "blockWhenExceeded": True},
+        }
+
+
 class MediaFileRouteServiceDerivativeTest(unittest.TestCase):
-    def make_service(self, tmpdir, storage_bucket_service=None, asset_registry_service=None):
+    def make_service(self, tmpdir, storage_bucket_service=None, asset_registry_service=None, storage_quota_service=None):
         uploads_dir = os.path.join(tmpdir, "data", "uploads")
         output_dir = os.path.join(tmpdir, "output")
         os.makedirs(uploads_dir, exist_ok=True)
@@ -70,6 +93,8 @@ class MediaFileRouteServiceDerivativeTest(unittest.TestCase):
             service.storage_bucket_service = storage_bucket_service
         if asset_registry_service is not None:
             service.asset_registry_service = asset_registry_service
+        if storage_quota_service is not None:
+            service.storage_quota_service = storage_quota_service
         return service
 
     def make_asset_registry(self, tmpdir):
@@ -441,6 +466,164 @@ class MediaFileRouteServiceDerivativeTest(unittest.TestCase):
             self.assertEqual(bucket.received["endpoint"], "http://127.0.0.1:9000")
             self.assertEqual(bucket.received["secretAccessKey"], "minio-secret")
             self.assertEqual(result["data"]["checks"]["write"], True)
+    def test_upload_quota_exceeded_does_not_write_upload_upload_bucket_or_create_asset(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bucket = FakeStorageBucketService()
+            quota = FakeStorageQuotaService(allowed=False, reason="quota_exceeded")
+            registry = self.make_asset_registry(tmpdir)
+            service = self.make_service(
+                tmpdir,
+                storage_bucket_service=bucket,
+                asset_registry_service=registry,
+                storage_quota_service=quota,
+            )
+            handler = FakeHandler(
+                b"upload-bytes",
+                path="/api/upload?filename=sample.png&nodeId=node-a&canvasId=canvas-a",
+                headers={"Content-Type": "image/png"},
+            )
+
+            result = service._handle_upload(handler)
+
+            self.assertEqual(result["kind"], "json_err")
+            self.assertEqual(result["code"], 507)
+            self.assertIn("storage_quota_exceeded", result["message"])
+            self.assertEqual(quota.calls[0]["operation"], "upload")
+            self.assertEqual(quota.calls[0]["assetType"], "image")
+            self.assertEqual(quota.calls[0]["incomingBytes"], len(b"upload-bytes"))
+            self.assertEqual(bucket.uploads, [])
+            self.assertEqual(os.listdir(os.path.join(tmpdir, "data", "uploads")), [])
+            self.assertFalse(os.path.exists(os.path.join(tmpdir, "user", "assets.json")))
+
+    def test_save_output_quota_exceeded_does_not_write_output_upload_bucket_or_create_asset(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bucket = FakeStorageBucketService()
+            quota = FakeStorageQuotaService(allowed=False, reason="quota_exceeded")
+            registry = self.make_asset_registry(tmpdir)
+            service = self.make_service(
+                tmpdir,
+                storage_bucket_service=bucket,
+                asset_registry_service=registry,
+                storage_quota_service=quota,
+            )
+            handler = FakeHandler(b"image-bytes", path="/api/v2/save_output?ext=png&nodeId=node-a&canvasId=canvas-a")
+
+            result = service._handle_save_output(handler)
+
+            self.assertEqual(result["kind"], "json_err")
+            self.assertEqual(result["code"], 507)
+            self.assertIn("storage_quota_exceeded", result["message"])
+            self.assertEqual(quota.calls[0]["operation"], "save_output")
+            self.assertEqual(quota.calls[0]["assetType"], "image")
+            self.assertEqual(quota.calls[0]["incomingBytes"], len(b"image-bytes"))
+            self.assertEqual(bucket.uploads, [])
+            self.assertFalse(os.path.exists(os.path.join(tmpdir, "output", "out.png")))
+            self.assertFalse(os.path.exists(os.path.join(tmpdir, "user", "assets.json")))
+
+    def test_save_output_from_url_quota_exceeded_with_content_length_does_not_download(self):
+        class FakeHeadResponse:
+            headers = {"Content-Length": "11", "Content-Type": "image/png"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bucket = FakeStorageBucketService()
+            quota = FakeStorageQuotaService(allowed=False, reason="quota_exceeded")
+            registry = self.make_asset_registry(tmpdir)
+            service = self.make_service(
+                tmpdir,
+                storage_bucket_service=bucket,
+                asset_registry_service=registry,
+                storage_quota_service=quota,
+            )
+            handler = FakeHandler(
+                json.dumps({"url": "https://runninghub.cn/result.png", "ext": "png", "nodeId": "node-a"}).encode("utf-8"),
+                path="/api/v2/save_output_from_url",
+            )
+            requests = []
+            original_urlopen = media_file_route_service.urllib.request.urlopen
+            try:
+                def fake_urlopen(request, timeout=0):
+                    requests.append(request.get_method())
+                    if request.get_method() == "HEAD":
+                        return FakeHeadResponse()
+                    raise AssertionError("GET should not be called when quota blocks by Content-Length")
+
+                media_file_route_service.urllib.request.urlopen = fake_urlopen
+                result = service._handle_save_output_from_url(handler)
+            finally:
+                media_file_route_service.urllib.request.urlopen = original_urlopen
+
+            self.assertEqual(result["kind"], "json_err")
+            self.assertEqual(result["code"], 507)
+            self.assertEqual(requests, ["HEAD"])
+            self.assertEqual(quota.calls[0]["operation"], "save_output_from_url")
+            self.assertEqual(quota.calls[0]["incomingBytes"], 11)
+            self.assertEqual(bucket.uploads, [])
+            self.assertEqual(os.listdir(os.path.join(tmpdir, "output")), [])
+            self.assertFalse(os.path.exists(os.path.join(tmpdir, "user", "assets.json")))
+
+    def test_save_output_from_url_unknown_length_download_then_quota_exceeded_cleans_file(self):
+        class FakeHeadResponse:
+            headers = {"Content-Type": "image/png"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        class FakeGetResponse:
+            headers = {"Content-Type": "image/png"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self, _size):
+                if getattr(self, "done", False):
+                    return b""
+                self.done = True
+                return b"remote-bytes"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bucket = FakeStorageBucketService()
+            quota = FakeStorageQuotaService(allowed=False, reason="quota_exceeded")
+            registry = self.make_asset_registry(tmpdir)
+            service = self.make_service(
+                tmpdir,
+                storage_bucket_service=bucket,
+                asset_registry_service=registry,
+                storage_quota_service=quota,
+            )
+            handler = FakeHandler(
+                json.dumps({"url": "https://runninghub.cn/result.png", "ext": "png"}).encode("utf-8"),
+                path="/api/v2/save_output_from_url",
+            )
+            original_urlopen = media_file_route_service.urllib.request.urlopen
+            try:
+                def fake_urlopen(request, timeout=0):
+                    if request.get_method() == "HEAD":
+                        return FakeHeadResponse()
+                    return FakeGetResponse()
+
+                media_file_route_service.urllib.request.urlopen = fake_urlopen
+                result = service._handle_save_output_from_url(handler)
+            finally:
+                media_file_route_service.urllib.request.urlopen = original_urlopen
+
+            self.assertEqual(result["kind"], "json_err")
+            self.assertEqual(result["code"], 507)
+            self.assertEqual([call["incomingBytes"] for call in quota.calls], [len(b"remote-bytes")])
+            self.assertEqual(bucket.uploads, [])
+            self.assertFalse(os.path.exists(os.path.join(tmpdir, "output", "out.png")))
+            self.assertFalse(os.path.exists(os.path.join(tmpdir, "user", "assets.json")))
 
 
 if __name__ == "__main__":

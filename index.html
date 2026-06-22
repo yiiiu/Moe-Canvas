@@ -1959,13 +1959,13 @@
               >
                 <div class="settings-storage-usage-head">
                   <div>
-                    <div class="settings-label">存储用量与配额</div>
+                    <div class="settings-label">存储空间</div>
                     <div class="settings-desc">
-                      基于 Asset Registry 统计当前占用。默认只提醒；开启超额阻断后，仅拦截新增媒体保存。
+                      按应用保存记录汇总本机与云端素材占用。默认只提醒；开启保护后，超过上限时会暂停新增素材保存。
                     </div>
                   </div>
                   <div class="settings-storage-usage-percent" id="storageUsagePercent">
-                    配额未启用
+                    未设置上限
                   </div>
                 </div>
                 <div class="settings-storage-usage-main">
@@ -1974,7 +1974,7 @@
                     <strong id="storageUsageTotal">0 B</strong>
                   </div>
                   <div class="settings-storage-usage-metric">
-                    <span class="settings-desc">配额上限</span>
+                    <span class="settings-desc">空间上限</span>
                     <strong id="storageUsageQuotaLimit">未启用</strong>
                   </div>
                   <div class="settings-storage-usage-metric">
@@ -1982,7 +1982,7 @@
                     <strong id="storageUsageLocal">0 B</strong>
                   </div>
                   <div class="settings-storage-usage-metric">
-                    <span class="settings-desc">S3-compatible</span>
+                    <span class="settings-desc">云端存储</span>
                     <strong id="storageUsageS3Compatible">0 B</strong>
                   </div>
                 </div>
@@ -1991,22 +1991,22 @@
                   <div><span>视频</span><strong id="storageUsageTypeVideo">0 B</strong></div>
                   <div><span>音频</span><strong id="storageUsageTypeAudio">0 B</strong></div>
                   <div><span>文件</span><strong id="storageUsageTypeFile">0 B</strong></div>
-                  <div><span>孤儿资源占用</span><strong id="storageUsageOrphan">0 B</strong></div>
-                  <div><span>已删除记录</span><strong id="storageUsageDeleted">0 B</strong></div>
+                  <div><span>可清理空间</span><strong id="storageUsageOrphan">0 B</strong></div>
+                  <div><span>清理记录</span><strong id="storageUsageDeleted">0 B</strong></div>
                 </div>
                 <div class="settings-desc settings-storage-usage-status" id="storageUsageStatus" aria-live="polite">
                   正在加载存储用量...
                 </div>
                 <div class="settings-desc settings-storage-usage-block-mode" id="storageUsageBlockMode">
-                  超额阻断：关闭
+                  空间保护：关闭
                 </div>
                 <div class="settings-storage-quota-form" id="storageQuotaSettingsForm">
                   <label class="settings-switch-inline">
                     <input type="checkbox" id="storageQuotaEnabled" />
-                    <span>启用配额提醒</span>
+                    <span>接近上限时提醒</span>
                   </label>
                   <label class="settings-field">
-                    <span>配额上限（GB）</span>
+                    <span>空间上限（GB）</span>
                     <input
                       type="number"
                       id="storageQuotaLimitGB"
@@ -2030,10 +2030,10 @@
                   </label>
                   <label class="settings-switch-inline settings-storage-quota-block-switch">
                     <input type="checkbox" id="storageQuotaBlockWhenExceeded" />
-                    <span>超过配额时阻断新增媒体保存</span>
+                    <span>超过上限时暂停新增素材保存</span>
                   </label>
                   <div class="settings-desc settings-storage-quota-note">
-                    默认关闭硬拦截；关闭时仅展示风险，不阻断上传或生成结果保存。
+                    默认不会暂停保存；关闭时只展示提醒，不影响上传或生成结果保存。
                   </div>
                   <div class="settings-storage-quota-actions">
                     <button type="button" class="settings-save-btn" id="btnStorageQuotaSave">
@@ -2306,8 +2306,12 @@
                         id="customStorageAccessKeyIdToggle"
                         aria-controls="customStorageAccessKeyId"
                         aria-pressed="false"
+                        aria-label="显示密钥"
                       >
-                        显示
+                        <svg class="settings-secret-toggle-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                          <circle cx="12" cy="12" r="2.8"></circle>
+                        </svg>
                       </button>
                     </div>
                   </label>
@@ -2326,8 +2330,12 @@
                         id="customStorageSecretAccessKeyToggle"
                         aria-controls="customStorageSecretAccessKey"
                         aria-pressed="false"
+                        aria-label="显示密钥"
                       >
-                        显示
+                        <svg class="settings-secret-toggle-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                          <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                          <circle cx="12" cy="12" r="2.8"></circle>
+                        </svg>
                       </button>
                     </div>
                   </label>

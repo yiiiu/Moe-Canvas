@@ -500,6 +500,25 @@ test('asset retention settings markup uses custom cleanup queue dropdowns instea
   assert.match(cleanupQueueMarkup, /data-cleanup-queue-option/);
 });
 
+test('asset cleanup queue dropdown trigger follows settings save button theme style', () => {
+  for (const cssPath of ['style.css', 'styles/settings.css']) {
+    const css = readFileSync(join(process.cwd(), cssPath), 'utf8');
+    const triggerRule = css.match(/\.settings-cleanup-select-trigger\s*\{([\s\S]*?)\}/);
+    const hoverRule = css.match(/\.settings-cleanup-select-trigger:hover\s*\{([\s\S]*?)\}/);
+
+    assert.ok(triggerRule, `${cssPath} should define cleanup dropdown trigger style`);
+    assert.ok(hoverRule, `${cssPath} should define cleanup dropdown trigger hover style`);
+    assert.match(triggerRule[1], /border:\s*1px solid var\(--settings-save-btn-border/);
+    assert.match(triggerRule[1], /background:\s*var\(--settings-save-btn-bg/);
+    assert.match(triggerRule[1], /color:\s*var\(--settings-save-btn-color/);
+    assert.match(hoverRule[1], /border-color:\s*var\(--settings-save-btn-border-hover/);
+    assert.match(hoverRule[1], /background:\s*var\(--settings-save-btn-bg-hover/);
+    assert.match(hoverRule[1], /color:\s*var\(--settings-save-btn-color-hover/);
+    assert.doesNotMatch(triggerRule[1], /linear-gradient/);
+    assert.doesNotMatch(triggerRule[1], /rgba\(38, 24, 34/);
+  }
+});
+
 test('asset retention settings markup exposes candidate marking and cleanup queue review actions', () => {
   const html = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 

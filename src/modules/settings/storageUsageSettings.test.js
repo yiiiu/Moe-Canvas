@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   formatStorageUsageBytes,
@@ -19,6 +20,35 @@ test('storage quota tone follows warning and exceeded thresholds', () => {
   assert.equal(getStorageQuotaTone({ enabled: true, usedPercent: 79, warningPercent: 80 }), 'normal');
   assert.equal(getStorageQuotaTone({ enabled: true, usedPercent: 80, warningPercent: 80 }), 'warning');
   assert.equal(getStorageQuotaTone({ enabled: true, usedPercent: 100, warningPercent: 80 }), 'danger');
+});
+
+test('storage usage card shows user-facing labels without storage jargon', () => {
+  const html = readFileSync(new URL('../../../index.html', import.meta.url), 'utf8');
+  const cardMatch = html.match(/<div\s+class="settings-section settings-card settings-storage-usage-card"[\s\S]*?<div class="settings-storage-quota-form"/);
+  assert.ok(cardMatch, 'storage usage card markup should exist');
+  const cardHtml = cardMatch[0];
+
+  assert.match(cardHtml, /应用保存记录/);
+  assert.match(cardHtml, /云端存储/);
+  assert.match(cardHtml, /可清理空间/);
+  assert.match(cardHtml, /清理记录/);
+  assert.match(cardHtml, /未设置上限/);
+  assert.doesNotMatch(cardHtml, /Asset Registry/);
+  assert.doesNotMatch(cardHtml, /S3-compatible/);
+  assert.doesNotMatch(cardHtml, /孤儿资源/);
+  assert.doesNotMatch(cardHtml, /已删除记录/);
+  assert.doesNotMatch(cardHtml, /汇总本机与云端保存的素材占用/);
+});
+
+test('storage usage warning tone does not tint the whole settings card', () => {
+  const css = readFileSync(new URL('../../../style.css', import.meta.url), 'utf8');
+  const fullCardToneRules = [...css.matchAll(/\.settings-storage-usage-card\[data-tone="(?:warning|danger)"\]\s*\{([\s\S]*?)\}/g)];
+
+  for (const [, body] of fullCardToneRules) {
+    assert.doesNotMatch(body, /\bbackground\s*:/);
+    assert.doesNotMatch(body, /\bborder-color\s*:/);
+  }
+  assert.match(css, /\.settings-storage-usage-card\[data-tone="danger"\]\s+\.settings-storage-usage-status/);
 });
 
 test('storage usage card renders totals, quota, storage backends and orphan reminder', () => {
@@ -88,9 +118,9 @@ test('storage usage card renders totals, quota, storage backends and orphan remi
   assert.equal(elements.get('storageUsageS3Compatible').textContent, '30 B');
   assert.equal(elements.get('storageUsageOrphan').textContent, '30 B');
   assert.equal(elements.get('storageUsageDeleted').textContent, '20 B');
-  assert.match(elements.get('storageUsageStatus').textContent, /已超过配额/);
-  assert.match(elements.get('storageUsageStatus').textContent, /新增媒体保存会被阻断/);
-  assert.match(elements.get('storageUsageStatus').textContent, /孤儿资源/);
+  assert.match(elements.get('storageUsageStatus').textContent, /已超过空间上限/);
+  assert.match(elements.get('storageUsageStatus').textContent, /新的图片、视频或文件会暂停保存/);
+  assert.match(elements.get('storageUsageStatus').textContent, /素材未被项目使用/);
   assert.match(elements.get('storageUsageBlockMode').textContent, /已开启/);
 });
 
@@ -142,8 +172,8 @@ test('storage usage card shows clear disabled quota label instead of dash', () =
   }
 
   assert.equal(elements.get('storageUsageCard').dataset.tone, 'normal');
-  assert.equal(elements.get('storageUsageQuotaLimit').textContent, '未启用');
-  assert.equal(elements.get('storageUsagePercent').textContent, '配额未启用');
-  assert.match(elements.get('storageUsageStatus').textContent, /仅显示当前统计/);
-  assert.match(elements.get('storageUsageStatus').textContent, /孤儿资源/);
+  assert.equal(elements.get('storageUsageQuotaLimit').textContent, '未设置');
+  assert.equal(elements.get('storageUsagePercent').textContent, '未设置上限');
+  assert.match(elements.get('storageUsageStatus').textContent, /只展示已占用空间/);
+  assert.match(elements.get('storageUsageStatus').textContent, /素材未被项目使用/);
 });

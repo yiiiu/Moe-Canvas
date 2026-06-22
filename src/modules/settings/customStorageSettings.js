@@ -99,6 +99,25 @@ function getElement(id) {
   return document.getElementById(id);
 }
 
+const SECRET_TOGGLE_ICON_SHOW = `
+  <svg class="settings-secret-toggle-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+    <circle cx="12" cy="12" r="2.8"></circle>
+  </svg>`;
+
+const SECRET_TOGGLE_ICON_HIDE = `
+  <svg class="settings-secret-toggle-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M2.5 12s3.5-6 9.5-6c1.6 0 3 .4 4.2 1"></path>
+    <path d="M21.5 12s-3.5 6-9.5 6c-1.6 0-3-.4-4.2-1"></path>
+    <path d="M3 3l18 18"></path>
+    <path d="M9.9 9.9A2.8 2.8 0 0 0 14.1 14.1"></path>
+  </svg>`;
+
+function renderSecretToggleIcon(toggle, visible) {
+  toggle.textContent = '';
+  toggle.innerHTML = visible ? SECRET_TOGGLE_ICON_HIDE : SECRET_TOGGLE_ICON_SHOW;
+}
+
 export function bindSecretVisibilityToggles() {
   FIELD_IDS.secretToggles.forEach(([inputId, toggleId]) => {
     const input = getElement(inputId);
@@ -108,8 +127,10 @@ export function bindSecretVisibilityToggles() {
     }
     const syncToggle = () => {
       const visible = input.type === 'text';
-      toggle.textContent = visible ? '隐藏' : '显示';
-      toggle.title = visible ? '隐藏密钥' : '显示密钥';
+      const label = visible ? '隐藏密钥' : '显示密钥';
+      renderSecretToggleIcon(toggle, visible);
+      toggle.title = label;
+      toggle.setAttribute?.('aria-label', label);
       toggle.setAttribute?.('aria-pressed', visible ? 'true' : 'false');
     };
     toggle.__customStorageSecretToggleBound = true;

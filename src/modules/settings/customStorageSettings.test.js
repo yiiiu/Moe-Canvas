@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
   buildCustomStorageSettings,
@@ -100,14 +102,19 @@ test('custom storage settings merge into existing user settings without dropping
   assert.equal(merged.customStorage.buckets[0].prefix, 'media/');
 });
 
-test('custom storage secret visibility toggles password inputs', () => {
+test('custom storage secret visibility toggles password inputs with icon-only buttons', () => {
   const elements = new Map();
   const makeInput = () => ({ type: 'password' });
   const makeButton = () => ({
     textContent: '',
+    innerHTML: '',
     title: '',
     dataset: {},
+    attributes: {},
     listeners: {},
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    },
     addEventListener(event, handler) {
       this.listeners[event] = handler;
     },
@@ -132,19 +139,52 @@ test('custom storage secret visibility toggles password inputs', () => {
     const secretInput = elements.get('customStorageSecretAccessKey');
     const secretToggle = elements.get('customStorageSecretAccessKeyToggle');
 
+    assert.equal(accessKeyToggle.textContent, '');
+    assert.match(accessKeyToggle.innerHTML, /settings-secret-toggle-icon/);
+    assert.equal(accessKeyToggle.attributes['aria-label'], '显示密钥');
+
     accessKeyToggle.click();
     assert.equal(accessKeyInput.type, 'text');
-    assert.equal(accessKeyToggle.textContent, '隐藏');
+    assert.equal(accessKeyToggle.textContent, '');
+    assert.match(accessKeyToggle.innerHTML, /settings-secret-toggle-icon/);
+    assert.equal(accessKeyToggle.title, '隐藏密钥');
+    assert.equal(accessKeyToggle.attributes['aria-label'], '隐藏密钥');
 
     accessKeyToggle.click();
     assert.equal(accessKeyInput.type, 'password');
-    assert.equal(accessKeyToggle.textContent, '显示');
+    assert.equal(accessKeyToggle.textContent, '');
+    assert.equal(accessKeyToggle.title, '显示密钥');
+    assert.equal(accessKeyToggle.attributes['aria-label'], '显示密钥');
 
     secretToggle.click();
     assert.equal(secretInput.type, 'text');
-    assert.equal(secretToggle.textContent, '隐藏');
+    assert.equal(secretToggle.textContent, '');
+    assert.match(secretToggle.innerHTML, /settings-secret-toggle-icon/);
   } finally {
     globalThis.document = previousDocument;
+  }
+});
+
+test('custom storage secret toggle is positioned inside the input in loaded settings styles', () => {
+  for (const cssPath of ['style.css', 'styles/settings.css']) {
+    const css = readFileSync(join(process.cwd(), cssPath), 'utf8');
+    const wrapRule = css.match(/\.settings-secret-input-wrap\s*\{([\s\S]*?)\}/);
+    const inputRule = css.match(/\.settings-secret-input-wrap\s+\.settings-input\s*\{([\s\S]*?)\}/);
+    const toggleRule = css.match(/\.settings-secret-toggle\s*\{([\s\S]*?)\}/);
+
+    assert.ok(wrapRule, `${cssPath} should define secret input wrapper style`);
+    assert.ok(inputRule, `${cssPath} should reserve room for the inline toggle`);
+    assert.ok(toggleRule, `${cssPath} should define secret toggle style`);
+    assert.match(wrapRule[1], /position:\s*relative/);
+    assert.match(inputRule[1], /padding-right:\s*58px/);
+    assert.match(toggleRule[1], /position:\s*absolute/);
+    assert.match(toggleRule[1], /right:\s*8px/);
+    assert.match(toggleRule[1], /top:\s*calc\(50% \+ 5px\)/);
+    assert.match(toggleRule[1], /width:\s*32px/);
+    assert.match(toggleRule[1], /height:\s*32px/);
+    assert.match(toggleRule[1], /padding:\s*0/);
+    assert.match(toggleRule[1], /transform:\s*translateY\(-50%\)/);
+    assert.match(css, /\.settings-secret-toggle-icon\s*\{/);
   }
 });
 

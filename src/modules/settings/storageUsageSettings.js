@@ -69,16 +69,16 @@ export function getStorageQuotaTone(quota = {}) {
 function buildStatusMessages(usage, quota, tone) {
   const messages = [];
   if (!quota?.enabled) {
-    messages.push('配额提醒未启用，仅显示当前统计。');
+    messages.push('空间提醒未启用，目前只展示已占用空间。');
   } else if (tone === 'danger') {
-    messages.push(quota.blockWhenExceeded ? '已超过配额上限，新增媒体保存会被阻断。' : '已超过配额上限；当前仅提醒，不阻断新增媒体保存。');
+    messages.push(quota.blockWhenExceeded ? '已超过空间上限，新的图片、视频或文件会暂停保存。' : '已超过空间上限；当前只提醒，不会暂停保存。');
   } else if (tone === 'warning') {
-    messages.push(`已达到 ${quota.warningPercent || 80}% 提醒线。`);
+    messages.push(`已接近空间上限，达到 ${quota.warningPercent || 80}% 提醒线。`);
   } else {
-    messages.push('当前用量低于提醒线。');
+    messages.push('当前空间充足。');
   }
   if (number(usage?.orphanBytes) > 0) {
-    messages.push('存在孤儿资源，可前往手动清理候选项确认处理。');
+    messages.push('有一部分素材未被项目使用，可在清理队列中确认后释放空间。');
   }
   return messages.join(' ');
 }
@@ -94,8 +94,8 @@ export function renderStorageUsageCard(payload = {}) {
   }
 
   setText(STORAGE_USAGE_IDS.total, formatStorageUsageBytes(usage.totalBytes));
-  setText(STORAGE_USAGE_IDS.quotaLimit, quota.enabled ? formatStorageUsageBytes(quota.limitBytes) : '未启用');
-  setText(STORAGE_USAGE_IDS.percent, quota.enabled ? `${number(quota.usedPercent)}%` : '配额未启用');
+  setText(STORAGE_USAGE_IDS.quotaLimit, quota.enabled ? formatStorageUsageBytes(quota.limitBytes) : '未设置');
+  setText(STORAGE_USAGE_IDS.percent, quota.enabled ? `${number(quota.usedPercent)}%` : '未设置上限');
   setText(STORAGE_USAGE_IDS.image, formatStorageUsageBytes(bytesOf(usage.byType, 'image')));
   setText(STORAGE_USAGE_IDS.video, formatStorageUsageBytes(bytesOf(usage.byType, 'video')));
   setText(STORAGE_USAGE_IDS.audio, formatStorageUsageBytes(bytesOf(usage.byType, 'audio')));
@@ -107,7 +107,7 @@ export function renderStorageUsageCard(payload = {}) {
   setText(STORAGE_USAGE_IDS.status, buildStatusMessages(usage, quota, tone));
   setText(
     STORAGE_USAGE_IDS.blockMode,
-    quota.blockWhenExceeded ? '超额阻断：已开启，仅拦截新增媒体保存' : '超额阻断：关闭',
+    quota.blockWhenExceeded ? '空间保护：已开启，超过上限时暂停新增素材保存' : '空间保护：关闭，超过上限时只提醒',
   );
 }
 

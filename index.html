@@ -2234,6 +2234,32 @@
                       </button>
                     </div>
                     <div class="settings-desc settings-retention-policy-status" id="assetCleanupQueueStatus" aria-live="polite"></div>
+                    <div class="settings-cleanup-job-panel" id="assetCleanupJobPanel" hidden>
+                      <div class="settings-cleanup-job-head">
+                        <div>
+                          <div class="settings-cleanup-job-title" id="assetCleanupJobTitle">后台清理任务</div>
+                          <div class="settings-cleanup-job-meta" id="assetCleanupJobHeartbeat">最近更新 —</div>
+                        </div>
+                        <strong class="settings-cleanup-job-progress" id="assetCleanupJobProgress">0%</strong>
+                      </div>
+                      <div class="settings-cleanup-job-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <span id="assetCleanupJobProgressBar"></span>
+                      </div>
+                      <div class="settings-cleanup-job-stats" id="assetCleanupJobStats">成功 0 项 · 失败 0 项 · 跳过 0 项 · 释放 0 B</div>
+                      <div class="settings-cleanup-job-current" id="assetCleanupJobCurrent">当前没有正在处理的资源</div>
+                      <div class="settings-retention-policy-actions settings-cleanup-job-actions">
+                        <button type="button" class="settings-save-btn settings-btn-ghost settings-cleanup-job-details-btn" id="btnAssetCleanupJobDetails" hidden>
+                          查看清理详情
+                        </button>
+                        <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetCleanupJobCancel" hidden>
+                          取消清理
+                        </button>
+                        <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetCleanupJobRetry" hidden>
+                          重试失败项
+                        </button>
+                      </div>
+                      <div class="settings-cleanup-job-report" id="assetCleanupJobReport" hidden></div>
+                    </div>
                     <div class="settings-cleanup-queue-list" id="assetCleanupQueueList" hidden></div>
                   </div>
                 </div>

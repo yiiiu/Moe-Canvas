@@ -1703,6 +1703,88 @@ html[data-app-theme="day"] .settings-save-btn {
   background: var(--error-bg, rgba(239, 68, 68, 0.12));
   color: var(--error-text);
 }
+.settings-cleanup-job-panel {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: var(--space-10);
+  padding: var(--space-12);
+  border: 1px solid var(--stroke-08);
+  border-radius: var(--radius-10, 10px);
+  background: var(--white-03);
+}
+.settings-cleanup-job-panel[hidden] {
+  display: none;
+}
+.settings-cleanup-job-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+.settings-cleanup-job-title {
+  color: var(--text-primary);
+  font-size: var(--font-14);
+  font-weight: 700;
+}
+.settings-cleanup-job-meta,
+.settings-cleanup-job-stats,
+.settings-cleanup-job-current {
+  color: var(--text-muted);
+  font-size: var(--font-12);
+}
+.settings-cleanup-job-progress {
+  flex-shrink: 0;
+  color: var(--text-primary);
+  font-size: var(--font-16);
+}
+.settings-cleanup-job-track {
+  overflow: hidden;
+  height: 8px;
+  border-radius: var(--radius-999);
+  background: var(--white-08);
+}
+.settings-cleanup-job-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+  transition: width 0.2s ease;
+}
+.settings-cleanup-job-panel[data-status="error"] .settings-cleanup-job-track span {
+  background: linear-gradient(90deg, var(--warning, #f59e0b), var(--error-text));
+}
+.settings-cleanup-job-panel[data-status="muted"] .settings-cleanup-job-track span {
+  background: var(--text-muted);
+}
+.settings-cleanup-job-actions {
+  justify-content: flex-start;
+}
+.settings-cleanup-job-report {
+  overflow: auto;
+  max-height: 180px;
+  border: 1px solid var(--stroke-08);
+  border-radius: var(--radius-8);
+  background: var(--white-03);
+}
+.settings-cleanup-job-report[hidden] {
+  display: none;
+}
+.settings-cleanup-job-result {
+  padding: var(--space-8) var(--space-10);
+  border-bottom: 1px solid var(--stroke-08);
+  color: var(--text-muted);
+  font-size: var(--font-12);
+}
+.settings-cleanup-job-result:last-child {
+  border-bottom: 0;
+}
+.settings-cleanup-job-result[data-status="success"] {
+  color: var(--green);
+}
+.settings-cleanup-job-result[data-status="failed"] {
+  color: var(--error-text);
+}
 .settings-local-cleanup-card[hidden] {
   display: none;
 }

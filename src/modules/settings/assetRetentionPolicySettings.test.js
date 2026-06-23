@@ -8,8 +8,11 @@ import {
   __deleteAssetCleanupQueueSettings,
   __dryRunAssetCleanupQueueSettings,
   __evaluateAssetRetentionPolicySettings,
+  __pollAssetCleanupJobSettings,
   __refreshAssetCleanupQueueSettings,
   __rejectAssetCleanupQueueSettings,
+  __retryAssetCleanupJobSettings,
+  __cancelAssetCleanupJobSettings,
   __runAssetRetentionSchedulerNow,
   __saveAssetRetentionPolicySettings,
   __saveAssetRetentionSchedulerSettings,
@@ -51,6 +54,7 @@ function makeElement(value = '', tagName = 'div') {
     dataset: {},
     attributes: {},
     children: [],
+    style: {},
     listeners: {},
     className: '',
     classList: {
@@ -142,6 +146,31 @@ function makeRetentionElements() {
     ['btnAssetCleanupQueueDelete', makeElement()],
     ['btnAssetCleanupQueueReject', makeElement()],
     ['assetCleanupQueueStatus', makeElement()],
+    ['assetCleanupJobPanel', makeElement()],
+    ['assetCleanupJobTitle', makeElement()],
+    ['assetCleanupJobProgress', makeElement()],
+    ['assetCleanupJobProgressBar', makeElement()],
+    ['assetCleanupJobStats', makeElement()],
+    ['assetCleanupJobCurrent', makeElement()],
+    ['assetCleanupJobHeartbeat', makeElement()],
+    ['assetCleanupJobReport', makeElement()],
+    ['btnAssetCleanupJobDetails', makeElement()],
+    ['btnAssetCleanupJobCancel', makeElement()],
+    ['btnAssetCleanupJobRetry', makeElement()],
+    ['storageUsageCard', makeElement()],
+    ['storageUsageTotal', makeElement()],
+    ['storageUsageQuotaLimit', makeElement()],
+    ['storageUsagePercent', makeElement()],
+    ['storageUsageTypeImage', makeElement()],
+    ['storageUsageTypeVideo', makeElement()],
+    ['storageUsageTypeAudio', makeElement()],
+    ['storageUsageTypeFile', makeElement()],
+    ['storageUsageLocal', makeElement()],
+    ['storageUsageS3Compatible', makeElement()],
+    ['storageUsageOrphan', makeElement()],
+    ['storageUsageDeleted', makeElement()],
+    ['storageUsageStatus', makeElement()],
+    ['storageUsageBlockMode', makeElement()],
   ]);
 }
 
@@ -389,7 +418,7 @@ test('asset cleanup queue renders summary, selectable items and blocked dry-run 
   assert.match(elements.get('assetCleanupQueueList').children[1].textContent, /asset_pinned|pinned/);
 });
 
-test('asset cleanup queue actions use queue endpoints and require confirm before delete', async () => {
+test('asset cleanup queue actions create background cleanup job and render progress report', async () => {
   const elements = makeRetentionElements();
   const restoreDocument = installDocument(elements);
   const previousFetch = globalThis.fetch;
@@ -404,11 +433,52 @@ test('asset cleanup queue actions use queue endpoints and require confirm before
     if (url === '/api/v2/assets/cleanup-queue/dry-run') {
       return { ok: true, json: async () => ({ success: true, results: [{ assetId: 'asset-a', canDelete: true, releasableBytes: 2048, reason: 'orphan_asset' }] }) };
     }
-    if (url === '/api/v2/assets/cleanup-queue/delete') {
-      return { ok: true, json: async () => ({ success: true, results: [{ assetId: 'asset-a', deleted: true, releasableBytes: 2048, reason: 'orphan_asset' }] }) };
+    if (url === '/api/v2/assets/cleanup-jobs') {
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          cleanupJobId: 'cleanup-job-1',
+          job: { cleanupJobId: 'cleanup-job-1', status: 'pending', totalCount: 1, processedCount: 0, progressPercent: 0, lastHeartbeatAt: 1710000000000, results: [{ assetId: 'asset-a', status: 'pending', reason: 'pending' }] },
+        }),
+      };
+    }
+    if (url === '/api/v2/assets/cleanup-jobs/cleanup-job-1') {
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          job: {
+            cleanupJobId: 'cleanup-job-1',
+            status: 'partial_failed',
+            totalCount: 2,
+            processedCount: 2,
+            successCount: 1,
+            failedCount: 1,
+            skippedCount: 0,
+            releasedBytes: 2048,
+            currentAssetId: '',
+            progressPercent: 100,
+            lastHeartbeatAt: 1710000001000,
+            results: [
+              { assetId: 'asset-a', status: 'success', reason: 'orphan_asset', releasedBytes: 2048 },
+              { assetId: 'asset-b', status: 'failed', reason: 'delete_failed', error: 'safe error' },
+            ],
+          },
+        }),
+      };
+    }
+    if (url === '/api/v2/assets/cleanup-jobs/cleanup-job-1/cancel') {
+      return { ok: true, json: async () => ({ success: true, job: { cleanupJobId: 'cleanup-job-1', status: 'canceled', totalCount: 1, processedCount: 1, progressPercent: 100, lastHeartbeatAt: 1710000002000, results: [{ assetId: 'asset-a', status: 'skipped', reason: 'canceled' }] } }) };
+    }
+    if (url === '/api/v2/assets/cleanup-jobs/cleanup-job-1/retry') {
+      return { ok: true, json: async () => ({ success: true, job: { cleanupJobId: 'cleanup-job-1', status: 'success', totalCount: 2, processedCount: 2, successCount: 2, failedCount: 0, skippedCount: 0, releasedBytes: 2048, progressPercent: 100, lastHeartbeatAt: 1710000003000, results: [{ assetId: 'asset-b', status: 'success', reason: 'retry_delete_failed', attempts: [{ status: 'failed' }, { status: 'success' }] }] } }) };
     }
     if (url === '/api/v2/assets/cleanup-queue/reject') {
       return { ok: true, json: async () => ({ success: true, results: [{ assetId: 'asset-a', rejected: true, reason: 'rejected' }] }) };
+    }
+    if (url === '/api/v2/storage/usage') {
+      return { ok: true, json: async () => ({ success: true, usage: { totalBytes: 0, byType: {}, byStorage: {} }, quota: { enabled: false } }) };
     }
     throw new Error(`unexpected fetch: ${url}`);
   };
@@ -419,6 +489,9 @@ test('asset cleanup queue actions use queue endpoints and require confirm before
     });
     await __dryRunAssetCleanupQueueSettings();
     await __deleteAssetCleanupQueueSettings();
+    await __pollAssetCleanupJobSettings('cleanup-job-1');
+    await __cancelAssetCleanupJobSettings('cleanup-job-1');
+    await __retryAssetCleanupJobSettings('cleanup-job-1');
     elements.get('assetCleanupQueueList').querySelectorAll('input[data-asset-id]').forEach(input => {
       input.checked = true;
     });
@@ -432,14 +505,35 @@ test('asset cleanup queue actions use queue endpoints and require confirm before
   assert.deepEqual(requests.map(request => request.url), [
     '/api/v2/assets/cleanup-queue?sort=size_desc&page=1&pageSize=50',
     '/api/v2/assets/cleanup-queue/dry-run',
-    '/api/v2/assets/cleanup-queue/delete',
+    '/api/v2/assets/cleanup-jobs',
+    '/api/v2/assets/cleanup-jobs/cleanup-job-1',
     '/api/v2/assets/cleanup-queue?sort=size_desc&page=1&pageSize=50',
+    '/api/v2/storage/usage',
+    '/api/v2/assets/cleanup-jobs/cleanup-job-1/cancel',
+    '/api/v2/assets/cleanup-jobs/cleanup-job-1/retry',
     '/api/v2/assets/cleanup-queue/reject',
     '/api/v2/assets/cleanup-queue?sort=size_desc&page=1&pageSize=50',
   ]);
   assert.equal(JSON.parse(requests[2].options.body).confirm, true);
+  assert.deepEqual(JSON.parse(requests[2].options.body).assetIds, ['asset-a']);
+  assert.doesNotMatch(JSON.stringify(requests), /cleanup-queue\/delete/);
   assert.doesNotMatch(JSON.stringify(requests), /\/api\/v2\/assets\/delete/);
-  assert.match(elements.get('assetCleanupQueueStatus').textContent, /已拒绝|删除/);
+  assert.match(elements.get('assetCleanupQueueStatus').textContent, /后台清理任务|已拒绝/);
+  assert.match(elements.get('assetCleanupJobTitle').textContent, /已清理 2 项/);
+  assert.match(elements.get('assetCleanupJobProgress').textContent, /100%/);
+  assert.equal(elements.get('assetCleanupJobProgressBar').style.width, '100%');
+  assert.match(elements.get('assetCleanupJobStats').textContent, /释放 2 KB/);
+  assert.equal(elements.get('assetCleanupJobReport').hidden, true);
+  assert.equal(elements.get('btnAssetCleanupJobDetails').hidden, false);
+  assert.match(elements.get('btnAssetCleanupJobDetails').textContent, /查看清理详情/);
+  const restoreDetailsDocument = installDocument(elements);
+  try {
+    await elements.get('btnAssetCleanupJobDetails').listeners.click();
+  } finally {
+    restoreDetailsDocument();
+  }
+  assert.equal(elements.get('assetCleanupJobReport').hidden, false);
+  assert.match(elements.get('assetCleanupJobReport').textContent, /retry_delete_failed/);
 });
 
 test('asset cleanup queue custom filter control updates hidden value and refreshes queue', async () => {
@@ -516,6 +610,18 @@ test('asset cleanup queue dropdown trigger follows settings save button theme st
     assert.match(hoverRule[1], /color:\s*var\(--settings-save-btn-color-hover/);
     assert.doesNotMatch(triggerRule[1], /linear-gradient/);
     assert.doesNotMatch(triggerRule[1], /rgba\(38, 24, 34/);
+  }
+});
+
+test('asset cleanup job progress fill uses a solid available theme color', () => {
+  for (const cssPath of ['style.css', 'styles/settings.css']) {
+    const css = readFileSync(join(process.cwd(), cssPath), 'utf8');
+    const fillRule = css.match(/\.settings-cleanup-job-track span\s*\{([\s\S]*?)\}/);
+
+    assert.ok(fillRule, `${cssPath} should define cleanup job progress fill style`);
+    assert.match(fillRule[1], /background:\s*var\(--blue\);/);
+    assert.doesNotMatch(fillRule[1], /linear-gradient/);
+    assert.doesNotMatch(fillRule[1], /var\(--primary\)/);
   }
 });
 

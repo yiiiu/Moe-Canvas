@@ -53,6 +53,7 @@ from backend.services.asset_registry_service import AssetRegistryService
 from backend.services.asset_usage_index_service import AssetUsageIndexService
 from backend.services.asset_lifecycle_service import AssetLifecycleService
 from backend.services.asset_cleanup_queue_service import AssetCleanupQueueService
+from backend.services.asset_cleanup_executor_service import AssetCleanupExecutorService
 from backend.services.asset_retention_policy_service import AssetRetentionPolicyService
 from backend.services.asset_retention_scheduler_service import AssetRetentionSchedulerService
 from backend.services.storage_usage_service import StorageUsageService
@@ -2007,6 +2008,16 @@ ASSET_CLEANUP_QUEUE_SERVICE = AssetCleanupQueueService(
 )
 
 
+ASSET_CLEANUP_EXECUTOR_SERVICE = AssetCleanupExecutorService(
+    jobs_file_path=os.path.join(USER_DIR, "cleanup_jobs.json"),
+    assets_file_path=os.path.join(USER_DIR, "assets.json"),
+    canvas_dir_getter=lambda: CANVAS_DIR,
+    lifecycle_service=ASSET_LIFECYCLE_SERVICE,
+    cleanup_queue_service=ASSET_CLEANUP_QUEUE_SERVICE,
+    local_root_dir=DIRECTORY,
+)
+
+
 STORAGE_USAGE_SERVICE = StorageUsageService(
     assets_file_path=os.path.join(USER_DIR, "assets.json"),
     settings_file_getter=lambda: os.path.join(USER_DIR, "settings.json"),
@@ -2829,6 +2840,84 @@ def _handle_asset_cleanup_queue_reject_request(handler):
     return True
 
 
+def _handle_asset_cleanup_jobs_get_request(handler, path):
+    try:
+        base = "/api/v2/assets/cleanup-jobs"
+        if path == base:
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(handler.path).query)
+            limit = query.get("limit", [20])[0]
+            _json_ok(handler, ASSET_CLEANUP_EXECUTOR_SERVICE.list_jobs(limit))
+            return True
+        prefix = base + "/"
+        job_id = urllib.parse.unquote(str(path or "")[len(prefix):]).strip()
+        if not job_id or "/" in job_id:
+            _json_err(handler, 400, "Invalid cleanupJobId")
+            return True
+        payload = ASSET_CLEANUP_EXECUTOR_SERVICE.get_job(job_id)
+        if payload.get("success") is False:
+            _json_err(handler, 404, payload.get("error") or "cleanup_job_not_found")
+            return True
+        _json_ok(handler, payload)
+    except Exception as exc:
+        _json_err(handler, 500, AssetCleanupExecutorService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_cleanup_jobs_create_request(handler):
+    payload, error = _read_json_object_request(handler)
+    if error:
+        _json_err(handler, 400, error)
+        return True
+    try:
+        asset_ids = payload.get("assetIds") if isinstance(payload.get("assetIds"), list) else []
+        result = ASSET_CLEANUP_EXECUTOR_SERVICE.create_job(asset_ids, confirm=payload.get("confirm") is True)
+        if result.get("success") is False:
+            _json_err(handler, 400, result.get("error") or "cleanup_job_create_failed")
+            return True
+        _json_ok(handler, result)
+    except Exception as exc:
+        _json_err(handler, 500, AssetCleanupExecutorService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_cleanup_jobs_retry_request(handler, path):
+    _read_body(handler)
+    try:
+        prefix = "/api/v2/assets/cleanup-jobs/"
+        suffix = "/retry"
+        job_id = urllib.parse.unquote(str(path or "")[len(prefix):-len(suffix)]).strip()
+        if not job_id or "/" in job_id:
+            _json_err(handler, 400, "Invalid cleanupJobId")
+            return True
+        result = ASSET_CLEANUP_EXECUTOR_SERVICE.retry_job(job_id)
+        if result.get("success") is False:
+            _json_err(handler, 400, result.get("error") or "cleanup_job_retry_failed")
+            return True
+        _json_ok(handler, result)
+    except Exception as exc:
+        _json_err(handler, 500, AssetCleanupExecutorService._sanitize_text(exc))
+    return True
+
+
+def _handle_asset_cleanup_jobs_cancel_request(handler, path):
+    _read_body(handler)
+    try:
+        prefix = "/api/v2/assets/cleanup-jobs/"
+        suffix = "/cancel"
+        job_id = urllib.parse.unquote(str(path or "")[len(prefix):-len(suffix)]).strip()
+        if not job_id or "/" in job_id:
+            _json_err(handler, 400, "Invalid cleanupJobId")
+            return True
+        result = ASSET_CLEANUP_EXECUTOR_SERVICE.cancel_job(job_id)
+        if result.get("success") is False:
+            _json_err(handler, 400, result.get("error") or "cleanup_job_cancel_failed")
+            return True
+        _json_ok(handler, result)
+    except Exception as exc:
+        _json_err(handler, 500, AssetCleanupExecutorService._sanitize_text(exc))
+    return True
+
+
 def _handle_asset_delete_request(handler):
     try:
         payload = json.loads(_read_body(handler) or b"{}")
@@ -3173,6 +3262,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if _handle_asset_cleanup_queue_get_request(self):
                 return
 
+        if path == "/api/v2/assets/cleanup-jobs" or path.startswith("/api/v2/assets/cleanup-jobs/"):
+            if _handle_asset_cleanup_jobs_get_request(self, path):
+                return
+
         if path == "/api/v2/assets/retention/policy":
             if _handle_asset_retention_policy_get_request(self):
                 return
@@ -3257,6 +3350,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/v2/assets/cleanup-queue/reject":
             if _handle_asset_cleanup_queue_reject_request(self):
+                return
+
+        if path == "/api/v2/assets/cleanup-jobs":
+            if _handle_asset_cleanup_jobs_create_request(self):
+                return
+
+        if path.startswith("/api/v2/assets/cleanup-jobs/") and path.endswith("/retry"):
+            if _handle_asset_cleanup_jobs_retry_request(self, path):
+                return
+
+        if path.startswith("/api/v2/assets/cleanup-jobs/") and path.endswith("/cancel"):
+            if _handle_asset_cleanup_jobs_cancel_request(self, path):
                 return
 
         if path == "/api/v2/assets/delete":

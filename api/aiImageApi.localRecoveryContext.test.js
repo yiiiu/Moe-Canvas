@@ -192,6 +192,79 @@ test('aiImageApi: GRSAI proxy request omits empty frontend apiKey so backend can
   }
 });
 
+test('aiImageApi: save_output_from_url fallback keeps generated image displayable', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const sourceUrl = 'https://img.example.com/minio-unstable-result.png';
+
+  try {
+    globalThis.window = { currentProjectId: 'project-save-fallback-test' };
+    globalThis.fetch = async (url, options = {}) => {
+      const requestUrl = String(url || '');
+      if (requestUrl === '/api/config') {
+        return makeJsonResponse({
+          providers: {
+            grsai: {
+              apiUrl: 'https://api.grsai.example.com/',
+              apiKey: 'k_grsai',
+            },
+          },
+        });
+      }
+      if (requestUrl === '/api/v2/proxy/image') {
+        return makeTextResponse(JSON.stringify({
+          id: 'grsai-save-fallback-result',
+          status: 'succeeded',
+          results: [{ url: sourceUrl }],
+        }));
+      }
+      if (requestUrl === '/api/v2/save_output_from_url') {
+        return makeJsonResponse({
+          success: true,
+          saved: false,
+          persisted: false,
+          path: '',
+          localPath: '',
+          url: sourceUrl,
+          sourceUrl,
+          displayUrl: sourceUrl,
+          originalUrl: sourceUrl,
+          storage: 'remote-fallback',
+          saveWarning: 'Download failed: SSL EOF',
+        });
+      }
+      throw new Error(`unexpected fetch url: ${requestUrl}`);
+    };
+
+    clearApiConfig();
+    const result = await generateImage({
+      prompt: 'p',
+      provider: 'grsai',
+      model: 'gpt-image-2',
+      mode: 'normal',
+      aspectRatio: '1:1',
+      imageSize: '2K',
+      inputUrls: [],
+    }, {
+      spec: {
+        runtimeTaskId: 'async:image:grsai:node-save-fallback:1000',
+        clientTaskId: 'client:async:image:grsai:node-save-fallback:1000',
+        targetNodeId: 'node-save-fallback',
+        canvasId: 'canvas-1',
+      },
+    });
+
+    const usableUrl = result.url || result.imageUrl || result.sourceUrl || result.displayUrl || result.originalUrl;
+    assert.equal(usableUrl, sourceUrl);
+    assert.equal(result.localPath || '', '');
+    assert.match(result.saveWarning || result.warning || '', /Download failed/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.window = originalWindow;
+    clearApiConfig();
+  }
+});
+
 test('aiImageApi: local recovery context merge fills empty request fields from spec', () => {
   const payload = mergeImageAsyncTaskContextForRequest({
     provider: 'grsai',

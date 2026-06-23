@@ -981,6 +981,25 @@ class MediaFileRouteService:
         query = urllib.parse.quote(parts.query or "", safe="=&%:@/?!$'()*+,;")
         return urllib.parse.urlunsplit((parts.scheme, netloc, path, query, ""))
 
+    def _build_remote_save_fallback_payload(self, url, warning):
+        message = str(warning or "Save skipped").strip() or "Save skipped"
+        remote_url = str(url or "").strip()
+        return {
+            "success": True,
+            "saved": False,
+            "persisted": False,
+            "filename": "",
+            "path": "",
+            "localPath": "",
+            "url": remote_url,
+            "sourceUrl": remote_url,
+            "displayUrl": remote_url,
+            "originalUrl": remote_url,
+            "storage": "remote-fallback",
+            "saveWarning": message,
+            "warning": message,
+        }
+
     def _handle_save_output_from_url(self, handler):
         body = self._read_body(handler)
         data, error = self._parse_json_object(body)
@@ -1084,9 +1103,13 @@ class MediaFileRouteService:
                                 return self._json_err(413, "File too large")
                             file.write(chunk)
             except urllib.error.HTTPError as exc:
-                return self._json_err(502, f"Download HTTPError: {exc.code}")
+                return self._json_ok(
+                    self._build_remote_save_fallback_payload(url, f"Download HTTPError: {exc.code}")
+                )
             except Exception as exc:
-                return self._json_err(502, f"Download failed: {str(exc)}")
+                return self._json_ok(
+                    self._build_remote_save_fallback_payload(url, f"Download failed: {str(exc)}")
+                )
 
             rel_path = f"output/{filename}"
             try:
@@ -1128,8 +1151,15 @@ class MediaFileRouteService:
                         local_path=rel_path,
                     )
                 except Exception as exc:
-                    return self._json_err(502, self._storage_bucket_upload_error(exc))
-                payload = self._apply_storage_bucket_result(payload, storage_result)
+                    warning = self._storage_bucket_upload_error(exc)
+                    payload["saved"] = True
+                    payload["persisted"] = True
+                    payload["storage"] = "local"
+                    payload["storageUploadFailed"] = True
+                    payload["storageWarning"] = warning
+                    payload["saveWarning"] = warning
+                else:
+                    payload = self._apply_storage_bucket_result(payload, storage_result)
             payload = self.augment_saved_media_response(
                 payload,
                 fpath,

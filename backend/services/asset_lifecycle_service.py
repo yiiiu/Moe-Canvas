@@ -169,18 +169,19 @@ class AssetLifecycleService:
         if storage_type == "s3-compatible":
             if not self.storage_bucket_service:
                 raise RuntimeError("存储桶服务不可用")
-            self.storage_bucket_service.delete_object(
-                self._text(asset.get("objectKey")),
-                bucket_name=self._text(storage.get("bucket")),
-            )
-            return
+            object_key = self._text(asset.get("objectKey"))
+            bucket_name = self._text(storage.get("bucket"))
+            if not self.storage_bucket_service.object_exists(object_key, bucket_name=bucket_name):
+                return "object_already_missing"
+            self.storage_bucket_service.delete_object(object_key, bucket_name=bucket_name)
+            return "orphan_asset"
         if storage_type == "local":
             path = self._safe_local_path(asset.get("localPath"))
             if not path:
                 raise RuntimeError("缺少 localPath")
             if os.path.exists(path):
                 os.remove(path)
-            return
+            return "orphan_asset"
         raise RuntimeError("不支持的 storage.type")
 
     def _result_base(self, asset_id, asset=None):
@@ -219,14 +220,14 @@ class AssetLifecycleService:
             asset["lifecycleStatus"] = "deleting"
             asset["lastLifecycleCheckedAt"] = now
             try:
-                self._delete_storage_object(asset)
+                delete_reason = self._delete_storage_object(asset)
                 deleted_at = self._now_ms()
                 asset["lifecycleStatus"] = "deleted"
                 asset["deletedAt"] = deleted_at
                 asset["deleteMode"] = "manual"
                 asset["deleteError"] = ""
                 asset["lastLifecycleCheckedAt"] = deleted_at
-                results.append({**self._result_base(asset_id, asset), "deleted": True, "reason": "orphan_asset"})
+                results.append({**self._result_base(asset_id, asset), "deleted": True, "reason": delete_reason or "orphan_asset"})
             except Exception as exc:
                 sanitized_error = self._sanitize_error(exc)
                 failed_at = self._now_ms()

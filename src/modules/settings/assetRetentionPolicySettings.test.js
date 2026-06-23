@@ -17,6 +17,8 @@ import {
   __saveAssetRetentionPolicySettings,
   __saveAssetRetentionSchedulerSettings,
   __bindAssetCleanupQueueFilterControls,
+  __confirmDeleteAssetCleanupQueueSettings,
+  __setAssetCleanupQueueSelectionSettings,
   normalizeAssetRetentionPolicySettings,
   normalizeAssetRetentionSchedulerSettings,
   readAssetRetentionPolicyForm,
@@ -140,11 +142,19 @@ function makeRetentionElements() {
     ['assetCleanupQueueList', makeElement()],
     ['assetCleanupQueueTypeFilter', makeElement('')],
     ['assetCleanupQueueStorageFilter', makeElement('')],
-    ['assetCleanupQueueSort', makeElement('size_desc')],
+    ['assetCleanupQueueStorageFilterField', makeElement()],
+    ['btnAssetCleanupQueueSelectAll', makeElement()],
+    ['btnAssetCleanupQueueClearSelection', makeElement()],
+    ['assetCleanupQueueSelectionSummary', makeElement()],
     ['btnAssetCleanupQueueRefresh', makeElement()],
     ['btnAssetCleanupQueueDryRun', makeElement()],
     ['btnAssetCleanupQueueDelete', makeElement()],
     ['btnAssetCleanupQueueReject', makeElement()],
+    ['assetCleanupQueueConfirmPanel', makeElement()],
+    ['assetCleanupQueueConfirmTitle', makeElement()],
+    ['assetCleanupQueueConfirmBody', makeElement()],
+    ['btnAssetCleanupQueueConfirmDelete', makeElement()],
+    ['btnAssetCleanupQueueCancelDelete', makeElement()],
     ['assetCleanupQueueStatus', makeElement()],
     ['assetCleanupJobPanel', makeElement()],
     ['assetCleanupJobTitle', makeElement()],
@@ -412,10 +422,72 @@ test('asset cleanup queue renders summary, selectable items and blocked dry-run 
   assert.equal(elements.get('assetCleanupQueueCount').textContent, '2');
   assert.match(elements.get('assetCleanupQueueBytes').textContent, /6 KB/);
   assert.match(elements.get('assetCleanupQueueByType').textContent, /image/);
-  assert.match(elements.get('assetCleanupQueueByStorage').textContent, /s3-compatible/);
+  assert.match(elements.get('assetCleanupQueueByStorage').textContent, /云端存储/);
+  assert.doesNotMatch(elements.get('assetCleanupQueueByStorage').textContent, /s3-compatible/);
+  assert.equal(elements.get('assetCleanupQueueStorageFilterField').hidden, false);
   assert.equal(elements.get('assetCleanupQueueList').children.length, 2);
   assert.match(elements.get('assetCleanupQueueList').children[1].textContent, /asset-b/);
-  assert.match(elements.get('assetCleanupQueueList').children[1].textContent, /asset_pinned|pinned/);
+  assert.match(elements.get('assetCleanupQueueList').children[1].textContent, /云端存储/);
+  assert.doesNotMatch(elements.get('assetCleanupQueueList').children[1].textContent, /s3-compatible|usage/);
+  assert.doesNotMatch(elements.get('assetCleanupQueueList').children[1].textContent, /asset_pinned/);
+  assert.match(elements.get('assetCleanupQueueList').children[1].textContent, /已固定/);
+});
+
+test('asset cleanup queue hides storage filter when current queue has no cloud resources', () => {
+  const elements = makeRetentionElements();
+  elements.get('assetCleanupQueueStorageFilter').value = 's3-compatible';
+  const restore = installDocument(elements);
+  try {
+    renderAssetCleanupQueue({
+      queue: [
+        { assetId: 'asset-a', type: 'image', size: 2048, storage: { type: 'local' }, usage: { usageCount: 0 } },
+      ],
+      summary: { totalCount: 1, totalBytes: 2048, byType: {}, byStorage: { local: { count: 1, bytes: 2048 } } },
+    });
+  } finally {
+    restore();
+  }
+
+  assert.equal(elements.get('assetCleanupQueueStorageFilterField').hidden, true);
+  assert.equal(elements.get('assetCleanupQueueStorageFilterField').dataset.hiddenReason, 'no-cloud-storage');
+  assert.equal(elements.get('assetCleanupQueueStorageFilter').value, '');
+  assert.doesNotMatch(elements.get('assetCleanupQueueByStorage').textContent, /local|s3-compatible/);
+  assert.match(elements.get('assetCleanupQueueByStorage').textContent, /本机存储/);
+});
+
+test('asset cleanup queue can select and clear all items in the current list', () => {
+  const elements = makeRetentionElements();
+  const restore = installDocument(elements);
+  try {
+    renderAssetCleanupQueue({
+      queue: [
+        { assetId: 'asset-a', type: 'image', size: 2048, storage: { type: 'local' }, usage: { usageCount: 0 } },
+        { assetId: 'asset-b', type: 'video', size: 4096, storage: { type: 'local' }, usage: { usageCount: 0 } },
+      ],
+      summary: { totalCount: 2, totalBytes: 6144, byType: {}, byStorage: {} },
+    });
+
+    assert.equal(elements.get('assetCleanupQueueSelectionSummary').textContent, '未选择资源');
+    __setAssetCleanupQueueSelectionSettings(true);
+    assert.deepEqual(
+      elements.get('assetCleanupQueueList').querySelectorAll('input[data-asset-id]').map(input => input.checked),
+      [true, true],
+    );
+    assert.equal(elements.get('assetCleanupQueueSelectionSummary').textContent, '已选择 2 项');
+    assert.equal(elements.get('btnAssetCleanupQueueSelectAll').disabled, true);
+    assert.equal(elements.get('btnAssetCleanupQueueClearSelection').disabled, false);
+
+    __setAssetCleanupQueueSelectionSettings(false);
+    assert.deepEqual(
+      elements.get('assetCleanupQueueList').querySelectorAll('input[data-asset-id]').map(input => input.checked),
+      [false, false],
+    );
+    assert.equal(elements.get('assetCleanupQueueSelectionSummary').textContent, '未选择资源');
+    assert.equal(elements.get('btnAssetCleanupQueueSelectAll').disabled, false);
+    assert.equal(elements.get('btnAssetCleanupQueueClearSelection').disabled, true);
+  } finally {
+    restore();
+  }
 });
 
 test('asset cleanup queue actions create background cleanup job and render progress report', async () => {
@@ -424,7 +496,11 @@ test('asset cleanup queue actions create background cleanup job and render progr
   const previousFetch = globalThis.fetch;
   const previousConfirm = globalThis.confirm;
   const requests = [];
-  globalThis.confirm = () => true;
+  let nativeConfirmCalled = false;
+  globalThis.confirm = () => {
+    nativeConfirmCalled = true;
+    return true;
+  };
   globalThis.fetch = async (url, options = {}) => {
     requests.push({ url: String(url), options });
     if (url.startsWith('/api/v2/assets/cleanup-queue?')) {
@@ -461,7 +537,7 @@ test('asset cleanup queue actions create background cleanup job and render progr
             progressPercent: 100,
             lastHeartbeatAt: 1710000001000,
             results: [
-              { assetId: 'asset-a', status: 'success', reason: 'orphan_asset', releasedBytes: 2048 },
+              { assetId: 'asset-a', status: 'success', reason: 'object_already_missing', releasedBytes: 0 },
               { assetId: 'asset-b', status: 'failed', reason: 'delete_failed', error: 'safe error' },
             ],
           },
@@ -489,6 +565,11 @@ test('asset cleanup queue actions create background cleanup job and render progr
     });
     await __dryRunAssetCleanupQueueSettings();
     await __deleteAssetCleanupQueueSettings();
+    assert.equal(nativeConfirmCalled, false);
+    assert.equal(elements.get('assetCleanupQueueConfirmPanel').hidden, false);
+    assert.match(elements.get('assetCleanupQueueConfirmTitle').textContent, /确认清理 1 项资源/);
+    assert.match(elements.get('assetCleanupQueueConfirmBody').textContent, /系统会再次确认这些资源未被使用/);
+    await __confirmDeleteAssetCleanupQueueSettings();
     await __pollAssetCleanupJobSettings('cleanup-job-1');
     await __cancelAssetCleanupJobSettings('cleanup-job-1');
     await __retryAssetCleanupJobSettings('cleanup-job-1');
@@ -518,22 +599,12 @@ test('asset cleanup queue actions create background cleanup job and render progr
   assert.deepEqual(JSON.parse(requests[2].options.body).assetIds, ['asset-a']);
   assert.doesNotMatch(JSON.stringify(requests), /cleanup-queue\/delete/);
   assert.doesNotMatch(JSON.stringify(requests), /\/api\/v2\/assets\/delete/);
-  assert.match(elements.get('assetCleanupQueueStatus').textContent, /后台清理任务|已拒绝/);
+  assert.match(elements.get('assetCleanupQueueStatus').textContent, /清理任务已创建|已拒绝/);
   assert.match(elements.get('assetCleanupJobTitle').textContent, /已清理 2 项/);
   assert.match(elements.get('assetCleanupJobProgress').textContent, /100%/);
   assert.equal(elements.get('assetCleanupJobProgressBar').style.width, '100%');
-  assert.match(elements.get('assetCleanupJobStats').textContent, /释放 2 KB/);
-  assert.equal(elements.get('assetCleanupJobReport').hidden, true);
-  assert.equal(elements.get('btnAssetCleanupJobDetails').hidden, false);
-  assert.match(elements.get('btnAssetCleanupJobDetails').textContent, /查看清理详情/);
-  const restoreDetailsDocument = installDocument(elements);
-  try {
-    await elements.get('btnAssetCleanupJobDetails').listeners.click();
-  } finally {
-    restoreDetailsDocument();
-  }
-  assert.equal(elements.get('assetCleanupJobReport').hidden, false);
-  assert.match(elements.get('assetCleanupJobReport').textContent, /retry_delete_failed/);
+  assert.match(elements.get('assetCleanupJobReport').textContent, /重试后完成/);
+  assert.doesNotMatch(elements.get('assetCleanupJobReport').textContent, /object_already_missing|partial_failed|success|failed|canceled/);
 });
 
 test('asset cleanup queue custom filter control updates hidden value and refreshes queue', async () => {
@@ -590,7 +661,13 @@ test('asset retention settings markup uses custom cleanup queue dropdowns instea
   );
 
   assert.doesNotMatch(cleanupQueueMarkup, /<select\b/);
+  assert.match(cleanupQueueMarkup, /id="assetCleanupQueueStorageFilterField"/);
   assert.match(cleanupQueueMarkup, /data-cleanup-queue-select="assetCleanupQueueTypeFilter"/);
+  assert.match(cleanupQueueMarkup, /data-cleanup-queue-select="assetCleanupQueueStorageFilter"/);
+  assert.match(cleanupQueueMarkup, /本机存储/);
+  assert.match(cleanupQueueMarkup, /云端存储/);
+  assert.doesNotMatch(cleanupQueueMarkup, />local</);
+  assert.doesNotMatch(cleanupQueueMarkup, />s3-compatible</);
   assert.match(cleanupQueueMarkup, /data-cleanup-queue-option/);
 });
 
@@ -627,13 +704,28 @@ test('asset cleanup job progress fill uses a solid available theme color', () =>
 
 test('asset retention settings markup exposes candidate marking and cleanup queue review actions', () => {
   const html = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
+  const cleanupQueueMarkup = html.slice(
+    html.indexOf('id="assetCleanupQueueSettingsForm"'),
+    html.indexOf('id="assetCleanupJobPanel"'),
+  );
 
   assert.match(html, /生命周期策略/);
   assert.match(html, /评估可清理资源/);
   assert.match(html, /标记为清理候选/);
-  assert.match(html, /清理队列/);
-  assert.match(html, /删除后将移除 MinIO\/S3\/本地文件，但保留 AssetRecord 审计/);
-  assert.match(html, /确认删除所选/);
-  assert.match(html, /拒绝清理所选/);
+  assert.match(cleanupQueueMarkup, /清理队列/);
+  assert.match(cleanupQueueMarkup, /这里列出已经确认不再使用、可以进入人工复核的资源/);
+  assert.match(cleanupQueueMarkup, /正式清理前会再次检查资源是否仍被使用/);
+  assert.doesNotMatch(cleanupQueueMarkup, /lifecycleStatus\s*=\s*deleted_candidate/);
+  assert.doesNotMatch(cleanupQueueMarkup, /AssetRecord|usageCount|active|pinned/);
+  assert.match(cleanupQueueMarkup, /清理所选/);
+  assert.match(cleanupQueueMarkup, /移出队列/);
+  assert.match(cleanupQueueMarkup, /全选当前列表/);
+  assert.match(cleanupQueueMarkup, /取消全选/);
+  assert.match(cleanupQueueMarkup, /未选择资源/);
   assert.match(html, /当前版本不支持自动删除/);
+  assert.match(cleanupQueueMarkup, /按容量从大到小/);
+  assert.match(cleanupQueueMarkup, /按容量从小到大/);
+  assert.match(cleanupQueueMarkup, /按创建时间从新到旧/);
+  assert.match(cleanupQueueMarkup, /按创建时间从旧到新/);
+  assert.match(cleanupQueueMarkup, /data-cleanup-queue-select="assetCleanupQueueSort"[\s\S]*settings-cleanup-select-caret/);
 });

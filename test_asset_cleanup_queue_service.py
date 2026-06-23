@@ -12,6 +12,10 @@ class FakeStorageBucketService:
     def __init__(self):
         self.deleted_keys = []
         self.failures = {}
+        self.existing_keys = set()
+
+    def object_exists(self, object_key, bucket_name=""):
+        return object_key in self.existing_keys
 
     def delete_object(self, object_key, bucket_name=""):
         if object_key in self.failures:
@@ -166,6 +170,7 @@ class AssetCleanupQueueServiceTest(unittest.TestCase):
             self._asset("asset_pinned", pinned=True, size=11),
             self._asset("asset_used", usage={"usageCount": 1, "references": [{"nodeId": "node"}]}, size=13),
         ])
+        self.storage.existing_keys.add("videos/asset_s3.mp4")
         service = self._service()
 
         rejected = service.delete(["asset_local"], confirm=False)

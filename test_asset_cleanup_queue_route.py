@@ -14,6 +14,10 @@ from backend.services.asset_lifecycle_service import AssetLifecycleService
 class FakeStorageBucketService:
     def __init__(self):
         self.deleted_keys = []
+        self.existing_keys = set()
+
+    def object_exists(self, object_key, bucket_name=""):
+        return object_key in self.existing_keys
 
     def delete_object(self, object_key, bucket_name=""):
         self.deleted_keys.append({"objectKey": object_key, "bucket": bucket_name})
@@ -106,6 +110,7 @@ class AssetCleanupQueueRouteTest(unittest.TestCase):
                     ],
                 },
             )
+            storage.existing_keys.add("videos/asset_s3.mp4")
             previous = self._install_service(assets_file, canvas_dir, storage)
             httpd, base_url = self._start_http_server()
             try:

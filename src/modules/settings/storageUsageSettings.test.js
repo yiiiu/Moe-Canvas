@@ -124,6 +124,50 @@ test('storage usage card renders totals, quota, storage backends and orphan remi
   assert.match(elements.get('storageUsageBlockMode').textContent, /已开启/);
 });
 
+test('storage usage card hides cloud metric when there is no cloud usage', () => {
+  const elements = new Map();
+  const makeElement = () => ({ textContent: '', hidden: false, dataset: {}, className: '', classList: { toggle() {} } });
+  for (const id of [
+    'storageUsageCard',
+    'storageUsageTotal',
+    'storageUsageQuotaLimit',
+    'storageUsagePercent',
+    'storageUsageTypeImage',
+    'storageUsageTypeVideo',
+    'storageUsageTypeAudio',
+    'storageUsageTypeFile',
+    'storageUsageLocal',
+    'storageUsageS3Compatible',
+    'storageUsageS3CompatibleMetric',
+    'storageUsageOrphan',
+    'storageUsageDeleted',
+    'storageUsageStatus',
+    'storageUsageBlockMode',
+  ]) {
+    elements.set(id, makeElement());
+  }
+  const previousDocument = globalThis.document;
+  globalThis.document = { getElementById: id => elements.get(id) || null };
+  try {
+    renderStorageUsageCard({
+      success: true,
+      usage: {
+        totalBytes: 1024,
+        orphanBytes: 0,
+        deletedBytes: 0,
+        byType: {},
+        byStorage: { local: { bytes: 1024 } },
+      },
+      quota: { enabled: false, blockWhenExceeded: false },
+    });
+  } finally {
+    globalThis.document = previousDocument;
+  }
+
+  assert.equal(elements.get('storageUsageS3CompatibleMetric').hidden, true);
+  assert.equal(elements.get('storageUsageS3Compatible').textContent, '0 B');
+});
+
 test('storage usage card shows clear disabled quota label instead of dash', () => {
   const elements = new Map();
   const makeElement = () => ({ textContent: '', hidden: false, dataset: {}, className: '', classList: { toggle() {} } });

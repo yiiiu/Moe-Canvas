@@ -17,6 +17,10 @@ class FakeStorageBucketService:
     def __init__(self):
         self.deleted_keys = []
         self.failures = {}
+        self.existing_keys = set()
+
+    def object_exists(self, object_key, bucket_name=""):
+        return object_key in self.existing_keys
 
     def delete_object(self, object_key, bucket_name=""):
         if object_key in self.failures:
@@ -133,6 +137,7 @@ class AssetCleanupExecutorRouteTest(unittest.TestCase):
                     ],
                 },
             )
+            storage.existing_keys.add("media/asset_retry.png")
             previous = self._install_service(assets_file, jobs_file, canvas_dir, storage)
             httpd, base_url = self._start_http_server()
             try:

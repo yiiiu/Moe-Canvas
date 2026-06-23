@@ -9,7 +9,13 @@ from backend.services.asset_lifecycle_service import AssetLifecycleService
 class FakeStorageBucketService:
     def __init__(self):
         self.deleted_keys = []
+        self.checked_keys = []
         self.failures = {}
+        self.existing_keys = set()
+
+    def object_exists(self, object_key, bucket_name=""):
+        self.checked_keys.append({"objectKey": object_key, "bucket": bucket_name})
+        return object_key in self.existing_keys
 
     def delete_object(self, object_key, bucket_name=""):
         if object_key in self.failures:
@@ -181,6 +187,7 @@ class AssetLifecycleServiceTest(unittest.TestCase):
                 "lifecycleStatus": "orphan",
             }
         ])
+        self.storage.existing_keys.add("videos/video.mp4")
 
         result = self._service().delete_assets(["asset_s3"], dry_run=False)
         asset = self._read_assets()["assets"][0]
@@ -194,6 +201,49 @@ class AssetLifecycleServiceTest(unittest.TestCase):
         self.assertEqual(asset["url"], "https://cdn.example/video.mp4")
         self.assertEqual(asset["objectKey"], "videos/video.mp4")
         self.assertEqual(asset["storage"]["bucket"], "safe-bucket")
+
+    def test_delete_orphan_s3_asset_checks_bucket_object_before_delete(self):
+        self._seed_assets([
+            {
+                "assetId": "asset_s3",
+                "type": "video",
+                "url": "https://cdn.example/video.mp4",
+                "objectKey": "videos/video.mp4",
+                "storage": {"type": "s3-compatible", "bucket": "safe-bucket"},
+                "usage": {"usageCount": 0, "references": []},
+                "lifecycleStatus": "orphan",
+            }
+        ])
+        self.storage.existing_keys.add("videos/video.mp4")
+
+        result = self._service().delete_assets(["asset_s3"], dry_run=False)
+
+        self.assertTrue(result["results"][0]["deleted"])
+        self.assertEqual(self.storage.checked_keys, [{"objectKey": "videos/video.mp4", "bucket": "safe-bucket"}])
+        self.assertEqual(self.storage.deleted_keys, [{"objectKey": "videos/video.mp4", "bucket": "safe-bucket"}])
+
+    def test_delete_orphan_s3_asset_marks_deleted_without_delete_when_bucket_object_missing(self):
+        self._seed_assets([
+            {
+                "assetId": "asset_missing_object",
+                "type": "video",
+                "url": "https://cdn.example/missing.mp4",
+                "objectKey": "videos/missing.mp4",
+                "storage": {"type": "s3-compatible", "bucket": "safe-bucket"},
+                "usage": {"usageCount": 0, "references": []},
+                "lifecycleStatus": "orphan",
+            }
+        ])
+
+        result = self._service().delete_assets(["asset_missing_object"], dry_run=False)
+        asset = self._read_assets()["assets"][0]
+
+        self.assertTrue(result["results"][0]["deleted"])
+        self.assertEqual(result["results"][0]["reason"], "object_already_missing")
+        self.assertEqual(self.storage.checked_keys, [{"objectKey": "videos/missing.mp4", "bucket": "safe-bucket"}])
+        self.assertEqual(self.storage.deleted_keys, [])
+        self.assertEqual(asset["lifecycleStatus"], "deleted")
+        self.assertEqual(asset["deleteMode"], "manual")
 
     def test_delete_orphan_local_asset_removes_local_file_and_keeps_record(self):
         local_file = os.path.join(self.temp_dir.name, "output", "local.png")
@@ -269,6 +319,7 @@ class AssetLifecycleServiceTest(unittest.TestCase):
         self.assertEqual(asset["usage"]["usageCount"], 1)
 
     def test_delete_failure_marks_delete_failed_and_sanitizes_error(self):
+        self.storage.existing_keys.add("media/fail.png")
         self.storage.failures["media/fail.png"] = "Authorization: AWS4-HMAC-SHA256 Credential=AKIA_TEST/20260101/auto/s3/aws4_request, Signature=abcdef secretAccessKey=VERY_SECRET"
         self._seed_assets([
             {

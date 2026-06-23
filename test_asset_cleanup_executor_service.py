@@ -11,7 +11,13 @@ from backend.services.asset_lifecycle_service import AssetLifecycleService
 class FakeStorageBucketService:
     def __init__(self):
         self.deleted_keys = []
+        self.checked_keys = []
         self.failures = {}
+        self.existing_keys = set()
+
+    def object_exists(self, object_key, bucket_name=""):
+        self.checked_keys.append({"objectKey": object_key, "bucket": bucket_name})
+        return object_key in self.existing_keys
 
     def delete_object(self, object_key, bucket_name=""):
         if object_key in self.failures:
@@ -134,6 +140,7 @@ class AssetCleanupExecutorServiceTest(unittest.TestCase):
             self._asset("asset_local", localPath=local_file, storage={"type": "local"}, size=5),
             self._asset("asset_s3", type="video", objectKey="videos/asset_s3.mp4", storage={"type": "s3-compatible", "bucket": "safe"}, size=7),
         ])
+        self.storage.existing_keys.add("videos/asset_s3.mp4")
         service = self._service(auto_start_worker=False)
         created = service.create_job(["asset_local", "asset_s3"], confirm=True)
 
@@ -191,6 +198,7 @@ class AssetCleanupExecutorServiceTest(unittest.TestCase):
                 Authorization="AWS4-HMAC-SHA256 Signature=abc",
             ),
         ])
+        self.storage.existing_keys.add("media/fail.png")
         self.storage.failures["media/fail.png"] = "delete failed Authorization: Bearer abc secretAccessKey=raw Signature=abc"
         service = self._service(auto_start_worker=False)
         created = service.create_job(["asset_active", "asset_pinned", "asset_used", "asset_secret_fail"], confirm=True)
@@ -242,6 +250,8 @@ class AssetCleanupExecutorServiceTest(unittest.TestCase):
             self._asset("asset_ok", objectKey="media/ok.png", storage={"type": "s3-compatible", "bucket": "safe"}, size=10),
             self._asset("asset_fail", objectKey="media/fail.png", storage={"type": "s3-compatible", "bucket": "safe"}, size=20),
         ])
+        self.storage.existing_keys.add("media/ok.png")
+        self.storage.existing_keys.add("media/fail.png")
         self.storage.failures["media/fail.png"] = "temporary_error secretAccessKey=raw"
         service = self._service(auto_start_worker=False)
         created = service.create_job(["asset_ok", "asset_fail"], confirm=True)

@@ -1551,6 +1551,45 @@ html[data-app-theme="day"] .settings-save-btn {
   background: var(--warning-bg, rgba(245, 158, 11, 0.08));
   color: var(--text-primary);
 }
+.settings-cleanup-confirm {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  padding: var(--space-12);
+  border: 1px solid var(--error-border, rgba(239, 68, 68, 0.35));
+  border-radius: var(--radius-10);
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--text-primary);
+}
+.settings-cleanup-confirm[hidden] {
+  display: none;
+}
+.settings-cleanup-confirm strong {
+  display: block;
+  margin-bottom: var(--space-4);
+  color: var(--text-primary);
+  font-size: var(--font-13);
+}
+.settings-cleanup-confirm p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-12);
+  line-height: 1.5;
+}
+.settings-cleanup-confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-shrink: 0;
+}
+.settings-cleanup-selection-summary {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: var(--font-12);
+}
 .settings-cleanup-queue-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }

@@ -13,6 +13,10 @@ from backend.services.asset_lifecycle_service import AssetLifecycleService
 class FakeStorageBucketService:
     def __init__(self):
         self.deleted_keys = []
+        self.existing_keys = set()
+
+    def object_exists(self, object_key, bucket_name=""):
+        return object_key in self.existing_keys
 
     def delete_object(self, object_key, bucket_name=""):
         self.deleted_keys.append({"objectKey": object_key, "bucket": bucket_name})
@@ -127,6 +131,9 @@ class AssetLifecycleRouteTest(unittest.TestCase):
                 os.path.join(canvas_dir, "project.json"),
                 {"nodes": [{"id": "node", "type": "source-image", "assetId": "asset_active"}]},
             )
+            storage.existing_keys.add("media/o.png")
+            storage.existing_keys.add("media/a.png")
+            previous = getattr(server, "ASSET_LIFECYCLE_SERVICE", None)
             server.ASSET_LIFECYCLE_SERVICE = AssetLifecycleService(
                 assets_file_path=assets_file,
                 canvas_dir_getter=lambda: canvas_dir,

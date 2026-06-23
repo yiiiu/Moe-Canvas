@@ -439,7 +439,8 @@ class AssetCleanupExecutorService:
         reason = self._text(delete_result.get("reason")) or "delete_failed"
         error = self._sanitize_text(delete_result.get("error"))
         if deleted:
-            result.update({"status": "success", "reason": reason or "orphan_asset", "releasedBytes": releasable_bytes, "error": "", "finishedAt": finished_at})
+            released_bytes = 0 if reason == "object_already_missing" else releasable_bytes
+            result.update({"status": "success", "reason": reason or "orphan_asset", "releasedBytes": released_bytes, "error": "", "finishedAt": finished_at})
             self._mark_asset_deleted(asset_id, job_id, released_reason=result.get("reason"))
             self._restore_job_candidates(job_id, processed_ids={asset_id}, candidate_ids=candidate_ids)
         elif self._is_object_not_found(error) and self._asset_is_deleted_candidate(asset_id):

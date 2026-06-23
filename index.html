@@ -1981,7 +1981,7 @@
                     <span class="settings-desc">本地存储</span>
                     <strong id="storageUsageLocal">0 B</strong>
                   </div>
-                  <div class="settings-storage-usage-metric">
+                  <div class="settings-storage-usage-metric" id="storageUsageS3CompatibleMetric">
                     <span class="settings-desc">云端存储</span>
                     <strong id="storageUsageS3Compatible">0 B</strong>
                   </div>
@@ -2156,12 +2156,12 @@
                       <div>
                         <div class="settings-label">清理队列</div>
                         <div class="settings-desc">
-                          lifecycleStatus = deleted_candidate 的资产会进入审核队列。删除前会二次校验 usage，并继续走安全删除逻辑。
+                          这里列出已经确认不再使用、可以进入人工复核的资源。你可以先预检，再决定是否开始清理。
                         </div>
                       </div>
                     </div>
                     <div class="settings-desc settings-cleanup-queue-warning">
-                      删除后将移除 MinIO/S3/本地文件，但保留 AssetRecord 审计。active、pinned、usageCount &gt; 0 的资产永远不会删除。
+                      正式清理前会再次检查资源是否仍被使用；正在使用或已固定的资源不会被清理。清理后会移除实际文件，并保留操作记录用于追踪。
                     </div>
                     <div class="settings-retention-policy-summary settings-cleanup-queue-summary">
                       <div><span>待清理数量</span><strong id="assetCleanupQueueCount">0</strong></div>
@@ -2187,8 +2187,8 @@
                           </div>
                         </div>
                       </label>
-                      <label class="settings-field">
-                        <span>存储后端</span>
+                      <label class="settings-field" id="assetCleanupQueueStorageFilterField">
+                        <span>存储位置</span>
                         <input type="hidden" id="assetCleanupQueueStorageFilter" value="" />
                         <div class="settings-cleanup-select" data-cleanup-queue-select="assetCleanupQueueStorageFilter">
                           <button type="button" class="settings-cleanup-select-trigger" data-cleanup-queue-select-trigger aria-haspopup="listbox" aria-expanded="false">
@@ -2197,8 +2197,8 @@
                           </button>
                           <div class="settings-cleanup-select-menu" role="listbox">
                             <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="" role="option">全部</button>
-                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="local" role="option">local</button>
-                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="s3-compatible" role="option">s3-compatible</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="local" role="option">本机存储</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="s3-compatible" role="option">云端存储</button>
                           </div>
                         </div>
                       </label>
@@ -2207,31 +2207,56 @@
                         <input type="hidden" id="assetCleanupQueueSort" value="size_desc" />
                         <div class="settings-cleanup-select" data-cleanup-queue-select="assetCleanupQueueSort">
                           <button type="button" class="settings-cleanup-select-trigger" data-cleanup-queue-select-trigger aria-haspopup="listbox" aria-expanded="false">
-                            <span data-cleanup-queue-select-value>size_desc</span>
+                            <span data-cleanup-queue-select-value>按容量从大到小</span>
                             <span class="settings-cleanup-select-caret" aria-hidden="true"></span>
                           </button>
                           <div class="settings-cleanup-select-menu" role="listbox">
-                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="size_desc" role="option">size_desc</button>
-                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="size_asc" role="option">size_asc</button>
-                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="created_desc" role="option">created_desc</button>
-                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="created_asc" role="option">created_asc</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="size_desc" role="option">按容量从大到小</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="size_asc" role="option">按容量从小到大</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="created_desc" role="option">按创建时间从新到旧</button>
+                            <button type="button" class="settings-cleanup-select-option" data-cleanup-queue-option data-value="created_asc" role="option">按创建时间从旧到新</button>
                           </div>
                         </div>
                       </label>
+                    </div>
+                    <div class="settings-retention-policy-actions">
+                      <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetCleanupQueueSelectAll">
+                        全选当前列表
+                      </button>
+                      <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetCleanupQueueClearSelection" disabled>
+                        取消全选
+                      </button>
+                      <span class="settings-cleanup-selection-summary" id="assetCleanupQueueSelectionSummary">未选择资源</span>
                     </div>
                     <div class="settings-retention-policy-actions">
                       <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetCleanupQueueRefresh">
                         刷新队列
                       </button>
                       <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetCleanupQueueDryRun">
-                        批量 dryRun
+                        预检所选
                       </button>
                       <button type="button" class="settings-save-btn settings-btn-danger" id="btnAssetCleanupQueueDelete">
-                        确认删除所选
+                        清理所选
                       </button>
                       <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetCleanupQueueReject">
-                        拒绝清理所选
+                        移出队列
                       </button>
+                    </div>
+                    <div class="settings-cleanup-confirm" id="assetCleanupQueueConfirmPanel" hidden>
+                      <div>
+                        <strong id="assetCleanupQueueConfirmTitle">确认清理所选资源</strong>
+                        <p id="assetCleanupQueueConfirmBody">
+                          清理会移除实际文件，并保留操作记录用于追踪。开始前系统会再次确认这些资源未被使用。
+                        </p>
+                      </div>
+                      <div class="settings-cleanup-confirm-actions">
+                        <button type="button" class="settings-save-btn settings-btn-danger" id="btnAssetCleanupQueueConfirmDelete">
+                          确认清理
+                        </button>
+                        <button type="button" class="settings-save-btn settings-btn-ghost" id="btnAssetCleanupQueueCancelDelete">
+                          取消
+                        </button>
+                      </div>
                     </div>
                     <div class="settings-desc settings-retention-policy-status" id="assetCleanupQueueStatus" aria-live="polite"></div>
                     <div class="settings-cleanup-job-panel" id="assetCleanupJobPanel" hidden>
@@ -2280,7 +2305,11 @@
                     <span>启用</span>
                   </label>
                 </div>
-                <div class="settings-custom-storage-grid">
+                <div class="settings-desc settings-custom-storage-disabled-hint" id="customStorageDisabledHint">
+                  启用云端存储后再配置 Endpoint、Bucket 和访问密钥。
+                </div>
+                <div class="settings-custom-storage-fields" id="customStorageFieldsPanel" hidden>
+                  <div class="settings-custom-storage-grid">
                   <label class="settings-field">
                     <span>名称</span>
                     <input
@@ -2411,6 +2440,7 @@
                   id="customStorageStatus"
                   aria-live="polite"
                 ></div>
+                </div>
               </div>
               <div
                 class="settings-section settings-card settings-file-migration-card"

@@ -9,6 +9,7 @@ const STORAGE_USAGE_IDS = Object.freeze({
   file: 'storageUsageTypeFile',
   local: 'storageUsageLocal',
   s3: 'storageUsageS3Compatible',
+  s3Metric: 'storageUsageS3CompatibleMetric',
   orphan: 'storageUsageOrphan',
   deleted: 'storageUsageDeleted',
   status: 'storageUsageStatus',
@@ -101,7 +102,12 @@ export function renderStorageUsageCard(payload = {}) {
   setText(STORAGE_USAGE_IDS.audio, formatStorageUsageBytes(bytesOf(usage.byType, 'audio')));
   setText(STORAGE_USAGE_IDS.file, formatStorageUsageBytes(bytesOf(usage.byType, 'file')));
   setText(STORAGE_USAGE_IDS.local, formatStorageUsageBytes(bytesOf(usage.byStorage, 'local')));
-  setText(STORAGE_USAGE_IDS.s3, formatStorageUsageBytes(bytesOf(usage.byStorage, 's3-compatible')));
+  const s3Bytes = bytesOf(usage.byStorage, 's3-compatible');
+  setText(STORAGE_USAGE_IDS.s3, formatStorageUsageBytes(s3Bytes));
+  const s3Metric = element(STORAGE_USAGE_IDS.s3Metric);
+  if (s3Metric) {
+    s3Metric.hidden = s3Bytes <= 0;
+  }
   setText(STORAGE_USAGE_IDS.orphan, formatStorageUsageBytes(usage.orphanBytes));
   setText(STORAGE_USAGE_IDS.deleted, formatStorageUsageBytes(usage.deletedBytes));
   setText(STORAGE_USAGE_IDS.status, buildStatusMessages(usage, quota, tone));

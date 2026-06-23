@@ -53,11 +53,20 @@ const FIELD_IDS = Object.freeze({
   cleanupQueueList: 'assetCleanupQueueList',
   cleanupQueueTypeFilter: 'assetCleanupQueueTypeFilter',
   cleanupQueueStorageFilter: 'assetCleanupQueueStorageFilter',
+  cleanupQueueStorageFilterField: 'assetCleanupQueueStorageFilterField',
   cleanupQueueSort: 'assetCleanupQueueSort',
+  cleanupQueueSelectAllButton: 'btnAssetCleanupQueueSelectAll',
+  cleanupQueueClearSelectionButton: 'btnAssetCleanupQueueClearSelection',
+  cleanupQueueSelectionSummary: 'assetCleanupQueueSelectionSummary',
   cleanupQueueRefreshButton: 'btnAssetCleanupQueueRefresh',
   cleanupQueueDryRunButton: 'btnAssetCleanupQueueDryRun',
   cleanupQueueDeleteButton: 'btnAssetCleanupQueueDelete',
   cleanupQueueRejectButton: 'btnAssetCleanupQueueReject',
+  cleanupQueueConfirmPanel: 'assetCleanupQueueConfirmPanel',
+  cleanupQueueConfirmTitle: 'assetCleanupQueueConfirmTitle',
+  cleanupQueueConfirmBody: 'assetCleanupQueueConfirmBody',
+  cleanupQueueConfirmDeleteButton: 'btnAssetCleanupQueueConfirmDelete',
+  cleanupQueueCancelDeleteButton: 'btnAssetCleanupQueueCancelDelete',
   cleanupQueueStatus: 'assetCleanupQueueStatus',
   cleanupJobPanel: 'assetCleanupJobPanel',
   cleanupJobTitle: 'assetCleanupJobTitle',
@@ -349,10 +358,43 @@ export function renderAssetRetentionSchedulerRuns(runs = []) {
   }
 }
 
-function formatCleanupBreakdown(value = {}) {
+function cleanupStorageLabel(value) {
+  return {
+    local: '本机存储',
+    's3-compatible': '云端存储',
+    s3: '云端存储',
+    minio: '云端存储',
+  }[String(value || '').toLowerCase()] || '其他存储';
+}
+
+function formatCleanupBreakdown(value = {}, labeler = key => key) {
   return Object.entries(value || {})
-    .map(([key, item]) => `${key}: ${Number(item?.count || 0)} / ${formatStorageUsageBytes(item?.bytes || 0)}`)
+    .map(([key, item]) => `${labeler(key)}: ${Number(item?.count || 0)} / ${formatStorageUsageBytes(item?.bytes || 0)}`)
     .join('；') || '—';
+}
+
+function isCloudCleanupStorageType(value) {
+  return ['s3-compatible', 's3', 'minio'].includes(String(value || '').toLowerCase());
+}
+
+function cleanupQueueHasCloudStorage(queue = [], byStorage = {}) {
+  if (Object.keys(byStorage || {}).some(isCloudCleanupStorageType)) {
+    return true;
+  }
+  return (Array.isArray(queue) ? queue : []).some(item => isCloudCleanupStorageType(item?.storage?.type));
+}
+
+function renderCleanupQueueStorageFilter(payload = {}, queue = []) {
+  const field = element(FIELD_IDS.cleanupQueueStorageFilterField);
+  if (!field) {
+    return;
+  }
+  const showCloudFilter = cleanupQueueHasCloudStorage(queue, payload?.summary?.byStorage || {});
+  field.hidden = !showCloudFilter;
+  field.dataset.hiddenReason = showCloudFilter ? '' : 'no-cloud-storage';
+  if (!showCloudFilter) {
+    setValue(FIELD_IDS.cleanupQueueStorageFilter, '');
+  }
 }
 
 function setCleanupQueueStatus(message, tone = '') {
@@ -364,28 +406,86 @@ function setCleanupQueueStatus(message, tone = '') {
   target.dataset.status = tone;
 }
 
-function selectedCleanupQueueAssetIds() {
+function cleanupQueueCheckboxes() {
   const list = element(FIELD_IDS.cleanupQueueList);
-  const boxes = list?.querySelectorAll?.('input[data-asset-id]') || [];
-  return Array.from(boxes)
+  return Array.from(list?.querySelectorAll?.('input[data-asset-id]') || []);
+}
+
+function selectedCleanupQueueAssetIds() {
+  return cleanupQueueCheckboxes()
     .filter(box => box.checked)
     .map(box => String(box.dataset.assetId || '').trim())
     .filter(Boolean);
+}
+
+function updateCleanupQueueSelectionState() {
+  const boxes = cleanupQueueCheckboxes();
+  const selected = boxes.filter(box => box.checked).length;
+  setText(FIELD_IDS.cleanupQueueSelectionSummary, selected ? `已选择 ${selected} 项` : '未选择资源');
+  const selectAllButton = element(FIELD_IDS.cleanupQueueSelectAllButton);
+  if (selectAllButton) {
+    selectAllButton.disabled = boxes.length === 0 || selected === boxes.length;
+  }
+  const clearButton = element(FIELD_IDS.cleanupQueueClearSelectionButton);
+  if (clearButton) {
+    clearButton.disabled = selected === 0;
+  }
+}
+
+export function __setAssetCleanupQueueSelectionSettings(selected) {
+  for (const box of cleanupQueueCheckboxes()) {
+    box.checked = !!selected;
+  }
+  setCleanupDeleteConfirmPanel(false);
+  updateCleanupQueueSelectionState();
+}
+
+function setCleanupDeleteConfirmPanel(open, count = 0) {
+  const panel = element(FIELD_IDS.cleanupQueueConfirmPanel);
+  if (!panel) {
+    return;
+  }
+  panel.hidden = !open;
+  setText(FIELD_IDS.cleanupQueueConfirmTitle, open ? `确认清理 ${count} 项资源` : '');
+  setText(
+    FIELD_IDS.cleanupQueueConfirmBody,
+    open
+      ? '清理会移除实际文件，并保留操作记录用于追踪。开始前系统会再次确认这些资源未被使用。'
+      : '',
+  );
 }
 
 const CLEANUP_JOB_TERMINAL_STATUSES = new Set(['success', 'partial_failed', 'failed', 'canceled']);
 let activeCleanupJobId = '';
 let cleanupJobPollTimer = null;
 
+function cleanupJobReasonText(reason) {
+  return {
+    orphan_asset: '可清理',
+    object_already_missing: '文件已不存在',
+    delete_failed: '清理失败',
+    asset_in_use: '正在使用',
+    asset_pinned: '已固定',
+    asset_not_found: '未找到',
+    invalid_status: '状态不允许清理',
+    canceled: '已取消',
+    pending: '等待中',
+    running: '处理中',
+    retry_delete_failed: '重试后完成',
+    server_restarted_or_interrupted: '任务中断',
+  }[String(reason || '')] || '未知原因';
+}
+
 function cleanupJobStatusText(status) {
   return {
-    pending: '等待后台清理',
-    running: '正在后台清理',
-    success: '清理完成',
-    partial_failed: '部分清理完成',
-    failed: '清理失败',
+    pending: '等待中',
+    running: '处理中',
+    success: '已完成',
+    partial_failed: '部分完成',
+    failed: '失败',
     canceled: '已取消',
-  }[status] || '清理任务';
+    skipped: '已跳过',
+  }[String(status || '')] || '状态未知';
 }
 
 function cleanupJobTone(status) {
@@ -516,9 +616,10 @@ function renderAssetCleanupJob(job = {}) {
     const row = document.createElement('div');
     row.className = 'settings-cleanup-job-result';
     row.dataset.status = item?.status || 'pending';
-    const reason = item?.reason ? ` · ${item.reason}` : '';
+    const statusText = cleanupJobStatusText(item?.status || 'pending');
+    const reason = item?.reason ? ` · ${cleanupJobReasonText(item.reason)}` : '';
     const released = Number(item?.releasedBytes || 0) > 0 ? ` · ${formatStorageUsageBytes(item.releasedBytes)}` : '';
-    row.textContent = `${item?.status || 'pending'} · ${item?.assetId || 'unknown'}${reason}${released}`;
+    row.textContent = `${statusText} · ${item?.assetId || 'unknown'}${reason}${released}`;
     report.appendChild(row);
   }
 }
@@ -551,7 +652,7 @@ function renderCleanupQueueDryRunResults(results = []) {
     const result = row.querySelector?.('[data-cleanup-result]');
     const text = item.canDelete
       ? `可删除 · ${formatStorageUsageBytes(item.releasableBytes || 0)}`
-      : `blocked · ${item.reason || 'blocked'}`;
+      : `不可删除 · ${cleanupJobReasonText(item.reason) || '不可删除'}`;
     if (result) {
       result.textContent = text;
       result.dataset.status = item.canDelete ? 'success' : 'error';
@@ -571,13 +672,15 @@ export function renderAssetCleanupQueue(payload = {}) {
   setText(FIELD_IDS.cleanupQueueCount, String(summary.totalCount ?? queue.length));
   setText(FIELD_IDS.cleanupQueueBytes, formatStorageUsageBytes(summary.totalBytes || 0));
   setText(FIELD_IDS.cleanupQueueByType, formatCleanupBreakdown(summary.byType));
-  setText(FIELD_IDS.cleanupQueueByStorage, formatCleanupBreakdown(summary.byStorage));
+  setText(FIELD_IDS.cleanupQueueByStorage, formatCleanupBreakdown(summary.byStorage, cleanupStorageLabel));
+  renderCleanupQueueStorageFilter(payload, queue);
   const list = element(FIELD_IDS.cleanupQueueList);
   if (!list) {
     return;
   }
   list.replaceChildren?.();
   list.hidden = queue.length === 0;
+  setCleanupDeleteConfirmPanel(false);
   for (const item of queue) {
     const row = document.createElement('label');
     row.className = 'settings-cleanup-queue-item';
@@ -585,11 +688,16 @@ export function renderAssetCleanupQueue(payload = {}) {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.dataset.assetId = item?.assetId || '';
+    checkbox.addEventListener?.('change', () => {
+      setCleanupDeleteConfirmPanel(false);
+      updateCleanupQueueSelectionState();
+    });
     const body = document.createElement('span');
     body.className = 'settings-cleanup-queue-item-body';
     const storage = item?.storage || {};
     const usageCount = Number(item?.usage?.usageCount || 0);
-    body.textContent = `${item?.assetId || 'unknown'} · ${item?.type || 'file'} · ${storage.type || 'local'}${storage.bucket ? `/${storage.bucket}` : ''} · ${formatStorageUsageBytes(item?.size || 0)} · usage ${usageCount}${item?.pinned ? ' · pinned' : ''}`;
+    const storageText = cleanupStorageLabel(storage.type || 'local');
+    body.textContent = `${item?.assetId || 'unknown'} · ${item?.type || 'file'} · ${storageText} · ${formatStorageUsageBytes(item?.size || 0)} · 使用记录 ${usageCount}${item?.pinned ? ' · 已固定' : ''}`;
     const result = document.createElement('span');
     result.className = 'settings-cleanup-queue-result';
     result.dataset.cleanupResult = 'true';
@@ -598,6 +706,7 @@ export function renderAssetCleanupQueue(payload = {}) {
     row.appendChild(result);
     list.appendChild(row);
   }
+  updateCleanupQueueSelectionState();
 }
 
 function cleanupQueueQueryString() {
@@ -640,7 +749,7 @@ export async function __dryRunAssetCleanupQueueSettings() {
     setCleanupQueueStatus('请选择要预检的资产', 'error');
     return null;
   }
-  setBusy(button, true, '批量 dryRun');
+  setBusy(button, true, '预检所选');
   try {
     const payload = await requestJson('/api/v2/assets/cleanup-queue/dry-run', {
       method: 'POST',
@@ -649,29 +758,25 @@ export async function __dryRunAssetCleanupQueueSettings() {
     renderAssetCleanupQueue({ dryRunResults: payload.results || [] });
     const releasable = (payload.results || []).reduce((sum, item) => sum + Number(item?.releasableBytes || 0), 0);
     const blocked = (payload.results || []).filter(item => item?.canDelete !== true).length;
-    setCleanupQueueStatus(`dryRun 完成，预计释放 ${formatStorageUsageBytes(releasable)}，blocked ${blocked} 项`, blocked ? 'error' : 'success');
+    setCleanupQueueStatus(`预检完成，预计释放 ${formatStorageUsageBytes(releasable)}，${blocked} 项暂不能清理`, blocked ? 'error' : 'success');
     return payload;
   } catch (error) {
-    setCleanupQueueStatus(error?.message || '清理队列 dryRun 失败', 'error');
+    setCleanupQueueStatus(error?.message || '预检清理队列失败', 'error');
     return null;
   } finally {
-    setBusy(button, false, '批量 dryRun');
+    setBusy(button, false, '预检所选');
   }
 }
 
-export async function __deleteAssetCleanupQueueSettings() {
-  const button = element(FIELD_IDS.cleanupQueueDeleteButton);
+async function confirmDeleteAssetCleanupQueueSettings() {
+  const button = element(FIELD_IDS.cleanupQueueConfirmDeleteButton);
   const assetIds = selectedCleanupQueueAssetIds();
   if (!assetIds.length) {
+    setCleanupDeleteConfirmPanel(false);
     setCleanupQueueStatus('请选择要删除的资产', 'error');
     return null;
   }
-  const confirmed = globalThis.confirm?.('删除后将移除 MinIO/S3/本地文件，但保留 AssetRecord 审计。确认删除所选资产？') === true;
-  if (!confirmed) {
-    setCleanupQueueStatus('已取消删除', '');
-    return null;
-  }
-  setBusy(button, true, '确认删除所选');
+  setBusy(button, true, '确认清理');
   try {
     const payload = await requestJson('/api/v2/assets/cleanup-jobs', {
       method: 'POST',
@@ -679,16 +784,33 @@ export async function __deleteAssetCleanupQueueSettings() {
     });
     const job = payload.job || { cleanupJobId: payload.cleanupJobId, status: payload.status || 'pending', totalCount: assetIds.length };
     activeCleanupJobId = payload.cleanupJobId || job.cleanupJobId || '';
+    setCleanupDeleteConfirmPanel(false);
     renderAssetCleanupJob(job);
-    setCleanupQueueStatus('后台清理任务已创建，可在下方查看进度和结果', 'success');
+    setCleanupQueueStatus('清理任务已创建，可在下方查看进度和结果', 'success');
     scheduleCleanupJobPoll(activeCleanupJobId);
     return payload;
   } catch (error) {
-    setCleanupQueueStatus(error?.message || '创建后台清理任务失败', 'error');
+    setCleanupQueueStatus(error?.message || '创建清理任务失败', 'error');
     return null;
   } finally {
-    setBusy(button, false, '确认删除所选');
+    setBusy(button, false, '确认清理');
   }
+}
+
+export async function __confirmDeleteAssetCleanupQueueSettings() {
+  return confirmDeleteAssetCleanupQueueSettings();
+}
+
+export async function __deleteAssetCleanupQueueSettings() {
+  const assetIds = selectedCleanupQueueAssetIds();
+  if (!assetIds.length) {
+    setCleanupDeleteConfirmPanel(false);
+    setCleanupQueueStatus('请选择要删除的资产', 'error');
+    return null;
+  }
+  setCleanupDeleteConfirmPanel(true, assetIds.length);
+  setCleanupQueueStatus('请确认后开始清理', '');
+  return { pendingConfirmation: true, assetIds };
 }
 
 export async function __pollAssetCleanupJobSettings(jobId = activeCleanupJobId, options = {}) {
@@ -912,10 +1034,14 @@ export function initAssetRetentionPolicySettings() {
   const applyButton = element(FIELD_IDS.applyButton);
   const schedulerSaveButton = element(FIELD_IDS.schedulerSaveButton);
   const schedulerRunNowButton = element(FIELD_IDS.schedulerRunNowButton);
+  const cleanupQueueSelectAllButton = element(FIELD_IDS.cleanupQueueSelectAllButton);
+  const cleanupQueueClearSelectionButton = element(FIELD_IDS.cleanupQueueClearSelectionButton);
   const cleanupQueueRefreshButton = element(FIELD_IDS.cleanupQueueRefreshButton);
   const cleanupQueueDryRunButton = element(FIELD_IDS.cleanupQueueDryRunButton);
   const cleanupQueueDeleteButton = element(FIELD_IDS.cleanupQueueDeleteButton);
   const cleanupQueueRejectButton = element(FIELD_IDS.cleanupQueueRejectButton);
+  const cleanupQueueConfirmDeleteButton = element(FIELD_IDS.cleanupQueueConfirmDeleteButton);
+  const cleanupQueueCancelDeleteButton = element(FIELD_IDS.cleanupQueueCancelDeleteButton);
   const cleanupJobCancelButton = element(FIELD_IDS.cleanupJobCancelButton);
   const cleanupJobRetryButton = element(FIELD_IDS.cleanupJobRetryButton);
   const cleanupQueueFilterControls = Array.from(document.querySelectorAll?.('[data-cleanup-queue-select]') || []);
@@ -955,11 +1081,24 @@ export function initAssetRetentionPolicySettings() {
   cleanupQueueRefreshButton?.addEventListener('click', () => {
     void __refreshAssetCleanupQueueSettings();
   });
+  cleanupQueueSelectAllButton?.addEventListener('click', () => {
+    __setAssetCleanupQueueSelectionSettings(true);
+  });
+  cleanupQueueClearSelectionButton?.addEventListener('click', () => {
+    __setAssetCleanupQueueSelectionSettings(false);
+  });
   cleanupQueueDryRunButton?.addEventListener('click', () => {
     void __dryRunAssetCleanupQueueSettings();
   });
   cleanupQueueDeleteButton?.addEventListener('click', () => {
     void __deleteAssetCleanupQueueSettings();
+  });
+  cleanupQueueConfirmDeleteButton?.addEventListener('click', () => {
+    void confirmDeleteAssetCleanupQueueSettings();
+  });
+  cleanupQueueCancelDeleteButton?.addEventListener('click', () => {
+    setCleanupDeleteConfirmPanel(false);
+    setCleanupQueueStatus('已取消清理', '');
   });
   cleanupQueueRejectButton?.addEventListener('click', () => {
     void __rejectAssetCleanupQueueSettings();

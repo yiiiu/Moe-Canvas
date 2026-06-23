@@ -8,6 +8,8 @@ import {
   normalizeCustomStorageSettings,
   sanitizeStorageErrorMessage,
   bindSecretVisibilityToggles,
+  renderCustomStorageSettingsForm,
+  initCustomStorageSettings,
   __testCustomStorage,
 } from './customStorageSettings.js';
 
@@ -100,6 +102,123 @@ test('custom storage settings merge into existing user settings without dropping
   assert.equal(merged.customStorage.enabled, true);
   assert.equal(merged.customStorage.buckets[0].providerType, 's3-compatible');
   assert.equal(merged.customStorage.buckets[0].prefix, 'media/');
+});
+
+test('custom storage form collapses bucket fields when cloud storage is disabled', () => {
+  const elements = new Map();
+  const makeInput = (value = '', checked = false) => ({ value, checked, hidden: false, disabled: false, textContent: '', dataset: {} });
+  const makePanel = () => ({ hidden: false, dataset: {}, textContent: '' });
+  elements.set('customStorageEnabled', makeInput('', false));
+  elements.set('customStorageFieldsPanel', makePanel());
+  elements.set('customStorageDisabledHint', makePanel());
+  elements.set('customStorageLabel', makeInput('MinIO'));
+  elements.set('customStorageEndpoint', makeInput('http://127.0.0.1:9000'));
+  elements.set('customStorageRegion', makeInput('us-east-1'));
+  elements.set('customStorageBucket', makeInput('canvas-assets'));
+  elements.set('customStorageAccessKeyId', makeInput('minio-user'));
+  elements.set('customStorageSecretAccessKey', makeInput('minio-secret'));
+  elements.set('customStorageForcePathStyle', makeInput('', true));
+  elements.set('customStoragePublicBaseUrl', makeInput('http://public.example.com/assets'));
+  elements.set('customStoragePrefix', makeInput('ai-canvas/'));
+  const previousDocument = globalThis.document;
+  globalThis.document = { getElementById: id => elements.get(id) || null };
+  try {
+    renderCustomStorageSettingsForm({ enabled: false, buckets: [] });
+    assert.equal(elements.get('customStorageFieldsPanel').hidden, true);
+    assert.equal(elements.get('customStorageDisabledHint').hidden, false);
+    assert.match(elements.get('customStorageDisabledHint').textContent, /启用云端存储后再配置/);
+
+    renderCustomStorageSettingsForm({
+      enabled: true,
+      activeBucketId: 'bucket-main',
+      buckets: [{ id: 'bucket-main', label: 'MinIO', endpoint: 'http://127.0.0.1:9000', bucket: 'canvas-assets', accessKeyId: 'minio-user', secretAccessKey: 'minio-secret' }],
+    });
+    assert.equal(elements.get('customStorageFieldsPanel').hidden, false);
+    assert.equal(elements.get('customStorageDisabledHint').hidden, true);
+  } finally {
+    globalThis.document = previousDocument;
+  }
+});
+
+test('custom storage enable switch saves immediately without clicking save bucket', async () => {
+  const elements = new Map();
+  const makeInput = (value = '', checked = false) => ({
+    value,
+    checked,
+    hidden: false,
+    disabled: false,
+    textContent: '',
+    dataset: {},
+    listeners: {},
+    addEventListener(event, handler) {
+      this.listeners[event] = handler;
+    },
+  });
+  const makePanel = () => ({ hidden: false, dataset: {}, textContent: '' });
+  elements.set('customStorageEnabled', makeInput('', false));
+  elements.set('customStorageFieldsPanel', makePanel());
+  elements.set('customStorageDisabledHint', makePanel());
+  elements.set('customStorageLabel', makeInput('MinIO'));
+  elements.set('customStorageEndpoint', makeInput('http://127.0.0.1:9000'));
+  elements.set('customStorageRegion', makeInput('us-east-1'));
+  elements.set('customStorageBucket', makeInput('canvas-assets'));
+  elements.set('customStorageAccessKeyId', makeInput('minio-user'));
+  elements.set('customStorageSecretAccessKey', makeInput('minio-secret'));
+  elements.set('customStorageForcePathStyle', makeInput('', true));
+  elements.set('customStoragePublicBaseUrl', makeInput('http://public.example.com/assets'));
+  elements.set('customStoragePrefix', makeInput('ai-canvas/'));
+  elements.set('btnCustomStorageSave', makeInput());
+  elements.set('btnCustomStorageTest', makeInput());
+  elements.set('customStorageStatus', makePanel());
+  const previousDocument = globalThis.document;
+  const previousFetch = globalThis.fetch;
+  const requests = [];
+  const existingSettings = {
+    theme: 'dark',
+    customStorage: {
+      enabled: false,
+      activeBucketId: 'bucket_default',
+      buckets: [{
+        id: 'bucket_default',
+        label: 'MinIO',
+        endpoint: 'http://127.0.0.1:9000',
+        region: 'us-east-1',
+        bucket: 'canvas-assets',
+        accessKeyId: 'minio-user',
+        secretAccessKey: 'minio-secret',
+        forcePathStyle: true,
+        publicBaseUrl: 'http://public.example.com/assets',
+        prefix: 'ai-canvas/',
+        enabled: true,
+      }],
+    },
+  };
+  globalThis.document = { getElementById: id => elements.get(id) || null };
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (!options.method || options.method === 'GET') {
+      return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => existingSettings };
+    }
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => JSON.parse(options.body) };
+  };
+  try {
+    initCustomStorageSettings();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    elements.get('customStorageEnabled').checked = true;
+    await elements.get('customStorageEnabled').listeners.change();
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.fetch = previousFetch;
+  }
+
+  const saveRequest = requests.find(request => request.options.method === 'POST');
+  assert.ok(saveRequest, 'enable switch should save settings immediately');
+  const savedSettings = JSON.parse(saveRequest.options.body);
+  assert.equal(savedSettings.theme, 'dark');
+  assert.equal(savedSettings.customStorage.enabled, true);
+  assert.equal(savedSettings.customStorage.activeBucketId, 'bucket_default');
+  assert.equal(elements.get('customStorageFieldsPanel').hidden, false);
+  assert.match(elements.get('customStorageStatus').textContent, /已启用/);
 });
 
 test('custom storage secret visibility toggles password inputs with icon-only buttons', () => {

@@ -284,6 +284,27 @@ class StorageBucketService:
             "contentType": content_type or "application/octet-stream",
         }
 
+    def object_exists(self, object_key, bucket_name=""):
+        bucket = self.validate_bucket(self.active_bucket())
+        key = self._text(object_key)
+        if not key:
+            raise StorageBucketConfigError("缺少 objectKey")
+        expected_bucket = self._text(bucket_name)
+        if expected_bucket and expected_bucket != self._text(bucket.get("bucket")):
+            raise StorageBucketConfigError("存储桶不匹配")
+        try:
+            with urllib.request.urlopen(self._signed_head_request(bucket, key), timeout=30) as response:
+                status = int(getattr(response, "status", 200) or 200)
+                return 200 <= status < 400
+        except urllib.error.HTTPError as exc:
+            body = self._read_http_error_body(exc)
+            code_text = f"{exc.code} {body}".lower()
+            if exc.code == 404 or "nosuchkey" in code_text or "not found" in code_text:
+                return False
+            raise RuntimeError(self._classify_request_error(exc, bucket, operation="read")) from exc
+        except Exception as exc:
+            raise RuntimeError(self._classify_request_error(exc, bucket, operation="read")) from exc
+
     def delete_object(self, object_key, bucket_name=""):
         bucket = self.validate_bucket(self.active_bucket())
         key = self._text(object_key)

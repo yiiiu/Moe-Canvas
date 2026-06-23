@@ -18,6 +18,8 @@ const FIELD_IDS = Object.freeze({
   forcePathStyle: 'customStorageForcePathStyle',
   publicBaseUrl: 'customStoragePublicBaseUrl',
   prefix: 'customStoragePrefix',
+  fieldsPanel: 'customStorageFieldsPanel',
+  disabledHint: 'customStorageDisabledHint',
   saveButton: 'btnCustomStorageSave',
   testButton: 'btnCustomStorageTest',
   status: 'customStorageStatus',
@@ -168,7 +170,20 @@ function getPrimaryBucket(customStorage) {
   return customStorage.buckets.find(bucket => bucket.id === customStorage.activeBucketId) || customStorage.buckets[0] || null;
 }
 
-function applyCustomStorageToForm(settings = {}) {
+function syncCustomStorageVisibility(customStorage) {
+  const enabled = !!customStorage?.enabled;
+  const fieldsPanel = getElement(FIELD_IDS.fieldsPanel);
+  if (fieldsPanel) {
+    fieldsPanel.hidden = !enabled;
+  }
+  const disabledHint = getElement(FIELD_IDS.disabledHint);
+  if (disabledHint) {
+    disabledHint.hidden = enabled;
+    disabledHint.textContent = enabled ? '' : '启用云端存储后再配置 Endpoint、Bucket 和访问密钥。';
+  }
+}
+
+export function renderCustomStorageSettingsForm(settings = {}) {
   const customStorage = normalizeCustomStorageSettings(settings);
   const bucket = getPrimaryBucket(customStorage) || normalizeBucket({}, 0);
   setChecked(FIELD_IDS.enabled, customStorage.enabled);
@@ -181,6 +196,7 @@ function applyCustomStorageToForm(settings = {}) {
   setChecked(FIELD_IDS.forcePathStyle, bucket.forcePathStyle);
   setValue(FIELD_IDS.publicBaseUrl, bucket.publicBaseUrl);
   setValue(FIELD_IDS.prefix, bucket.prefix);
+  syncCustomStorageVisibility(customStorage);
 }
 
 function readCustomStorageFromForm() {
@@ -244,7 +260,7 @@ async function saveCustomStorage() {
     const existingSettings = await fetchUserSettingsFromServer().catch(() => ({}));
     const nextSettings = buildCustomStorageSettings(existingSettings, customStorage);
     await saveUserSettingsToServer(nextSettings);
-    applyCustomStorageToForm(nextSettings.customStorage);
+    renderCustomStorageSettingsForm(nextSettings.customStorage);
     setStatus(customStorage.enabled ? '自定义存储桶已启用' : '自定义存储桶已关闭', 'success');
     showSuccess('存储桶配置已保存');
   } catch (error) {
@@ -255,6 +271,40 @@ async function saveCustomStorage() {
     showError(`保存存储桶失败：${message}`);
   } finally {
     setBusy(saveButton, false, '保存中...', '保存存储桶');
+  }
+}
+
+async function saveCustomStorageEnabled() {
+  const enabledInput = getElement(FIELD_IDS.enabled);
+  const enabled = !!enabledInput?.checked;
+  syncCustomStorageVisibility({ enabled });
+  const customStorage = readCustomStorageFromForm();
+  if (enabled && !customStorage.enabled) {
+    const message = '请先填写存储桶配置后启用云端存储';
+    setStatus(message, 'error');
+    showError(message);
+    return;
+  }
+  if (enabledInput) {
+    enabledInput.disabled = true;
+  }
+  try {
+    const existingSettings = await fetchUserSettingsFromServer().catch(() => ({}));
+    const nextSettings = buildCustomStorageSettings(existingSettings, customStorage);
+    await saveUserSettingsToServer(nextSettings);
+    renderCustomStorageSettingsForm(nextSettings.customStorage);
+    setStatus(customStorage.enabled ? '自定义存储桶已启用' : '自定义存储桶已关闭', 'success');
+    showSuccess(customStorage.enabled ? '云端存储已启用' : '云端存储已关闭');
+  } catch (error) {
+    const bucket = getPrimaryBucket(customStorage);
+    const message = sanitizeStorageErrorMessage(error, bucket);
+    console.error('[Settings] 切换自定义存储桶失败:', message);
+    setStatus(message, 'error');
+    showError(`切换云端存储失败：${message}`);
+  } finally {
+    if (enabledInput) {
+      enabledInput.disabled = false;
+    }
   }
 }
 
@@ -309,8 +359,9 @@ export function initCustomStorageSettings() {
     testButton.__customStorageBound = true;
   }
   bindSecretVisibilityToggles();
+  getElement(FIELD_IDS.enabled)?.addEventListener?.('change', () => saveCustomStorageEnabled());
   fetchUserSettingsFromServer()
-    .then(settings => applyCustomStorageToForm(settings?.customStorage || {}))
+    .then(settings => renderCustomStorageSettingsForm(settings?.customStorage || {}))
     .catch(error => {
       const message = sanitizeStorageErrorMessage(error);
       console.error('[Settings] 加载自定义存储桶失败:', message);

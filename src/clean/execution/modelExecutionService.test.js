@@ -47,6 +47,26 @@ function createFakeTextAdapter(providerResult = 'Normalized text') {
   };
 }
 
+function manifestOfType(type) {
+  return {
+    ...openaiChatManifest,
+    id: `mock-${type}-model`,
+    type,
+  };
+}
+
+function createFakeRoutingAdapter(routeResults = {}) {
+  const calls = [];
+  const adapter = { calls };
+  for (const [method, providerResult] of Object.entries(routeResults)) {
+    adapter[method] = async (input) => {
+      calls.push({ method, input });
+      return providerResult;
+    };
+  }
+  return adapter;
+}
+
 async function assertModelExecutionError(action, code) {
   await assert.rejects(
     action,
@@ -161,6 +181,146 @@ test('ModelExecutionService calls text adapter submitChatCompletion', async () =
   ]);
 });
 
+test('ModelExecutionService routes image type to submitImageGeneration and normalizes images', async () => {
+  const providerResult = { images: [{ url: 'file:///image.png' }] };
+  const adapter = createFakeRoutingAdapter({ submitImageGeneration: providerResult });
+  const manifestRegistry = createFakeManifestRegistry(manifestOfType('image'));
+  const providerRegistry = createFakeProviderRegistry(adapter);
+  const service = new ModelExecutionService({ manifestRegistry, providerRegistry });
+
+  const execution = await service.execute({
+    manifestId: 'mock-image-model',
+    input: { prompt: 'Create image.' },
+    context: { taskId: 'task-image-1' },
+  });
+
+  assert.equal(execution.type, 'image');
+  assert.deepEqual(adapter.calls, [
+    {
+      method: 'submitImageGeneration',
+      input: {
+        temperature: 0.7,
+        maxTokens: 2048,
+        prompt: 'Create image.',
+      },
+    },
+  ]);
+  assert.deepEqual(execution.result, {
+    type: 'image',
+    images: providerResult.images,
+    raw: providerResult,
+  });
+});
+
+test('ModelExecutionService routes video type to submitVideoGeneration and normalizes videos', async () => {
+  const providerResult = { videos: [{ url: 'file:///video.mp4' }] };
+  const adapter = createFakeRoutingAdapter({ submitVideoGeneration: providerResult });
+  const manifestRegistry = createFakeManifestRegistry(manifestOfType('video'));
+  const providerRegistry = createFakeProviderRegistry(adapter);
+  const service = new ModelExecutionService({ manifestRegistry, providerRegistry });
+
+  const execution = await service.execute({
+    manifestId: 'mock-video-model',
+    input: { prompt: 'Create video.' },
+    context: { taskId: 'task-video-1' },
+  });
+
+  assert.equal(execution.type, 'video');
+  assert.deepEqual(adapter.calls, [
+    {
+      method: 'submitVideoGeneration',
+      input: {
+        temperature: 0.7,
+        maxTokens: 2048,
+        prompt: 'Create video.',
+      },
+    },
+  ]);
+  assert.deepEqual(execution.result, {
+    type: 'video',
+    videos: providerResult.videos,
+    raw: providerResult,
+  });
+});
+
+test('ModelExecutionService routes audio type to submitAudioGeneration and normalizes audios', async () => {
+  const providerResult = { audios: [{ url: 'file:///audio.wav' }] };
+  const adapter = createFakeRoutingAdapter({ submitAudioGeneration: providerResult });
+  const manifestRegistry = createFakeManifestRegistry(manifestOfType('audio'));
+  const providerRegistry = createFakeProviderRegistry(adapter);
+  const service = new ModelExecutionService({ manifestRegistry, providerRegistry });
+
+  const execution = await service.execute({
+    manifestId: 'mock-audio-model',
+    input: { prompt: 'Create audio.' },
+    context: { taskId: 'task-audio-1' },
+  });
+
+  assert.equal(execution.type, 'audio');
+  assert.deepEqual(adapter.calls, [
+    {
+      method: 'submitAudioGeneration',
+      input: {
+        temperature: 0.7,
+        maxTokens: 2048,
+        prompt: 'Create audio.',
+      },
+    },
+  ]);
+  assert.deepEqual(execution.result, {
+    type: 'audio',
+    audios: providerResult.audios,
+    raw: providerResult,
+  });
+});
+
+test('ModelExecutionService routes multimodal type to submitMultimodal and normalizes items', async () => {
+  const providerResult = { items: [{ type: 'text', text: 'scene' }] };
+  const adapter = createFakeRoutingAdapter({ submitMultimodal: providerResult });
+  const manifestRegistry = createFakeManifestRegistry(manifestOfType('multimodal'));
+  const providerRegistry = createFakeProviderRegistry(adapter);
+  const service = new ModelExecutionService({ manifestRegistry, providerRegistry });
+
+  const execution = await service.execute({
+    manifestId: 'mock-multimodal-model',
+    input: { prompt: 'Create scene.' },
+    context: { taskId: 'task-multimodal-1' },
+  });
+
+  assert.equal(execution.type, 'multimodal');
+  assert.deepEqual(adapter.calls, [
+    {
+      method: 'submitMultimodal',
+      input: {
+        temperature: 0.7,
+        maxTokens: 2048,
+        prompt: 'Create scene.',
+      },
+    },
+  ]);
+  assert.deepEqual(execution.result, {
+    type: 'multimodal',
+    items: providerResult.items,
+    raw: providerResult,
+  });
+});
+
+test('ModelExecutionService maps missing adapter route to MODEL_EXECUTION_FAILED', async () => {
+  const adapter = {};
+  const manifestRegistry = createFakeManifestRegistry(manifestOfType('image'));
+  const providerRegistry = createFakeProviderRegistry(adapter);
+  const service = new ModelExecutionService({ manifestRegistry, providerRegistry });
+
+  await assertModelExecutionError(
+    () => service.execute({
+      manifestId: 'mock-image-model',
+      input: { prompt: 'Missing route.' },
+      context: {},
+    }),
+    MODEL_EXECUTION_ERROR_CODES.MODEL_EXECUTION_FAILED,
+  );
+});
+
 test('ModelExecutionService returns normalized text result', async () => {
   const adapter = createFakeTextAdapter('Plain text result.');
   const manifestRegistry = createFakeManifestRegistry();
@@ -228,19 +388,19 @@ test('ModelExecutionService maps missing provider to MODEL_EXECUTION_PROVIDER_NO
 });
 
 test('ModelExecutionService rejects unsupported manifest type', async () => {
-  const imageManifest = {
+  const unsupportedManifest = {
     ...openaiChatManifest,
-    id: 'mock-image-model',
-    type: 'image',
+    id: 'mock-embedding-model',
+    type: 'embedding',
   };
   const adapter = createFakeTextAdapter();
-  const manifestRegistry = createFakeManifestRegistry(imageManifest);
+  const manifestRegistry = createFakeManifestRegistry(unsupportedManifest);
   const providerRegistry = createFakeProviderRegistry(adapter);
   const service = new ModelExecutionService({ manifestRegistry, providerRegistry });
 
   await assertModelExecutionError(
     () => service.execute({
-      manifestId: 'mock-image-model',
+      manifestId: 'mock-embedding-model',
       input: { prompt: 'Unsupported.' },
       context: {},
     }),

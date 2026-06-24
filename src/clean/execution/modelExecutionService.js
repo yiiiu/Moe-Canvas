@@ -48,20 +48,28 @@ export class ModelExecutionService {
     }
   }
 
-  async executeText(adapter, payload) {
-    if (typeof adapter.submitChatCompletion !== 'function') {
+  async executeRoute(adapter, payload, methodName) {
+    if (typeof adapter[methodName] !== 'function') {
       throw createModelExecutionError(
-        MODEL_EXECUTION_ERROR_CODES.MODEL_EXECUTION_UNSUPPORTED_TYPE,
-        'Text model execution requires submitChatCompletion adapter method.',
-        { type: payload.type },
+        MODEL_EXECUTION_ERROR_CODES.MODEL_EXECUTION_FAILED,
+        'Model adapter route is not implemented.',
+        { type: payload.type, methodName },
       );
     }
-    return adapter.submitChatCompletion(payload.input);
+    return adapter[methodName](payload.input);
   }
 
   async executeAdapter(adapter, payload) {
-    if (payload.type === 'text') {
-      return this.executeText(adapter, payload);
+    const routeByType = {
+      text: 'submitChatCompletion',
+      image: 'submitImageGeneration',
+      video: 'submitVideoGeneration',
+      audio: 'submitAudioGeneration',
+      multimodal: 'submitMultimodal',
+    };
+    const methodName = routeByType[payload.type];
+    if (methodName) {
+      return this.executeRoute(adapter, payload, methodName);
     }
     throw createModelExecutionError(
       MODEL_EXECUTION_ERROR_CODES.MODEL_EXECUTION_UNSUPPORTED_TYPE,
@@ -73,7 +81,20 @@ export class ModelExecutionService {
   async execute({ manifestId, input = {}, context = {} } = {}) {
     const taskContext = isObject(context) ? context : {};
     const manifest = this.getManifest(manifestId);
-    const payload = buildModelTaskPayload({ manifest, input, context: taskContext });
+    let payload;
+    try {
+      payload = buildModelTaskPayload({ manifest, input, context: taskContext });
+    } catch (error) {
+      if (error instanceof ModelExecutionError && error.code === MODEL_EXECUTION_ERROR_CODES.MODEL_TASK_UNSUPPORTED_TYPE) {
+        throw wrapExecutionError(
+          error,
+          MODEL_EXECUTION_ERROR_CODES.MODEL_EXECUTION_UNSUPPORTED_TYPE,
+          'Model execution type is unsupported.',
+          { manifestId, type: manifest.type },
+        );
+      }
+      throw error;
+    }
     const adapter = this.createProvider(manifest, taskContext);
 
     let providerResult;

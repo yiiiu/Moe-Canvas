@@ -1129,3 +1129,185 @@ test('generationRecoveryV2 waits when target node is not loaded yet', async () =
   assert.equal(store.getState().nodes['node-1'].asyncTaskRecovering, true);
   assert.equal(store.getState().nodes['node-1'].asyncTaskStatus, 'pending');
 });
+
+test('generationRecoveryV2 cancelled response releases node loading state without retry', async () => {
+  const store = createStore({
+    'node-1': {
+      id: 'node-1',
+      isGenerating: true,
+      jobStatus: 'loading',
+      asyncTaskRecovering: true,
+      asyncTaskStatus: 'running',
+      generationStartTime: 100,
+    },
+  });
+  const manager = createManager();
+  const scheduled = [];
+
+  const session = startGenerationRecoveryV2([createLocalProxyTask()], manager, {
+    store,
+    now: () => 1000,
+    pollIntervalMs: 2000,
+    graceMs: 60000,
+    setTimeout(fn, ms) {
+      scheduled.push({ fn, ms });
+      return scheduled.length;
+    },
+    clearTimeout() {},
+    fetch: async () => ({ ok: true, json: async () => ({ status: 'cancelled', message: 'user cancelled' }) }),
+  });
+
+  await session.flush();
+
+  const node = store.getState().nodes['node-1'];
+  assert.equal(scheduled.length, 0);
+  assert.equal(node.isGenerating, false);
+  assert.notEqual(node.jobStatus, 'loading');
+  assert.equal(node.asyncTaskRecovering, false);
+  assert.equal(node.asyncTaskStatus, 'cancelled');
+  assert.equal(manager.updates.at(-1).status, 'cancelled');
+});
+
+test('generationRecoveryV2 failed response clears loading card and writes readable error', async () => {
+  const store = createStore({
+    'node-1': {
+      id: 'node-1',
+      isGenerating: true,
+      jobStatus: 'loading',
+      asyncTaskRecovering: true,
+      asyncTaskStatus: 'running',
+      rhTaskRecovering: true,
+      dreaminaTaskRecovering: true,
+      generationStartTime: 100,
+    },
+  });
+  const manager = createManager();
+
+  const session = startGenerationRecoveryV2([createLocalProxyTask()], manager, {
+    store,
+    now: () => 1000,
+    pollIntervalMs: 2000,
+    graceMs: 60000,
+    setTimeout() {
+      throw new Error('failed terminal response must not schedule retry');
+    },
+    clearTimeout() {},
+    fetch: async () => ({ ok: true, json: async () => ({ status: 'failed', error: { message: 'provider quota exceeded' } }) }),
+  });
+
+  await session.flush();
+
+  const node = store.getState().nodes['node-1'];
+  assert.equal(node.isGenerating, false);
+  assert.equal(node.jobStatus, 'error');
+  assert.equal(node.jobError, 'provider quota exceeded');
+  assert.equal(node.asyncTaskRecovering, false);
+  assert.equal(node.rhTaskRecovering, false);
+  assert.equal(node.dreaminaTaskRecovering, false);
+  assert.equal(node.asyncTaskStatus, 'failed');
+  assert.equal(manager.updates.at(-1).status, 'failed');
+});
+
+test('generationRecoveryV2 terminal restored task is not polled again', async () => {
+  const store = createStore({
+    'node-1': {
+      id: 'node-1',
+      isGenerating: false,
+      jobStatus: 'success',
+      asyncTaskStatus: 'success',
+      imageUrl: '/output/done.png',
+    },
+  });
+  const manager = createManager();
+  let fetchCount = 0;
+
+  const session = startGenerationRecoveryV2([
+    createLocalProxyTask({
+      status: 'success',
+      unifiedTask: { status: 'success', canResume: false },
+    }),
+  ], manager, {
+    store,
+    now: () => 1000,
+    pollIntervalMs: 2000,
+    graceMs: 60000,
+    setTimeout() {
+      throw new Error('completed task must not schedule retry');
+    },
+    clearTimeout() {},
+    fetch: async () => {
+      fetchCount += 1;
+      return { ok: true, json: async () => ({ status: 'success' }) };
+    },
+  });
+
+  await session.flush();
+
+  assert.equal(session.activeCount, 0);
+  assert.equal(fetchCount, 0);
+  assert.equal(manager.updates.length, 0);
+  assert.equal(store.getState().nodes['node-1'].imageUrl, '/output/done.png');
+});
+
+test('generationRecoveryV2 local proxy terminal success writes back once and does not keep stale retry', async () => {
+  const store = createStore({
+    'node-1': {
+      id: 'node-1',
+      isGenerating: true,
+      jobStatus: 'loading',
+      asyncTaskRecovering: true,
+      generationStartTime: 100,
+    },
+  });
+  const manager = createManager();
+  const storage = createMemoryStorage();
+  const requestedUrls = [];
+  const nodeUpdates = [];
+  const originalUpdate = store.updateNodeData;
+  store.updateNodeData = (nodeId, patch) => {
+    nodeUpdates.push({ nodeId, patch });
+    originalUpdate(nodeId, patch);
+  };
+
+  const session = startGenerationRecoveryV2([createLocalProxyTask()], manager, {
+    store,
+    asyncTaskStorage: storage,
+    now: () => 1000,
+    pollIntervalMs: 2000,
+    graceMs: 60000,
+    setTimeout() {
+      throw new Error('terminal success must not leave stale retry timer');
+    },
+    clearTimeout() {},
+    fetch: async (url) => {
+      requestedUrls.push(String(url));
+      return {
+        ok: true,
+        json: async () => ({
+          runtimeTaskId: 'runtime-grsai-1',
+          clientTaskId: 'client-grsai-1',
+          nodeId: 'node-1',
+          provider: 'grsai',
+          kind: 'image',
+          status: 'success',
+          result: {
+            status: 'succeeded',
+            results: [{ url: '/output/final-once.png' }],
+          },
+        }),
+      };
+    },
+  });
+
+  await session.flush();
+
+  const terminalWrites = nodeUpdates.filter((entry) => entry.patch.asyncTaskStatus === 'success');
+  const records = loadAsyncTaskRecords({ storage });
+  assert.equal(requestedUrls.length, 1);
+  assert.equal(terminalWrites.length, 1);
+  assert.equal(manager.updates.filter((task) => task.status === 'success').length, 1);
+  assert.equal(store.getState().nodes['node-1'].imageUrl, '/output/final-once.png');
+  assert.equal(store.getState().nodes['node-1'].isGenerating, false);
+  assert.equal(records.length, 1);
+  assert.equal(records[0].status, 'success');
+});

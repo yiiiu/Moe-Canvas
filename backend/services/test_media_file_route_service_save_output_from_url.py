@@ -1,9 +1,15 @@
 import json
 import os
 import ssl
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from backend.services.media_file_route_service import MediaFileRouteService
 

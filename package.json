@@ -6,6 +6,13 @@
   "author": "AI CanvasPro",
   "type": "module",
   "main": "electron/main.js",
+  "scripts": {
+    "dev:server": "python server.py",
+    "dev:electron": "electron .",
+    "test:js": "node --test",
+    "test:py": "python -B -m unittest discover -s . -p \"test*.py\"",
+    "test": "npm run test:js && npm run test:py"
+  },
   "dependencies": {
     "electron-updater": "^6.8.3",
     "lucide": "^1.17.0",

@@ -52,6 +52,10 @@ async function readJson(response) {
 }
 
 export class OpenAICompatibleAdapter extends BaseProviderAdapter {
+  static id = 'openai-compatible';
+
+  static displayName = 'OpenAI Compatible';
+
   constructor(config = {}) {
     super(config);
     this.fetch = typeof config.fetch === 'function' ? config.fetch : defaultFetch();
